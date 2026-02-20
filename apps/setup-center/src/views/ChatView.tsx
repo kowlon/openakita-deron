@@ -33,7 +33,9 @@ import {
   IconChevronDown, IconChevronUp, IconMessageCircle, IconChevronRight,
   IconImage, IconRefresh, IconClipboard, IconTrash, IconZap,
   IconMask, IconBot, IconUsers, IconHelp, IconEdit,
+  IconBrain,
 } from "../icons";
+import { WebUIView } from "./WebUIView";
 
 // ─── 排队消息类型 ───
 type QueuedMessage = {
@@ -1279,9 +1281,16 @@ export function ChatView({
     catch { return "flat"; }
   });
 
+  // WebUI 模式（新界面）
+  const [webuiMode, setWebuiMode] = useState(() => {
+    try { const v = localStorage.getItem("chat_webuiMode"); return v === "true"; }
+    catch { return false; }
+  });
+
   // 持久化用户偏好
   useEffect(() => { try { localStorage.setItem("chat_showChain", String(showChain)); } catch {} }, [showChain]);
   useEffect(() => { try { localStorage.setItem("chat_displayMode", displayMode); } catch {} }, [displayMode]);
+  useEffect(() => { try { localStorage.setItem("chat_webuiMode", String(webuiMode)); } catch {} }, [webuiMode]);
 
   const [isRecording, setIsRecording] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -2590,6 +2599,11 @@ export function ChatView({
     }
   }, []);
 
+  // WebUI 模式 - 显示新的三栏布局界面（可以在服务未运行时显示）
+  if (webuiMode) {
+    return <WebUIView endpoints={endpoints} />;
+  }
+
   // ── 未启动服务提示 ──
   if (!serviceRunning) {
     return (
@@ -2599,6 +2613,14 @@ export function ChatView({
         <div className="cardHint" style={{ marginTop: 8, marginBottom: 20 }}>
           {t("chat.serviceHint")}
         </div>
+        {/* 临时添加 WebUI 切换按钮用于测试 */}
+        <button
+          onClick={() => setWebuiMode(true)}
+          className="btnPrimary"
+          style={{ marginTop: 16 }}
+        >
+          切换到 WebUI 视图
+        </button>
       </div>
     );
   }
@@ -2704,6 +2726,19 @@ export function ChatView({
             style={{ opacity: showChain ? 1 : 0.4 }}
           >
             <IconZap size={14} />
+          </button>
+
+          {/* WebUI 模式切换 */}
+          <button
+            onClick={() => setWebuiMode(v => !v)}
+            className="chatTopBarBtn"
+            title={webuiMode ? "切换到经典视图" : "切换到 WebUI 视图"}
+            style={{ background: webuiMode ? "rgba(14,165,233,0.08)" : "transparent" }}
+          >
+            <IconBrain size={14} />
+            <span style={{ fontSize: 11, marginLeft: 2 }}>
+              {webuiMode ? "WebUI" : "经典"}
+            </span>
           </button>
 
           {/* 模式切换: bubble <-> flat */}

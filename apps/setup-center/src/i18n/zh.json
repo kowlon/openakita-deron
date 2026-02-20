@@ -685,6 +685,43 @@
     },
     "installLogSaved": "安装日志已保存至: {{path}}"
   },
+  "webui": {
+    "newChat": "新建会话",
+    "searchSessions": "搜索会话...",
+    "settings": "设置",
+    "stepDetails": "步骤详情",
+    "noSession": "选择或创建一个会话开始",
+    "inputPlaceholder": "输入消息...",
+    "selectModel": "选择模型",
+    "autoMode": "Auto",
+    "editMode": "Edit",
+    "activeStatus": "Active",
+    "completedStatus": "已完成",
+    "errorStatus": "出错",
+    "stepStatus": {
+      "pending": "等待中",
+      "running": "执行中",
+      "completed": "已完成",
+      "failed": "失败"
+    },
+    "stepType": {
+      "llm": "LLM 调用",
+      "tool": "工具调用",
+      "skill": "技能调用",
+      "thinking": "思考",
+      "planning": "规划"
+    },
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "duration": "执行时长",
+    "inputParams": "输入参数",
+    "outputResult": "输出结果",
+    "copyJson": "复制 JSON",
+    "downloadOutput": "下载完整输出",
+    "deleteSession": "删除会话",
+    "confirmDelete": "确定要删除此会话吗？",
+    "noSteps": "暂无步骤"
+  },
   "modules": {
     "title": "模块管理",
     "desc": "管理可选功能模块的安装与卸载。安装模块后需要重启后端服务生效。",

@@ -685,6 +685,43 @@
     },
     "installLogSaved": "Install log saved to: {{path}}"
   },
+  "webui": {
+    "newChat": "New Chat",
+    "searchSessions": "Search sessions...",
+    "settings": "Settings",
+    "stepDetails": "Step Details",
+    "noSession": "Select or create a session to start",
+    "inputPlaceholder": "Type a message...",
+    "selectModel": "Select Model",
+    "autoMode": "Auto",
+    "editMode": "Edit",
+    "activeStatus": "Active",
+    "completedStatus": "Completed",
+    "errorStatus": "Error",
+    "stepStatus": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "stepType": {
+      "llm": "LLM Call",
+      "tool": "Tool Call",
+      "skill": "Skill Call",
+      "thinking": "Thinking",
+      "planning": "Planning"
+    },
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "duration": "Duration",
+    "inputParams": "Input Parameters",
+    "outputResult": "Output Result",
+    "copyJson": "Copy JSON",
+    "downloadOutput": "Download Full Output",
+    "deleteSession": "Delete Session",
+    "confirmDelete": "Are you sure you want to delete this session?",
+    "noSteps": "No steps yet"
+  },
   "modules": {
     "title": "Module Management",
     "desc": "Manage optional feature module installation and removal. Restart backend service after changes.",
