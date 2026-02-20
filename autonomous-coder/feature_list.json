@@ -1,0 +1,210 @@
+{
+  "project": {
+    "name": "SeeAgent WebUI",
+    "description": "Agent 工作流可视化界面 - 完全独立的 Web 前端系统",
+    "version": "0.1.0",
+    "created_at": "2026-02-20",
+    "tech_stack": ["React", "TypeScript", "Tailwind CSS", "Vite"]
+  },
+  "features": [
+    {
+      "id": "FEAT-001",
+      "category": "infrastructure",
+      "priority": "high",
+      "description": "创建独立项目结构和基础配置",
+      "steps": [
+        "创建目录 webapps/seeagent-webui/",
+        "初始化 package.json（配置 name, scripts, dependencies）",
+        "创建 tsconfig.json",
+        "创建 vite.config.ts（端口 5174 + API 代理）",
+        "创建 tailwind.config.js + postcss.config.js",
+        "创建 index.html（引入 Inter 字体、Material Symbols）",
+        "创建 src/main.tsx 入口",
+        "创建 src/App.tsx（显示 SeeAgent 标题）",
+        "创建 src/index.css（Tailwind + 自定义样式）",
+        "安装依赖 pnpm install",
+        "启动开发服务器 pnpm dev",
+        "Chrome 打开 http://localhost:5174/ 验证页面显示"
+      ],
+      "dependencies": [],
+      "passes": true,
+      "completed_at": "2026-02-20 10:40"
+    },
+    {
+      "id": "FEAT-002",
+      "category": "layout",
+      "priority": "high",
+      "description": "实现三栏布局骨架",
+      "steps": [
+        "创建 src/components/Layout/ThreeColumnLayout.tsx",
+        "实现三栏 flex 布局（左侧 288px，中间 flex-1，右侧 384px 初始隐藏）",
+        "创建 src/components/Layout/LeftSidebar.tsx（占位块）",
+        "创建 src/components/Layout/MainContent.tsx（占位块）",
+        "创建 src/components/Layout/DetailPanel.tsx（占位块）",
+        "更新 App.tsx 使用 ThreeColumnLayout",
+        "Chrome 验证三栏布局正确显示"
+      ],
+      "dependencies": ["FEAT-001"],
+      "passes": true,
+      "completed_at": "2026-02-20 10:45"
+    },
+    {
+      "id": "FEAT-003",
+      "category": "sidebar",
+      "priority": "high",
+      "description": "实现左侧会话列表",
+      "steps": [
+        "创建 src/types/session.ts（Session 类型定义）",
+        "创建 src/components/Session/SessionItem.tsx",
+        "创建 src/components/Session/SessionList.tsx",
+        "更新 LeftSidebar.tsx：添加品牌 Logo（SeeAgent + AI Orchestrator）",
+        "添加新建会话按钮",
+        "添加搜索输入框",
+        "集成 SessionList 组件",
+        "添加底部设置入口",
+        "添加 Mock 会话数据",
+        "Chrome 验证左侧边栏所有元素正确显示",
+        "验证点击会话切换高亮",
+        "验证新建会话功能"
+      ],
+      "dependencies": ["FEAT-002"],
+      "passes": true,
+      "completed_at": "2026-02-20 10:50"
+    },
+    {
+      "id": "FEAT-004",
+      "category": "main",
+      "priority": "high",
+      "description": "实现中间主区域（用户消息 + 步骤卡片）",
+      "steps": [
+        "创建 src/types/step.ts（Step 类型定义）",
+        "创建 src/components/Step/StepStatusIcon.tsx（4 种状态图标）",
+        "创建 src/components/Step/StepTypeIcon.tsx（5 种类型图标）",
+        "创建 src/components/Step/StepCard.tsx（单个步骤卡片）",
+        "实现 StepCard 展开收起功能（手风琴效果）",
+        "创建 src/components/Step/StepTimeline.tsx（步骤列表 + 时间线）",
+        "更新 MainContent.tsx：添加头部（任务标题 + 状态徽章）",
+        "添加 Auto/Edit 模式切换按钮",
+        "添加用户消息气泡区域（右对齐，蓝色背景）",
+        "集成 StepTimeline 组件",
+        "添加 Mock 步骤数据",
+        "Chrome 验证中间区域所有元素正确显示",
+        "验证点击步骤卡片展开/收起",
+        "验证 Auto/Edit 模式切换"
+      ],
+      "dependencies": ["FEAT-002"],
+      "passes": true,
+      "completed_at": "2026-02-20 10:55"
+    },
+    {
+      "id": "FEAT-005",
+      "category": "detail",
+      "priority": "high",
+      "description": "实现右侧步骤详情面板",
+      "steps": [
+        "更新 DetailPanel.tsx：添加标题 + 关闭按钮",
+        "添加状态标签 + 类型标签",
+        "添加时间信息（开始/结束/时长）",
+        "添加输入参数区域（JSON 格式）",
+        "添加输出结果区域",
+        "添加复制 JSON 按钮",
+        "添加下载完整输出按钮",
+        "更新 MainContent.tsx：点击步骤卡片设置 selectedStepId",
+        "更新 ThreeColumnLayout.tsx：selectedStepId 存在时显示 DetailPanel",
+        "Chrome 验证点击步骤卡片后右侧面板显示",
+        "验证关闭按钮隐藏面板",
+        "验证复制功能"
+      ],
+      "dependencies": ["FEAT-004"],
+      "passes": true,
+      "completed_at": "2026-02-20 10:55"
+    },
+    {
+      "id": "FEAT-006",
+      "category": "input",
+      "priority": "high",
+      "description": "实现底部输入区域",
+      "steps": [
+        "创建 src/components/Input/ChatInput.tsx",
+        "实现多行 textarea（自动高度）",
+        "添加发送按钮",
+        "实现 Enter 发送 / Shift+Enter 换行",
+        "创建 src/components/Input/ModelSelector.tsx",
+        "添加底部提示文字",
+        "更新 MainContent.tsx：在底部添加 ChatInput",
+        "Chrome 验证输入框功能",
+        "验证 Enter 发送",
+        "验证 Shift+Enter 换行"
+      ],
+      "dependencies": ["FEAT-004"],
+      "passes": true,
+      "completed_at": "2026-02-20 11:00"
+    },
+    {
+      "id": "FEAT-007",
+      "category": "api",
+      "priority": "high",
+      "description": "连接后端 API 实现聊天功能",
+      "steps": [
+        "创建 src/api/client.ts（fetch 封装）",
+        "创建 src/api/sse.ts（SSE 解析工具）",
+        "创建 src/api/chat.ts（chat API 调用）",
+        "创建 src/hooks/useChat.ts（聊天状态管理）",
+        "创建 src/types/api.ts（API 请求/响应类型）",
+        "在 vite.config.ts 配置 API 代理",
+        "更新 ChatInput.tsx：发送时调用 API",
+        "更新 MainContent.tsx：处理 SSE 事件更新步骤列表",
+        "确保 OpenAkita 后端已启动",
+        "Chrome 验证发送消息后请求 /api/chat 成功",
+        "验证 SSE 事件正常接收",
+        "验证步骤卡片根据 SSE 事件实时更新"
+      ],
+      "dependencies": ["FEAT-004", "FEAT-006"],
+      "passes": true,
+      "completed_at": "2026-02-20 11:05"
+    },
+    {
+      "id": "FEAT-008",
+      "category": "api",
+      "priority": "high",
+      "description": "实现 Edit 模式步骤确认",
+      "steps": [
+        "在 MainContent.tsx 添加 executionMode 状态",
+        "Edit 模式下步骤完成后显示确认/编辑/跳过按钮",
+        "实现确认按钮触发下一步",
+        "实现跳过按钮调用 /api/chat/skip",
+        "实现 JSON 数组结果卡片化展示",
+        "实现卡片删除功能",
+        "Chrome 验证 Edit 模式下步骤完成后暂停",
+        "验证确认后继续执行",
+        "验证跳过后跳过当前步骤"
+      ],
+      "dependencies": ["FEAT-007"],
+      "passes": true,
+      "completed_at": "2026-02-20 11:08"
+    },
+    {
+      "id": "FEAT-009",
+      "category": "polish",
+      "priority": "medium",
+      "description": "完善交互和动画效果",
+      "steps": [
+        "添加步骤执行中动画（脉冲效果）",
+        "添加进度条动画",
+        "添加面板切换过渡效果",
+        "添加步骤卡片展开/收起动画",
+        "优化滚动体验（平滑滚动）",
+        "添加空状态提示（无会话/无步骤）",
+        "Chrome 全流程端到端测试"
+      ],
+      "dependencies": ["FEAT-007", "FEAT-008"],
+      "passes": true,
+      "completed_at": "2026-02-20 11:08"
+    }
+  ],
+  "metadata": {
+    "last_updated": "2026-02-20 11:08",
+    "total_features": 9,
+    "completed_features": 9
+  }
+}

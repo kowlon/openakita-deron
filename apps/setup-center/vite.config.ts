@@ -16,6 +16,15 @@ export default defineConfig({
       ),
     },
   },
+  // 多入口支持：主应用和独立 WebUI
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        webui: path.resolve(__dirname, "webui.html"),
+      },
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

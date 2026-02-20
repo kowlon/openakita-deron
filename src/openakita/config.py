@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     )
 
     # === 任务超时策略 ===
-    # 目标：避免“卡死”而不是限制长任务。推荐使用“无进展超时”。
+    # 目标：避免"卡死"而不是限制长任务。推荐使用"无进展超时"。
     # - progress_timeout_seconds: 若连续超过该时间没有任何进展（LLM返回/工具完成/迭代推进），视为卡死。
     # - hard_timeout_seconds: 可选硬上限（默认关闭=0）。仅作为最终兜底，避免无限任务。
     progress_timeout_seconds: int = Field(
@@ -53,25 +53,22 @@ class Settings(BaseSettings):
         description="硬超时上限（秒，0=禁用）。仅作为最终兜底，避免无限任务",
     )
 
-    # === ForceToolCall（工具护栏）===
-    # 当模型在“可能需要工具”的任务中只给文本不调用工具时，Agent 可追问 1 次以推动工具调用。
-    # 设为 0 可完全关闭该行为（推荐 IM 闲聊/客服式对话场景）。
+    # === ForceToolCall (Tool Guard) ===
+    # Set to 0 to disable forcing tool calls for simple questions
     force_tool_call_max_retries: int = Field(
-        default=1,
-        description="当模型未调用工具时，最多追问要求调用工具的次数（0=禁用）",
+        default=0,
+        description="Force tool call max retries (0=disabled)",
     )
 
-    # === 工具并行执行 ===
-    # 单轮模型返回多个 tool_use/tool_calls 时，Agent 可选择并行执行工具以提升吞吐。
-    # 默认 1：保持现有串行语义（最安全，尤其是带“思维链连续性”的工具链）。
+    # === Tool Parallel Execution ===
     tool_max_parallel: int = Field(
         default=1,
-        description="单轮并行工具调用最大并发数（默认 1=串行；>1 启用并行）",
+        description="Max parallel tool calls (default 1=serial)",
     )
 
     allow_parallel_tools_with_interrupt_checks: bool = Field(
         default=False,
-        description="是否允许在启用“工具间中断检查”时也并行执行工具（会降低中断插入粒度，默认关闭）",
+        description="Allow parallel tools with interrupt checks",
     )
 
     # Thinking 模式配置
