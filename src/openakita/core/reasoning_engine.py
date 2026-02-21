@@ -787,10 +787,14 @@ class ReasoningEngine:
                     )
 
                     # 添加 assistant 消息（保留完整的 tool_use 内容用于上下文连贯）
-                    working_messages.append({
+                    assistant_msg = {
                         "role": "assistant",
                         "content": decision.assistant_content,
-                    })
+                    }
+                    # 如果有 thinking 内容，添加 reasoning_content 字段（Kimi 等模型需要）
+                    if decision.thinking_content:
+                        assistant_msg["reasoning_content"] = decision.thinking_content
+                    working_messages.append(assistant_msg)
 
                     # 如果同时还有其他工具调用，先执行它们
                     # 收集其他工具的 tool_result（Claude API 要求每个 tool_use 都有对应 tool_result）
@@ -908,11 +912,15 @@ class ReasoningEngine:
                 # 保存检查点（在工具执行前）
                 self._save_checkpoint(working_messages, state, decision, iteration)
 
-                # 添加 assistant 消息
-                working_messages.append({
+                # 添加 assistant 消息（包含 reasoning_content 用于支持 thinking 的模型）
+                assistant_msg = {
                     "role": "assistant",
                     "content": decision.assistant_content,
-                })
+                }
+                # 如果有 thinking 内容，添加 reasoning_content 字段（Kimi 等模型需要）
+                if decision.thinking_content:
+                    assistant_msg["reasoning_content"] = decision.thinking_content
+                working_messages.append(assistant_msg)
 
                 # 检查取消
                 if state.cancelled:
@@ -1111,6 +1119,13 @@ class ReasoningEngine:
         - {"type": "done"}
         """
         tools = tools or []
+
+        # ========== 工具按需加载优化 ==========
+        # 根据任务内容过滤工具，减少 tokens 消耗
+        if tools and task_description:
+            from .tool_filter import get_tools_for_message
+            tools = get_tools_for_message(tools, task_description, session_type)
+
         self._last_exit_reason = "normal"
 
         react_trace: list[dict] = []
@@ -1214,6 +1229,12 @@ class ReasoningEngine:
             no_confirmation_text_count = 0
             tools_executed_in_task = False
 
+            # ========== 空转检测变量 ==========
+            # 检测连续没有工具调用也没有实质输出的迭代
+            consecutive_empty_iterations = 0
+            max_consecutive_empty = 2  # 最大连续空转次数
+            last_inject_prompt = ""  # 避免重复注入相同提示
+
             # 循环检测
             recent_tool_signatures: list[str] = []
             tool_pattern_window = 8
@@ -1251,6 +1272,20 @@ class ReasoningEngine:
                     yield {"type": "text_delta", "content": "✅ 任务已停止。"}
                     yield {"type": "done"}
                     return
+
+                # --- 空转检测：连续多次迭代无工具调用也无最终答案 ---
+                if consecutive_empty_iterations >= max_consecutive_empty:
+                    inject_prompt = self._get_empty_turn_inject_prompt(last_inject_prompt)
+                    if inject_prompt:
+                        logger.warning(
+                            f"[ReAct-Stream] 检测到连续 {consecutive_empty_iterations} 次空转，注入强制提示"
+                        )
+                        last_inject_prompt = inject_prompt[:50]
+                        working_messages.append({
+                            "role": "user",
+                            "content": f"[系统提示] {inject_prompt}",
+                        })
+                        consecutive_empty_iterations = 0  # 重置，给模型一次机会
 
                 # --- TaskMonitor: 迭代开始 + 模型切换检查 ---
                 if task_monitor:
@@ -1314,6 +1349,10 @@ class ReasoningEngine:
                 # --- Reason phase ---
                 _thinking_t0 = time.time()
                 yield {"type": "thinking_start"}
+                # 发送 first_token 事件用于 TTFT 测量
+                # 由于当前实现是非流式的，这个事件在 LLM 调用开始时发送
+                # 作为 TTFT 的近似测量点
+                yield {"type": "first_token", "timestamp": _thinking_t0}
 
                 try:
                     decision = None
@@ -1462,6 +1501,7 @@ class ReasoningEngine:
                 # ==================== FINAL_ANSWER ====================
                 if decision.type == DecisionType.FINAL_ANSWER:
                     consecutive_tool_rounds = 0
+                    consecutive_empty_iterations = 0  # 有最终答案，重置空转计数
 
                     # 任务完成度验证（与 run() 一致）
                     result = await self._handle_final_answer(
@@ -1522,15 +1562,20 @@ class ReasoningEngine:
 
                 # ==================== TOOL_CALLS ====================
                 elif decision.type == DecisionType.TOOL_CALLS and decision.tool_calls:
+                    consecutive_empty_iterations = 0  # 有工具调用，重置空转计数
                     try:
                         state.transition(TaskStatus.ACTING)
                     except ValueError:
                         state.status = TaskStatus.ACTING
 
-                    working_messages.append({
+                    # 添加 assistant 消息（包含 reasoning_content 用于支持 thinking 的模型）
+                    assistant_msg = {
                         "role": "assistant",
                         "content": decision.assistant_content or [{"type": "text", "text": ""}],
-                    })
+                    }
+                    if decision.thinking_content:
+                        assistant_msg["reasoning_content"] = decision.thinking_content
+                    working_messages.append(assistant_msg)
 
                     # ---- ask_user 拦截 ----
                     ask_user_calls = [tc for tc in decision.tool_calls if tc.get("name") == "ask_user"]
@@ -1874,6 +1919,21 @@ class ReasoningEngine:
 
                     continue  # Next iteration
 
+                # ==================== 空转处理（既没有 FINAL_ANSWER 也没有有效 TOOL_CALLS）====================
+                else:
+                    # 增加空转计数
+                    consecutive_empty_iterations += 1
+                    logger.warning(
+                        f"[ReAct-Stream] Iter {_iteration+1} — 空转检测: "
+                        f"decision_type={decision.type.value if hasattr(decision.type, 'value') else decision.type}, "
+                        f"tool_calls={len(decision.tool_calls) if decision.tool_calls else 0}, "
+                        f"consecutive_empty={consecutive_empty_iterations}"
+                    )
+                    # 记录到 trace
+                    react_trace.append(_iter_trace)
+                    # 继续下一次迭代
+                    continue
+
             # max_iterations
             self._last_working_messages = working_messages
             self._save_react_trace(
@@ -1999,6 +2059,21 @@ class ReasoningEngine:
                 if r_len < 100:
                     return r[:100]
                 return f"完成 ({r_len} 字符)"
+
+    # ==================== 空转检测辅助方法 ====================
+
+    _EMPTY_TURN_PROMPTS = [
+        "请立即使用工具执行任务。如果需要搜索，使用 web_search 工具；如果需要读写文件，使用 file 工具。不要只描述计划，要立即行动。",
+        "你需要直接执行任务，而不是只描述想法。请立即调用相应的工具来完成用户的请求。",
+        "已检测到多次迭代无实际进展。请直接给出最终答案或调用必要的工具，不要再继续分析。",
+    ]
+
+    def _get_empty_turn_inject_prompt(self, last_prompt: str) -> str:
+        """获取空转注入提示词，避免重复使用同一条。"""
+        for p in self._EMPTY_TURN_PROMPTS:
+            if p[:50] != last_prompt:
+                return p
+        return self._EMPTY_TURN_PROMPTS[0]
 
     # ==================== ReAct 推理链保存 ====================
 

@@ -23,6 +23,7 @@ export type SSEEventType =
   | 'thinking_start'
   | 'thinking_delta'
   | 'thinking_end'
+  | 'first_token'
   | 'text_delta'
   | 'tool_call_start'
   | 'tool_call_end'

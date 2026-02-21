@@ -11,16 +11,25 @@ export function useChat(conversationId: string | null) {
   const [steps, setSteps] = useState<Step[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [firstTokenTime, setFirstTokenTime] = useState<number | null>(null)
+  const [messageSendTime, setMessageSendTime] = useState<number | null>(null)
+  const [llmOutput, setLlmOutput] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(
     async (message: string, endpoint?: string) => {
       if (isStreaming) return
 
+      // Record message send time immediately
+      const sendTime = Date.now()
+      setMessageSendTime(sendTime)
+
       // Clear previous steps when starting a new message
       setSteps([])
       setIsStreaming(true)
       setError(null)
+      setFirstTokenTime(null) // Reset first token time
+      setLlmOutput(null) // Reset LLM output
 
       const request: ChatRequest = {
         message,
@@ -35,7 +44,7 @@ export function useChat(conversationId: string | null) {
           '/chat',
           request,
           (event: Record<string, unknown>) => {
-            handleSSEEvent(event as SSEEvent, setSteps)
+            handleSSEEvent(event as SSEEvent, setSteps, setFirstTokenTime, setLlmOutput)
           },
           (err) => {
             setError(err.message)
@@ -62,12 +71,18 @@ export function useChat(conversationId: string | null) {
     setSteps([])
     setError(null)
     setIsStreaming(false)
+    setFirstTokenTime(null)
+    setMessageSendTime(null)
+    setLlmOutput(null)
   }, [])
 
   return {
     steps,
     isStreaming,
     error,
+    firstTokenTime,
+    messageSendTime,
+    llmOutput,
     sendMessage,
     cancel,
     reset,
@@ -76,7 +91,9 @@ export function useChat(conversationId: string | null) {
 
 function handleSSEEvent(
   event: SSEEvent,
-  setSteps: React.Dispatch<React.SetStateAction<Step[]>>
+  setSteps: React.Dispatch<React.SetStateAction<Step[]>>,
+  setFirstTokenTime: React.Dispatch<React.SetStateAction<number | null>>,
+  setLlmOutput: React.Dispatch<React.SetStateAction<string | null>>
 ) {
   const eventRecord = event as Record<string, unknown>
 
@@ -87,52 +104,24 @@ function handleSSEEvent(
     }
 
     case 'thinking_start': {
-      // Create a thinking/analysis step only if no thinking step exists at all
-      setSteps((prev) => {
-        const hasThinkingStep = prev.some(s => s.type === 'thinking')
-        if (hasThinkingStep) return prev
+      // Don't create thinking step automatically - only show steps when tools are actually called
+      // For simple Q&A without tool calls, we'll just show the LLM response directly
+      break
+    }
 
-        const newStep: Step = {
-          id: generateStepId(),
-          type: 'thinking',
-          status: 'running',
-          title: '意图分析',
-          summary: '正在分析用户请求...',
-          startTime: Date.now(),
-          category: 'core',
-        }
-        return [...prev, newStep]
-      })
+    case 'first_token': {
+      // 收到 first_token 事件，立即锁定 TTFT
+      setFirstTokenTime((prev) => prev || Date.now())
       break
     }
 
     case 'thinking_delta': {
-      // Update thinking step with content
-      setSteps((prev) => {
-        const lastThinkingStep = [...prev].reverse().find(s => s.type === 'thinking' && s.status === 'running')
-        if (lastThinkingStep) {
-          return prev.map((step) =>
-            step.id === lastThinkingStep.id
-              ? { ...step, output: (step.output || '') + (eventRecord.content as string || '') }
-              : step
-          )
-        }
-        return prev
-      })
+      // Ignore thinking content for now - we don't show thinking steps
       break
     }
 
     case 'thinking_end': {
-      // Don't mark thinking as completed - it may continue in next iteration
-      // Just update the summary if needed
-      setSteps((prev) =>
-        prev.map((step) => {
-          if (step.type === 'thinking' && step.status === 'running') {
-            return { ...step, summary: '分析完成，准备执行...' }
-          }
-          return step
-        })
-      )
+      // Ignore thinking end
       break
     }
 
@@ -204,13 +193,28 @@ function handleSSEEvent(
     }
 
     case 'text_delta': {
+      // Record first token time (only once) - fallback for backwards compatibility
+      setFirstTokenTime((prev) => prev || Date.now())
+
+      const content = eventRecord.content as string || ''
+
+      // Always update llmOutput (for conversation history)
+      setLlmOutput((prev) => (prev || '') + content)
+
+      // Only create/update LLM step if there are already other steps (complex task)
+      // For simple Q&A without tool calls, we don't show step cards
       setSteps((prev) => {
-        // Find or create a text step
+        // If no previous steps, don't create any step (simple Q&A)
+        if (prev.length === 0) {
+          return prev
+        }
+
+        // Find or create a text step (for complex tasks with tool calls)
         const lastStep = prev[prev.length - 1]
         if (lastStep && lastStep.type === 'llm' && lastStep.status === 'running') {
           return prev.map((step, idx) =>
             idx === prev.length - 1
-              ? { ...step, output: (step.output || '') + (eventRecord.content as string) }
+              ? { ...step, output: (step.output || '') + content }
               : step
           )
         }
@@ -222,7 +226,7 @@ function handleSSEEvent(
           title: '总结',
           summary: '',
           startTime: Date.now(),
-          output: eventRecord.content as string,
+          output: content,
           category: 'core',
         }
         return [...prev, newStep]
