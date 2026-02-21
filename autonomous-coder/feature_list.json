@@ -91,7 +91,9 @@
         "简单 Q&A 不显示步骤卡片（只显示 AI 回复）"
       ],
       "dependencies": [],
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-02-22 01:15",
+      "solution": "修复了 App.tsx 中 displaySteps 传递问题：将 chatSteps（当前轮次步骤）和 displaySteps（全部步骤）分开传递给 MainContent，确保当前轮次只显示当前步骤而非历史步骤"
     },
     {
       "id": "REF-003",
@@ -334,9 +336,9 @@
     "REF-007"
   ],
   "metadata": {
-    "last_updated": "2026-02-21 00:45",
+    "last_updated": "2026-02-22 01:15",
     "total_features": 7,
-    "completed_features": 1,
+    "completed_features": 2,
     "p0_features": 2,
     "p1_features": 3,
     "p2_features": 2

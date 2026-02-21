@@ -4,52 +4,42 @@ import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
-import type { Session, Step, ExecutionMode } from './types'
-
-// Conversation turn type
-interface ConversationTurn {
-  id: string
-  userMessage: string
-  steps: Step[]
-  summary: string | null
-  timestamp: number
-}
+import type { Session, Step, ExecutionMode, ConversationTurn } from './types'
 
 // Extended Session type with conversation history
 interface ExtendedSession extends Session {
   conversationHistory: ConversationTurn[]
 }
 
-// Mock sessions
-const MOCK_SESSIONS: ExtendedSession[] = [
-  {
-    id: 'session-1',
-    title: 'Web Research Task',
-    stepCount: 3,
-    timestamp: Date.now() - 60000,
-    status: 'active',
-    userMessage: 'Research the latest trends in AI agents for 2024. Focus on multi-agent orchestration frameworks.',
-    conversationHistory: [],
-  },
-  {
-    id: 'session-2',
-    title: 'Data Extraction',
-    stepCount: 1,
-    timestamp: Date.now() - 3600000,
-    status: 'completed',
-    userMessage: 'Extract all email addresses from the provided document.',
-    conversationHistory: [],
-  },
-  {
-    id: 'session-3',
-    title: 'Market Analysis',
-    stepCount: 5,
-    timestamp: Date.now() - 86400000,
-    status: 'completed',
-    userMessage: 'Analyze the competitive landscape for AI coding assistants.',
-    conversationHistory: [],
-  },
-]
+// Storage key for sessions
+const SESSIONS_STORAGE_KEY = 'openakita_sessions'
+
+// Load sessions from localStorage
+function loadSessions(): ExtendedSession[] {
+  try {
+    const saved = localStorage.getItem(SESSIONS_STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      return parsed.map((s: ExtendedSession) => ({
+        ...s,
+        // Ensure timestamp is a number
+        timestamp: typeof s.timestamp === 'number' ? s.timestamp : Date.now(),
+      }))
+    }
+  } catch (e) {
+    console.error('Failed to load sessions:', e)
+  }
+  return [] // Start with empty sessions (ChatGPT style)
+}
+
+// Save sessions to localStorage
+function saveSessions(sessions: ExtendedSession[]): void {
+  try {
+    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions))
+  } catch (e) {
+    console.error('Failed to save sessions:', e)
+  }
+}
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -75,54 +65,95 @@ function generateSessionTitle(message: string): string {
 }
 
 function App() {
-  const [sessions, setSessions] = useState<ExtendedSession[]>(MOCK_SESSIONS)
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>('session-1')
+  const [sessions, setSessions] = useState<ExtendedSession[]>(loadSessions)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
+
+  // Save sessions to localStorage when they change
+  useEffect(() => {
+    saveSessions(sessions)
+  }, [sessions])
 
   // Track previous chatSteps to detect when they're cleared
   const prevChatStepsRef = useRef<Step[]>([])
   const isSendingRef = useRef(false)
 
+  // Track timing for current turn
+  const currentTurnTimingRef = useRef<{
+    startTime: number | null
+    firstTokenTime: number | null
+  }>({ startTime: null, firstTokenTime: null })
+
   // Chat hook - must be before currentSteps
-  const { steps: chatSteps, sendMessage, isStreaming, reset } = useChat(currentSessionId)
+  const { steps: chatSteps, sendMessage, isStreaming, reset, firstTokenTime, messageSendTime, llmOutput } = useChat(currentSessionId)
+
+  // Track timing when messageSendTime or firstTokenTime changes
+  useEffect(() => {
+    if (messageSendTime) {
+      currentTurnTimingRef.current.startTime = messageSendTime
+    }
+  }, [messageSendTime])
+
+  useEffect(() => {
+    if (firstTokenTime) {
+      currentTurnTimingRef.current.firstTokenTime = firstTokenTime
+    }
+  }, [firstTokenTime])
+
+  // Track previous streaming state to detect when response completes
+  const prevIsStreamingRef = useRef(false)
+  const currentLlmOutputRef = useRef<string | null>(null)
+
+  // Update llmOutput ref when it changes
+  useEffect(() => {
+    if (llmOutput) {
+      currentLlmOutputRef.current = llmOutput
+    }
+  }, [llmOutput])
 
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) || null,
     [sessions, currentSessionId]
   )
 
-  // Save completed conversation turn when chatSteps transition from non-empty to empty
+  // Save completed conversation turn when streaming ends
   useEffect(() => {
-    // Update ref when steps change
-    if (chatSteps.length > 0) {
-      prevChatStepsRef.current = chatSteps
-    }
+    // Detect when streaming transitions from true to false
+    const wasStreaming = prevIsStreamingRef.current
+    prevIsStreamingRef.current = isStreaming
 
-    // When steps are cleared and we had previous steps, save the turn
-    if (currentSessionId && chatSteps.length === 0 && !isStreaming && prevChatStepsRef.current.length > 0) {
-      const prevSteps = prevChatStepsRef.current
-      const summary = [...prevSteps].reverse().find(s => s.type === 'llm')?.output || null
-      const prevUserMessage = currentSession?.userMessage || ''
+    // When streaming ends and we had a conversation
+    if (wasStreaming && !isStreaming && currentSessionId) {
+      const currentUserMessage = currentSession?.userMessage || ''
+      const timing = currentTurnTimingRef.current
+      const output = currentLlmOutputRef.current
 
-      // Only save if steps are actually completed
-      const isCompleted = prevSteps.every(s => s.status === 'completed')
-      if (!isCompleted) return
+      // Only save if we have a user message
+      if (!currentUserMessage) return
 
+      // Get steps and summary
+      const steps = chatSteps.length > 0 ? chatSteps : prevChatStepsRef.current
+      const summary = output || [...steps].reverse().find(s => s.type === 'llm')?.output || null
+
+      // Create the turn
       const newTurn: ConversationTurn = {
         id: `turn-${Date.now()}`,
-        userMessage: prevUserMessage,
-        steps: prevSteps,
+        userMessage: currentUserMessage,
+        steps: steps,
         summary,
         timestamp: Date.now(),
+        startTime: timing.startTime || undefined,
+        firstTokenTime: timing.firstTokenTime,
+        endTime: Date.now(),
       }
 
       setSessions((prev) =>
         prev.map((s) => {
           if (s.id === currentSessionId) {
             // Check if this turn already exists (avoid duplicates)
-            const turnExists = s.conversationHistory.some(t => t.userMessage === prevUserMessage)
+            const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
             if (turnExists) return s
 
             return {
@@ -135,10 +166,12 @@ function App() {
         })
       )
 
-      // Clear the ref after saving
+      // Clear refs after saving
       prevChatStepsRef.current = []
+      currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
+      currentLlmOutputRef.current = null
     }
-  }, [chatSteps.length, chatSteps, isStreaming, currentSessionId, currentSession?.userMessage])
+  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps])
 
   // Combine historical turns with current chat steps
   const displaySteps = useMemo(() => {
@@ -161,46 +194,68 @@ function App() {
   // Send message handler
   const handleSendMessage = useCallback(
     (message: string) => {
-      // Save current turn before starting a new one
-      if (currentSessionId && chatSteps.length > 0) {
-        const currentSteps = chatSteps
-        const isCompleted = currentSteps.every(s => s.status === 'completed')
-        const summary = [...currentSteps].reverse().find(s => s.type === 'llm')?.output || null
-        const currentUserMessage = currentSession?.userMessage || ''
-
-        if (isCompleted && currentUserMessage) {
-          const newTurn: ConversationTurn = {
-            id: `turn-${Date.now()}`,
-            userMessage: currentUserMessage,
-            steps: currentSteps,
-            summary,
-            timestamp: Date.now(),
-          }
-
-          setSessions((prev) =>
-            prev.map((s) => {
-              if (s.id === currentSessionId) {
-                // Check if this turn already exists
-                const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
-                if (turnExists) return s
-
-                return {
-                  ...s,
-                  conversationHistory: [...s.conversationHistory, newTurn],
-                  stepCount: s.conversationHistory.length + 1,
-                }
-              }
-              return s
-            })
-          )
+      // If no current session, create a new one first
+      let sessionId = currentSessionId
+      if (!sessionId) {
+        const newSession: ExtendedSession = {
+          id: generateId(),
+          title: generateSessionTitle(message),
+          stepCount: 0,
+          timestamp: Date.now(),
+          status: 'active',
+          userMessage: message,
+          conversationHistory: [],
         }
-      }
+        setSessions((prev) => [newSession, ...prev])
+        sessionId = newSession.id
+        setCurrentSessionId(sessionId)
+      } else {
+        // Save current turn before starting a new one
+        if (chatSteps.length > 0) {
+          const currentSteps = chatSteps
+          const isCompleted = currentSteps.every(s => s.status === 'completed')
+          const summary = [...currentSteps].reverse().find(s => s.type === 'llm')?.output || null
+          const currentUserMessage = currentSession?.userMessage || ''
 
-      // Update current session with user message and generate title
-      if (currentSessionId) {
+          if (isCompleted && currentUserMessage) {
+            // Get timing info from ref
+            const timing = currentTurnTimingRef.current
+            const lastStep = currentSteps[currentSteps.length - 1]
+
+            const newTurn: ConversationTurn = {
+              id: `turn-${Date.now()}`,
+              userMessage: currentUserMessage,
+              steps: currentSteps,
+              summary,
+              timestamp: Date.now(),
+              startTime: timing.startTime || undefined,
+              firstTokenTime: timing.firstTokenTime,
+              endTime: lastStep?.endTime || undefined,
+            }
+
+            setSessions((prev) =>
+              prev.map((s) => {
+                if (s.id === sessionId) {
+                  // Check if this turn already exists
+                  const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
+                  if (turnExists) return s
+
+                  return {
+                    ...s,
+                    conversationHistory: [...s.conversationHistory, newTurn],
+                    stepCount: s.conversationHistory.length + 1,
+                  }
+                }
+                return s
+              })
+            )
+          }
+        }
+
+        // Update current session with user message and generate title
         setSessions((prev) =>
           prev.map((s) => {
-            if (s.id === currentSessionId) {
+            if (s.id === sessionId) {
               // Generate title from user message (first 30 chars or until first punctuation)
               const title = generateSessionTitle(message)
               return {
@@ -235,6 +290,7 @@ function App() {
     setSelectedStepId(null)
     reset() // Clear current chat steps
     prevChatStepsRef.current = []
+    currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
   }, [reset])
 
   const handleDeleteSession = useCallback(
@@ -253,12 +309,19 @@ function App() {
       const prevSteps = chatSteps
       const summary = [...prevSteps].reverse().find(s => s.type === 'llm')?.output || null
 
+      // Get timing info from ref
+      const timing = currentTurnTimingRef.current
+      const lastStep = prevSteps[prevSteps.length - 1]
+
       const newTurn: ConversationTurn = {
         id: `turn-${Date.now()}`,
         userMessage: currentSession?.userMessage || '',
         steps: prevSteps,
         summary,
         timestamp: Date.now(),
+        startTime: timing.startTime || undefined,
+        firstTokenTime: timing.firstTokenTime,
+        endTime: lastStep?.endTime || undefined,
       }
 
       setSessions((prev) =>
@@ -279,6 +342,7 @@ function App() {
     setSelectedStepId(null)
     reset() // Clear current chat steps for the new session
     prevChatStepsRef.current = []
+    currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
   }, [currentSessionId, currentSession?.userMessage, chatSteps, reset])
 
   return (
@@ -297,11 +361,17 @@ function App() {
       mainContent={
         <MainContent
           session={currentSession}
-          steps={displaySteps}
+          conversationHistory={currentSession?.conversationHistory || []}
+          steps={chatSteps}
+          allSteps={displaySteps}
           executionMode={executionMode}
           onModeChange={setExecutionMode}
           onStepClick={setSelectedStepId}
           onSendMessage={handleSendMessage}
+          isStreaming={isStreaming}
+          firstTokenTime={firstTokenTime}
+          messageSendTime={messageSendTime}
+          llmOutput={llmOutput}
         />
       }
       detailPanel={selectedStep ? <DetailPanel step={selectedStep} onClose={() => setSelectedStepId(null)} /> : null}
