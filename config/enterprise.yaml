@@ -1,0 +1,123 @@
+# Enterprise Configuration Template
+# 企业级配置模板
+#
+# 此配置文件用于企业级部署，提供 Memory 和 Context 系统的后端切换能力。
+#
+# 使用方法：
+# 1. 复制此文件到你的配置目录
+# 2. 根据需要修改配置项
+# 3. 在代码中加载配置并创建后端实例
+
+# ============================================================
+# Memory 系统配置
+# ============================================================
+memory:
+  # 后端类型: legacy | enterprise
+  # - legacy: 使用原有 Memory 系统（ChromaDB 向量存储，AI 提取记忆）
+  # - enterprise: 使用企业级 Memory 系统（规则驱动，任务上下文，无向量依赖）
+  backend: enterprise
+
+  # 企业级模式配置（仅当 backend=enterprise 时生效）
+  enterprise:
+    # 系统规则配置文件路径（YAML 或 JSON）
+    # 规则文件格式见下方示例
+    rules_path: config/rules.yaml
+
+    # 技能缓存配置文件路径（可选）
+    # 用于存储常用操作模式
+    skills_path: config/skills.json
+
+    # 每个任务最大步骤摘要数（滑动窗口大小）
+    max_step_summaries: 20
+
+    # 每个任务最大关键变量数
+    max_key_variables: 50
+
+# ============================================================
+# Context 系统配置
+# ============================================================
+context:
+  # 后端类型: legacy | enterprise
+  # - legacy: 使用原有 ContextManager（LLM 压缩，2-5s 延迟）
+  # - enterprise: 使用企业级 ContextManager（滑动窗口，<10ms 延迟）
+  backend: enterprise
+
+  # 企业级模式配置（仅当 backend=enterprise 时生效）
+  enterprise:
+    # 对话滑动窗口大小（轮数）
+    # 超过此数量的早期对话会被裁剪
+    max_conversation_rounds: 20
+
+    # 任务上下文最大摘要数
+    max_task_summaries: 20
+
+    # 任务上下文最大变量数
+    max_task_variables: 50
+
+  # Legacy 模式配置（仅当 backend=legacy 时生效）
+  legacy:
+    # 是否启用 LLM 压缩
+    # true: 当上下文接近限制时使用 LLM 压缩（较慢但保留更多信息）
+    # false: 禁用压缩（仅使用硬截断）
+    enable_compression: true
+
+# ============================================================
+# 规则文件格式示例 (config/rules.yaml)
+# ============================================================
+# rules:
+#   - id: rule-001
+#     category: compliance
+#     content: "不允许存储敏感信息"
+#     priority: 10
+#     enabled: true
+#     created_by: admin
+#
+#   - id: rule-002
+#     category: security
+#     content: "禁止执行危险操作"
+#     priority: 9
+#     enabled: true
+#     created_by: admin
+#
+#   - id: rule-003
+#     category: business
+#     content: "优先使用中文回复"
+#     priority: 5
+#     enabled: true
+#     created_by: admin
+#
+# 规则类别 (category):
+#   - compliance: 合规性规则
+#   - security: 安全规则
+#   - business: 业务规则
+#   - custom: 自定义规则
+#
+# 优先级 (priority): 1-10，数字越大优先级越高
+
+# ============================================================
+# 代码使用示例
+# ============================================================
+# from openakita.config import (
+#     MemoryBackendConfig,
+#     ContextBackendConfig,
+#     create_memory_backend,
+#     create_context_backend,
+# )
+#
+# # Memory 后端
+# memory_config = MemoryBackendConfig(
+#     backend="enterprise",
+#     rules_path="config/rules.yaml"
+# )
+# memory_backend = create_memory_backend(memory_config)
+#
+# # Context 后端
+# context_config = ContextBackendConfig(backend="enterprise")
+# context_backend = create_context_backend(context_config)
+#
+# # 初始化
+# context_backend.initialize(
+#     identity="我是企业助手",
+#     rules=["规则1", "规则2"],
+#     tools_manifest="可用工具列表"
+# )
