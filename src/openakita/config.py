@@ -395,22 +395,6 @@ class Settings(BaseSettings):
     orchestration_heartbeat_interval: int = Field(default=5, description="Worker 心跳间隔（秒）")
     orchestration_health_check_interval: int = Field(default=10, description="健康检查间隔（秒）")
 
-    # === 人格系统配置 ===
-    persona_name: str = Field(
-        default="default", description="当前激活的人格预设名称 (default/business/tech_expert/butler/girlfriend/boyfriend/family/jarvis)"
-    )
-
-    # === 活人感引擎配置 ===
-    proactive_enabled: bool = Field(default=True, description="是否启用活人感模式")
-    proactive_max_daily_messages: int = Field(default=3, description="每日最多主动消息数")
-    proactive_min_interval_minutes: int = Field(default=120, description="两条主动消息最短间隔（分钟）")
-    proactive_quiet_hours_start: int = Field(default=23, description="安静时段开始（小时，0-23）")
-    proactive_quiet_hours_end: int = Field(default=7, description="安静时段结束（小时，0-23）")
-    proactive_idle_threshold_hours: int = Field(default=24, description="用户空闲多久后触发闲聊问候（小时）")
-
-    # === 表情包配置 ===
-    sticker_enabled: bool = Field(default=True, description="是否启用表情包功能")
-    sticker_data_dir: str = Field(default="data/sticker", description="表情包数据目录")
 
     # === 追踪配置 ===
     tracing_enabled: bool = Field(default=False, description="是否启用 Agent 追踪")
@@ -489,16 +473,6 @@ class Settings(BaseSettings):
         return self.identity_path / "MEMORY.md"
 
     @property
-    def personas_path(self) -> Path:
-        """人格预设目录路径"""
-        return self.identity_path / "personas"
-
-    @property
-    def sticker_data_path(self) -> Path:
-        """表情包数据目录路径"""
-        return self.project_root / self.sticker_data_dir
-
-    @property
     def skills_path(self) -> Path:
         """技能目录路径"""
         return self.project_root / "skills"
@@ -543,14 +517,7 @@ class Settings(BaseSettings):
 # ---------------------------------------------------------------------------
 
 # 需要持久化的 settings 字段名
-_PERSISTABLE_KEYS: list[str] = [
-    "persona_name",
-    "proactive_enabled",
-    "proactive_max_daily_messages",
-    "proactive_min_interval_minutes",
-    "proactive_quiet_hours_start",
-    "proactive_quiet_hours_end",
-]
+_PERSISTABLE_KEYS: list[str] = []
 
 
 class RuntimeState:
