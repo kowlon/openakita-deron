@@ -33,17 +33,13 @@ class PromptAssembler:
         skill_catalog: Any,
         mcp_catalog: Any,
         memory_manager: Any,
-        profile_manager: Any,
         brain: Any,
-        persona_manager: Any = None,
     ) -> None:
         self._tool_catalog = tool_catalog
         self._skill_catalog = skill_catalog
         self._mcp_catalog = mcp_catalog
         self._memory_manager = memory_manager
-        self._profile_manager = profile_manager
         self._brain = brain
-        self._persona_manager = persona_manager
 
         self._mcp_catalog_text: str = ""
 
@@ -94,13 +90,6 @@ class PromptAssembler:
         # 工具列表
         tools_text = self._generate_tools_text(tools)
 
-        # 用户档案
-        profile_prompt = ""
-        if self._profile_manager.is_first_use():
-            profile_prompt = self._profile_manager.get_onboarding_prompt()
-        else:
-            profile_prompt = self._profile_manager.get_daily_question_prompt()
-
         # 系统环境信息
         system_info = self._build_system_info()
 
@@ -121,8 +110,7 @@ class PromptAssembler:
 
 {tools_guide}
 
-{core_principles}
-{profile_prompt}"""
+{core_principles}"""
 
     async def build_system_prompt_compiled(
         self,
@@ -174,7 +162,6 @@ class PromptAssembler:
             include_tools_guide=True,
             session_type=session_type,
             precomputed_memory=precomputed_memory,
-            persona_manager=self._persona_manager,
         )
 
     def _build_compiled_sync(self, task_description: str = "", session_type: str = "cli") -> str:
@@ -198,7 +185,6 @@ class PromptAssembler:
             task_description=task_description,
             include_tools_guide=True,
             session_type=session_type,
-            persona_manager=self._persona_manager,
         )
 
     def _generate_tools_text(self, tools: list[dict]) -> str:
