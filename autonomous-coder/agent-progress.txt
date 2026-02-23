@@ -336,3 +336,430 @@
 
 ---
 
+## Session 9 - 企业级 Memory & Context 重构规划
+- Date: 2026-02-23
+- Agent: Planner
+- Features: Enterprise Memory & Context Refactoring Planning
+
+### 背景分析:
+
+#### 1. 现有 Memory 系统问题
+- 过度记录：AI 自动提取大量"用户偏好"，对企业用户无意义
+- 向量依赖：强依赖 ChromaDB 和 embedding 模型
+- 个人化设计：PREFERENCE/PERSONA_TRAIT 类型对企业无意义
+- 每日归纳：凌晨定时任务对企业场景不适用
+- 无限增长：记忆只增不减（除过期清理）
+
+#### 2. 现有 Context 系统问题
+- LLM 压缩开销大：每次压缩调用 LLM，延迟 2-5 秒
+- 压缩时机被动：只在超限时触发，可能导致突然卡顿
+- 无优先级区分：所有消息同等对待，可能丢失关键信息
+- 企业场景不适配：无多租户隔离、无任务级上下文
+
+### 重构方案:
+
+#### Memory 三层架构
+```
+System Rules (永久)     → 管理员配置，业务规则
+     ↓
+Task Context (任务级)   → 步骤摘要、关键变量
+     ↓
+Skill Cache (可选)      → 常用操作模式，TTL 过期
+```
+
+#### Context 三层架构
+```
+System Context (永久)   → 身份、规则、工具清单，固定 8K
+     ↓
+Task Context (任务级)   → 步骤摘要、关键变量，动态 16K
+     ↓
+Conversation Context (轮次) → 滑动窗口 20 轮，8K
+```
+
+### 核心改进点:
+1. **移除 LLM 压缩** → 滑动窗口 + 步骤摘要，延迟从秒级降到毫秒级
+2. **三层分离** → 系统/任务/对话独立管理，职责清晰
+3. **任务导向** → 任务结束即清理，避免上下文污染
+4. **确定性** → 无 LLM 调用，行为可预测
+5. **可观测** → stats 接口实时监控上下文状态
+
+### 创建的文件:
+1. **docs/memory-refactoring-enterprise.md** - Memory 系统分析与重构方案
+2. **docs/context-refactoring-enterprise.md** - Context 系统分析与重构方案
+3. **autonomous-coder/enterprise_refactor_plan.md** - 详细实施计划
+4. **autonomous-coder/enterprise_feature_list.json** - 功能分解列表
+
+### 功能分解:
+
+#### Memory 模块 (9 个任务)
+| ID | 任务 | 优先级 |
+|----|------|--------|
+| MEM-001 | 定义 MemoryBackend 协议 | P0 |
+| MEM-002 | 实现 SystemRuleStore | P0 |
+| MEM-003 | 实现 TaskContextStore | P0 |
+| MEM-004 | 实现 SkillStore (可选) | P1 |
+| MEM-005 | 实现 EnterpriseMemoryRouter | P0 |
+| MEM-006 | 实现 LegacyMemoryBackend 适配器 | P0 |
+| MEM-007 | 更新配置系统 | P0 |
+| MEM-008 | 后端单元测试 | P0 |
+| MEM-009 | 集成测试 | P1 |
+
+#### Context 模块 (9 个任务)
+| ID | 任务 | 优先级 |
+|----|------|--------|
+| CTX-001 | 定义 ContextBackend 协议 | P0 |
+| CTX-002 | 实现 SystemContext | P0 |
+| CTX-003 | 实现 TaskContext | P0 |
+| CTX-004 | 实现 ConversationContext | P0 |
+| CTX-005 | 实现 EnterpriseContextManager | P0 |
+| CTX-006 | 实现 LegacyContextBackend 适配器 | P0 |
+| CTX-007 | 更新 Agent 集成 | P0 |
+| CTX-008 | 后端单元测试 | P0 |
+| CTX-009 | 集成测试 | P1 |
+
+#### E2E 测试 (3 个任务)
+| ID | 任务 | 优先级 |
+|----|------|--------|
+| E2E-001 | Memory 模块 Chrome 插件测试 | P0 |
+| E2E-002 | Context 模块 Chrome 插件测试 | P0 |
+| E2E-003 | 完整流程端到端测试 | P1 |
+
+### 测试计划:
+
+#### 后端单元测试
+- Memory 模块: 20 个测试用例
+- Context 模块: 18 个测试用例
+- 总计: 38 个
+
+#### Chrome 插件 E2E 测试
+- Memory E2E: 5 个测试用例
+- Context E2E: 4 个测试用例
+- Full Flow E2E: 3 个测试用例
+- 总计: 12 个
+
+### 时间估算:
+| 阶段 | 预计时间 |
+|------|---------|
+| 第 1 天 | MEM-001~004 (4h) |
+| 第 2 天 | MEM-005~008 (4h) |
+| 第 3 天 | CTX-001~005 (4h) |
+| 第 4 天 | CTX-006~008 + E2E-001~002 (4h) |
+| 第 5 天 | E2E-003 + 联调 + 文档 (4h) |
+| **总计** | **约 20 小时** |
+
+### 预期收益:
+- **延迟降低**：压缩从 2-5s 降到 <10ms
+- **部署简化**：移除 ChromaDB 和 embedding 模型依赖
+- **资源节省**：内存从 200-500MB 降到 10-50MB
+- **多租户支持**：原生支持任务级隔离
+
+### Next Steps:
+1. 执行 MEM-001: 定义 MemoryBackend 协议 ✅ 已完成
+2. 执行 MEM-002: 实现 SystemRuleStore
+3. 执行 CTX-001: 定义 ContextBackend 协议
+4. 按 implementation_order 顺序依次实施
+
+---
+
+## Session 10 - Enterprise Coding
+- Date: 2026-02-23 14:30
+- Agent: Enterprise Coder
+- Feature: MEM-001 - 定义 MemoryBackend 协议
+
+### Completed:
+- 创建 src/openakita/memory/protocol.py 文件
+- 定义 MemoryBackend Protocol 类，包含 6 个核心方法
+- 添加类型注解和完整文档字符串
+- 编写 23 个单元测试 (tests/memory/test_protocol.py)
+
+### Files Changed:
+- src/openakita/memory/protocol.py (新建)
+- tests/memory/test_protocol.py (新建)
+- tests/memory/__init__.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- test_protocol_is_runtime_checkable: PASS
+- test_protocol_has_*_method (6 tests): PASS
+- TestMockMemoryBackend (11 tests): PASS
+- TestProtocolMethodSignatures (6 tests): PASS
+- **Total: 23 passed**
+- mypy type check: PASS
+
+### Git Commit:
+- Commit: 91267ef
+- Message: feat(memory): implement MemoryBackend protocol (MEM-001)
+
+### Next Steps:
+- 继续实现下一个功能: MEM-002 - 实现 SystemRuleStore 系统规则存储 ✅ 已完成
+
+---
+
+## Session 11 - Enterprise Coding
+- Date: 2026-02-23 15:00
+- Agent: Enterprise Coder
+- Feature: MEM-002 - 实现 SystemRuleStore 系统规则存储
+
+### Completed:
+- 创建 enterprise 目录结构 (src/openakita/memory/enterprise/)
+- 定义 RuleCategory 枚举 (COMPLIANCE, SECURITY, BUSINESS, CUSTOM)
+- 定义 SystemRule 数据类 (支持序列化/反序列化)
+- 实现 SystemRuleStore 类:
+  - load_from_yaml: 从 YAML 配置加载规则
+  - load_from_json: 从 JSON 配置加载规则
+  - get_enabled_rules: 获取启用的规则（按优先级排序）
+  - get_rules_by_category: 按类别过滤规则
+  - to_prompt: 生成提示词格式的规则字符串
+- 编写 25 个单元测试 (tests/memory/enterprise/test_rules.py)
+
+### Files Changed:
+- src/openakita/memory/enterprise/__init__.py (新建)
+- src/openakita/memory/enterprise/rules.py (新建)
+- tests/memory/enterprise/test_rules.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- TestRuleCategory (2 tests): PASS
+- TestSystemRule (4 tests): PASS
+- TestSystemRuleStore (19 tests): PASS
+- **Total: 25 passed**
+- mypy type check: PASS
+
+### Git Commit:
+- Commit: 48f8d1a
+- Message: feat(memory): implement SystemRuleStore (MEM-002)
+
+### Next Steps:
+- 继续实现下一个功能: MEM-003 - 实现 TaskContextStore 任务上下文存储 ✅ 已完成
+
+---
+
+## Session 12 - Enterprise Coding
+- Date: 2026-02-23 15:30
+- Agent: Enterprise Coder
+- Feature: MEM-003 - 实现 TaskContextStore 任务上下文存储
+
+### Completed:
+- 定义 ErrorEntry 数据类（错误记录）
+- 定义 TaskMemory 数据类：
+  - step_summaries (最多 20 条，滑动窗口)
+  - key_variables (最多 50 个)
+  - errors (错误记录列表)
+- 实现 TaskContextStore 类：
+  - start_task/end_task: 任务生命周期管理
+  - get_context: 获取任务上下文
+  - record_step_completion: 记录步骤完成（含摘要和变量）
+  - record_error: 记录错误（含可选解决方案）
+  - to_prompt: 生成提示词格式的上下文
+  - get_tasks_by_tenant: 多租户支持
+- 编写 33 个单元测试 (tests/memory/enterprise/test_task_context.py)
+
+### Files Changed:
+- src/openakita/memory/enterprise/task_context.py (新建)
+- src/openakita/memory/enterprise/__init__.py (更新导出)
+- tests/memory/enterprise/test_task_context.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- TestErrorEntry (4 tests): PASS
+- TestTaskMemory (8 tests): PASS
+- TestTaskContextStore (21 tests): PASS
+- **Total: 33 passed**
+- mypy type check: PASS
+
+### Git Commit:
+- Commit: fcaee90
+- Message: feat(memory): implement TaskContextStore (MEM-003)
+
+### Next Steps:
+- 继续实现下一个功能: CTX-001 - 定义 ContextBackend 协议 ✅ 已完成
+
+---
+
+## Session 13 - Enterprise Coding
+- Date: 2026-02-23 16:00
+- Agent: Enterprise Coder
+- Feature: CTX-001 - 定义 ContextBackend 协议
+
+### Completed:
+- 创建 context 模块目录结构
+- 定义 ContextBackend Protocol 类，包含 8 个方法：
+  - initialize: 初始化身份、规则、工具清单
+  - start_task/end_task: 任务生命周期管理
+  - record_step: 记录步骤完成
+  - build_context: 组装完整上下文（系统+任务+对话）
+  - add_message: 添加对话消息
+  - get_stats: 获取上下文统计信息
+  - clear_session: 清理会话数据
+- 创建 MockContextBackend 用于测试
+- 编写 22 个单元测试 (tests/context/test_protocol.py)
+
+### Files Changed:
+- src/openakita/context/__init__.py (新建)
+- src/openakita/context/protocol.py (新建)
+- tests/context/__init__.py (新建)
+- tests/context/test_protocol.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- TestContextBackendProtocol (9 tests): PASS
+- TestMockContextBackend (9 tests): PASS
+- TestProtocolMethodSignatures (4 tests): PASS
+- **Total: 22 passed**
+- mypy type check: PASS
+
+### Git Commit:
+- Commit: f5074ce
+- Message: feat(context): implement ContextBackend protocol (CTX-001)
+
+### Summary (本次会话):
+- 完成 4 个功能: MEM-001, MEM-002, MEM-003, CTX-001
+- 测试通过: 23 + 25 + 33 + 22 = 103 个单元测试
+- Git commits: 4 个
+
+### Next Steps:
+- 继续实现下一个功能: CTX-002 - 实现 SystemContext 系统上下文 ✅ 已完成
+
+---
+
+## Session 14 - Enterprise Coding
+- Date: 2026-02-23 16:30
+- Agent: Enterprise Coder
+- Feature: CTX-002 - 实现 SystemContext 系统上下文
+
+### Completed:
+- 创建 context/enterprise 目录结构
+- 定义 SystemContext 数据类：
+  - identity: Agent 身份描述
+  - rules: 行为规则列表
+  - tools_manifest: 可用工具清单
+  - max_tokens: token 预算上限 (默认 8000)
+- 实现 to_prompt() 方法生成系统提示词
+- 实现 estimate_tokens() 方法进行 token 估算
+- 实现 is_within_budget() 方法检查预算
+- 支持序列化 (to_dict, from_dict)
+- 编写 26 个单元测试
+
+### Files Changed:
+- src/openakita/context/enterprise/__init__.py (新建)
+- src/openakita/context/enterprise/system_context.py (新建)
+- tests/context/enterprise/__init__.py (新建)
+- tests/context/enterprise/test_system_context.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- TestSystemContext (26 tests): PASS
+- **Total: 26 passed**
+- mypy type check: PASS
+
+### Git Commit:
+- Commit: f399dab
+- Message: feat(context): implement SystemContext (CTX-002)
+
+### Next Steps:
+- 继续实现下一个功能: CTX-003 - 实现 TaskContext 任务上下文 ✅ 已完成
+- 继续实现下一个功能: CTX-004 - 实现 ConversationContext 对话上下文（核心优化） ✅ 已完成
+
+---
+
+## Session 15 - Enterprise Coding
+- Date: 2026-02-23 17:30
+- Agent: Enterprise Coder
+- Feature: CTX-003 & CTX-004 - TaskContext & ConversationContext
+
+### CTX-003 Completed:
+- 定义 TaskContext 数据类（task_id, tenant_id, step_summaries, key_variables）
+- 实现 add_step_summary 方法（滑动窗口限制 20 条）
+- 实现 add_variable 方法（限制 50 个变量）
+- to_prompt() 生成任务上下文提示词
+- 19 个单元测试通过
+
+### CTX-004 Completed (CORE OPTIMIZATION):
+- 定义 ConversationContext 数据类（messages, max_rounds=20）
+- 实现 add_message 方法
+- **【核心】实现 _trim_if_needed 滑动窗口裁剪**
+  - 无 LLM 调用，纯 Python 确定性算法
+  - 延迟从 2-5s 降到 <1ms
+  - 保留 tool_use/tool_result 配对
+- 25 个单元测试通过，包括性能测试
+
+### Files Changed:
+- src/openakita/context/enterprise/task_context.py (新建)
+- src/openakita/context/enterprise/conversation_context.py (新建)
+- src/openakita/context/enterprise/__init__.py (更新导出)
+- tests/context/enterprise/test_task_context.py (新建)
+- tests/context/enterprise/test_conversation_context.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- CTX-003: 19 passed
+- CTX-004: 25 passed
+- **Total: 44 passed**
+- mypy type check: PASS
+
+### Performance Verification:
+- test_trim_performance: < 10ms ✓
+- test_no_llm_calls_in_trim: < 1ms ✓
+
+### Git Commits:
+- Commit: 70fdf67 (CTX-003)
+- Commit: 881c7e3 (CTX-004)
+
+### Summary (本次会话累计):
+- 完成 7 个功能: MEM-001, MEM-002, MEM-003, CTX-001, CTX-002, CTX-003, CTX-004
+- 测试通过: 23 + 25 + 33 + 22 + 26 + 19 + 25 = 173 个单元测试
+- Git commits: 7 个
+
+### Next Steps:
+- 继续实现下一个功能: CTX-005 - 实现 EnterpriseContextManager 上下文管理器 ✅ 已完成
+
+---
+
+## Session 16 - Enterprise Coding
+- Date: 2026-02-23 18:00
+- Agent: Enterprise Coder
+- Feature: CTX-005 - 实现 EnterpriseContextManager 上下文管理器
+
+### Completed:
+- 定义 ContextConfig 配置类
+- 实现 EnterpriseContextManager 统一上下文管理器：
+  - initialize(): 初始化系统上下文
+  - start_task/end_task(): 任务生命周期管理
+  - record_step(): 记录步骤完成
+  - add_message(): 添加对话消息（带滑动窗口）
+  - build_context(): 组装三层上下文
+  - get_stats(): 获取所有层统计信息
+- 协调三层上下文：
+  1. SystemContext（永久）
+  2. TaskContext（任务生命周期）
+  3. ConversationContext（滑动窗口）
+- 编写 19 个单元测试
+
+### Files Changed:
+- src/openakita/context/enterprise/config.py (新建)
+- src/openakita/context/enterprise/manager.py (新建)
+- src/openakita/context/enterprise/__init__.py (更新)
+- tests/context/enterprise/test_manager.py (新建)
+- autonomous-coder/enterprise_feature_list.json (更新)
+
+### Test Results:
+- TestContextConfig (4 tests): PASS
+- TestEnterpriseContextManager (15 tests): PASS
+- **Total: 19 passed**
+- mypy type check: PASS (6 source files)
+
+### Git Commit:
+- Commit: 8979001
+- Message: feat(context): implement EnterpriseContextManager (CTX-005)
+
+### Summary (累计):
+- 完成 8 个功能: MEM-001~003, CTX-001~005
+- 测试通过: 192 个单元测试
+- Git commits: 8 个
+- 剩余 12 个功能
+
+### Next Steps:
+- 继续实现下一个功能: CTX-006 - 实现 LegacyContextBackend 适配器
+- 请在新会话中继续
+
+---
