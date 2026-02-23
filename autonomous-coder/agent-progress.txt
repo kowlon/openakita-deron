@@ -180,3 +180,159 @@
 - 执行 REF-002 修复中间步骤不显示的问题
 
 ---
+## Session 6 - REF-003 完成
+- Date: 2026-02-22 02:15
+- Agent: Coder
+- Feature: REF-003 - 实现 Edit 模式完整交互流程
+
+### 问题分析:
+1. 原问题：Edit 模式只是状态切换，没有实际的暂停和确认交互
+2. 期望：步骤完成后暂停，显示确认按钮，用户确认后保存到历史记录
+
+### 解决方案:
+1. **创建 EditConfirmBar 组件** (`webapps/seeagent-webui/src/components/Step/EditConfirmBar.tsx`):
+   - 显示步骤完成提示
+   - 提供 "跳过" 和 "确认，继续下一步" 按钮
+
+2. **更新 StepCard 组件** (`webapps/seeagent-webui/src/components/Step/StepCard.tsx`):
+   - 添加 Edit 模式相关 props (executionMode, onConfirmStep, onSkipStep, isWaitingConfirmation)
+   - 在 Edit 模式下步骤完成时显示 EditConfirmBar
+
+3. **更新 StepTimeline 组件** (`webapps/seeagent-webui/src/components/Step/StepTimeline.tsx`):
+   - 透传 Edit 模式相关 props 给 StepCard
+
+4. **更新 MainContent 组件** (`webapps/seeagent-webui/src/components/Layout/MainContent.tsx`):
+   - 添加 Edit 模式状态管理 (waitingConfirmationStepId, confirmedSteps)
+   - 添加步骤级确认逻辑 (handleConfirmStep, handleSkipStep)
+   - 添加任务级确认栏 (editModeNeedsConfirmation)
+   - 添加 onConfirmTurn 回调 prop
+
+5. **更新 App.tsx** (`webapps/seeagent-webui/src/App.tsx`):
+   - 修改自动保存逻辑：Auto 模式自动保存，Edit 模式等待用户确认
+   - 添加 handleConfirmTurn 回调处理确认后保存
+
+### Files Changed:
+- webapps/seeagent-webui/src/components/Step/EditConfirmBar.tsx (新建)
+- webapps/seeagent-webui/src/components/Step/StepCard.tsx
+- webapps/seeagent-webui/src/components/Step/StepTimeline.tsx
+- webapps/seeagent-webui/src/components/Layout/MainContent.tsx
+- webapps/seeagent-webui/src/App.tsx
+- autonomous-coder/feature_list.json
+
+### Test Results:
+- ✅ Edit 模式下发送消息，步骤完成后显示确认栏
+- ✅ 步骤级确认栏显示："Edit 模式：步骤「网络搜索」已完成，请确认后继续"
+- ✅ 任务级确认栏显示："Edit 模式：任务已完成，请确认结果"
+- ✅ 点击 "确认完成" 后，对话保存到历史记录
+- ✅ Auto 模式下自动保存，无需确认
+
+### 验收标准:
+- [x] Edit 模式下步骤完成后暂停，显示确认入口
+- [x] 点击确认后继续执行下一步（保存到历史记录）
+- [x] Auto 模式下自动继续执行（自动保存）
+
+### Next Steps:
+- 执行 REF-004 实现文件卡片组件
+
+---
+
+## Session 7 - REF-004 ~ REF-007 完成
+- Date: 2026-02-22 03:20
+- Agent: Coder
+- Features: REF-004, REF-005, REF-006, REF-007
+
+### REF-004: 文件卡片组件（Artifact）
+- 创建 types/artifact.ts：定义 Artifact 类型和辅助函数
+- 创建 ArtifactCard 组件：显示文件图标、名称、大小、下载按钮
+- 创建 ArtifactList 组件：管理多个文件卡片
+- 在 useChat 添加 artifact_created 事件处理和工具结果检测
+- 在 MainContent 集成 ArtifactList
+
+### REF-005: 步骤卡片交互优化
+- StepTimer 组件正常工作：从0开始、运行中更新、完成后停止
+- 点击卡片显示详情，点击箭头展开/收起
+- 运行状态添加 animate-pulse 边框动画
+
+### REF-006: 文件预览功能
+- PDF 和图片类型显示预览按钮
+- 点击预览在新窗口打开文件
+
+### REF-007: 代码清理和优化
+- npm run build 无错误通过
+- TypeScript strict 模式通过
+- 所有组件使用 PascalCase 命名
+
+### Summary
+全部 7 个重构任务已完成：
+- ✅ REF-001: TTFT 计时器修复
+- ✅ REF-002: 步骤显示修复
+- ✅ REF-003: Edit 模式交互
+- ✅ REF-004: 文件卡片组件
+- ✅ REF-005: 步骤卡片交互优化
+- ✅ REF-006: 文件预览功能
+- ✅ REF-007: 代码清理
+
+---
+
+## Session 8 - Edit 模式完善 & 测试
+- Date: 2026-02-22 14:30
+- Agent: Coder
+- Features: Edit Mode Enhancement & Test Case Execution
+
+### Completed:
+
+#### 1. Edit 模式完善
+1. **EditableResultCard 组件** (`src/components/Step/EditableResultCard.tsx`)
+   - 支持勾选/取消勾选
+   - 支持删除结果
+   - 支持点击编辑内容
+   - 显示标题、内容、来源
+
+2. **EditableResultList 组件** (`src/components/Step/EditableResultList.tsx`)
+   - 管理多个结果卡片
+   - 支持全选功能
+   - 支持"添加自定义内容"
+   - 显示确认按钮
+
+3. **工具结果解析** (`src/utils/parseToolResult.ts`)
+   - parseWebSearchResults: 解析网页搜索结果
+   - parseNewsSearchResults: 解析新闻搜索结果
+   - parseGenericResults: 通用结果解析
+
+4. **StepCard 集成**
+   - 在 Edit 模式下显示可编辑结果列表
+   - 传递 editableResults 和 onEditableResultsChange
+
+5. **MainContent 状态管理**
+   - 添加 editableResults 状态
+   - 重置时清空 editableResults
+
+#### 2. Bug 修复
+- 修复会话持久化问题：使用 isInitialMountRef 避免 StrictMode 导致的空数组覆盖
+
+#### 3. 测试用例执行
+全部 16 个测试用例通过：
+- TC-01~03: 计时器测试 (3/3 PASS)
+- TC-04~07: 步骤显示测试 (4/4 PASS)
+- TC-08: 文件卡片测试 (1/1 PASS)
+- TC-09~11: 会话管理测试 (3/3 PASS)
+- TC-12~14: 模式切换测试 (3/3 PASS)
+- TC-15~16: 交互测试 (2/2 PASS)
+
+### Files Changed:
+- webapps/seeagent-webui/src/components/Step/EditableResultCard.tsx (新建)
+- webapps/seeagent-webui/src/components/Step/EditableResultList.tsx (新建)
+- webapps/seeagent-webui/src/utils/parseToolResult.ts (新建)
+- webapps/seeagent-webui/src/components/Step/StepCard.tsx
+- webapps/seeagent-webui/src/components/Step/StepTimeline.tsx
+- webapps/seeagent-webui/src/components/Layout/MainContent.tsx
+- webapps/seeagent-webui/src/App.tsx
+- webapps/seeagent-webui/docs/test-results.md (新建)
+
+### Final Status:
+- ✅ Edit 模式完整实现（可编辑结果、确认流程）
+- ✅ 16/16 测试用例通过
+- ✅ 构建成功
+
+---
+

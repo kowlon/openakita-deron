@@ -28,6 +28,8 @@ MIN_RECENT_TURNS = 4  # 至少保留最近 4 轮对话
 COMPRESSION_RATIO = 0.15  # 目标压缩到原上下文的 15%
 CHUNK_MAX_TOKENS = 30000  # 每次发给 LLM 压缩的单块上限
 LARGE_TOOL_RESULT_THRESHOLD = 5000  # 单条 tool_result 超过此 token 数时独立压缩
+# 提前触发压缩的阈值：当消息数超过此值时，即使 token 数未到 soft_limit 也触发压缩
+MAX_MESSAGE_COUNT_THRESHOLD = 100  # 超过 100 条消息时强制压缩
 
 
 class _CancelledError(Exception):
@@ -249,9 +251,18 @@ class ContextManager:
         soft_limit = int(hard_limit * 0.7)
 
         current_tokens = self.estimate_messages_tokens(messages)
+        message_count = len(messages)
 
-        if current_tokens <= soft_limit:
+        # 触发压缩的条件：1. token 超过 soft_limit，或 2. 消息数超过阈值
+        if current_tokens <= soft_limit and message_count <= MAX_MESSAGE_COUNT_THRESHOLD:
             return messages
+
+        # 如果只是消息数过多但 token 不多，也记录日志
+        if current_tokens <= soft_limit and message_count > MAX_MESSAGE_COUNT_THRESHOLD:
+            logger.info(
+                f"Message count ({message_count}) exceeds threshold ({MAX_MESSAGE_COUNT_THRESHOLD}), "
+                f"triggering compression even though tokens ({current_tokens}) <= soft_limit ({soft_limit})"
+            )
 
         tracer = get_tracer()
         from ..tracing.tracer import SpanType

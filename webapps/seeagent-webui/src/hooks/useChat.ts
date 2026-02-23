@@ -1,32 +1,46 @@
 import { useState, useCallback, useRef } from 'react'
-import { apiPostStream } from '@/api/client'
+import { apiPostStream, apiPost } from '@/api/client'
 import type { ChatRequest, SSEEvent, Step, StepStatus, StepCategory } from '@/types'
+import type { Artifact } from '@/types/artifact'
 import { CORE_STEP_PATTERNS, INTERNAL_STEP_PATTERNS } from '@/types/step'
 
 function generateStepId(): string {
   return `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 }
 
+function generateArtifactId(): string {
+  return `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+}
+
 export function useChat(conversationId: string | null) {
   const [steps, setSteps] = useState<Step[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
+  const [pausedStepId, setPausedStepId] = useState<string | null>(null)
+  const [pausedStepResult, setPausedStepResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [firstTokenTime, setFirstTokenTime] = useState<number | null>(null)
   const [messageSendTime, setMessageSendTime] = useState<number | null>(null)
   const [llmOutput, setLlmOutput] = useState<string | null>(null)
+  const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const abortControllerRef = useRef<AbortController | null>(null)
+  const editModeRef = useRef(false)
 
   const sendMessage = useCallback(
-    async (message: string, endpoint?: string) => {
+    async (message: string, endpoint?: string, editMode: boolean = false) => {
       if (isStreaming) return
 
       // Record message send time immediately
       const sendTime = Date.now()
       setMessageSendTime(sendTime)
+      editModeRef.current = editMode
 
       // Clear previous steps when starting a new message
       setSteps([])
       setIsStreaming(true)
+      setIsPaused(false)
+      setPausedStepId(null)
+      setPausedStepResult(null)
       setError(null)
       setFirstTokenTime(null) // Reset first token time
       setLlmOutput(null) // Reset LLM output
@@ -35,6 +49,7 @@ export function useChat(conversationId: string | null) {
         message,
         conversation_id: conversationId || undefined,
         endpoint,
+        edit_mode: editMode,
       }
 
       abortControllerRef.current = new AbortController()
@@ -44,7 +59,20 @@ export function useChat(conversationId: string | null) {
           '/chat',
           request,
           (event: Record<string, unknown>) => {
-            handleSSEEvent(event as SSEEvent, setSteps, setFirstTokenTime, setLlmOutput)
+            handleSSEEvent(
+              event as SSEEvent,
+              setSteps,
+              setFirstTokenTime,
+              setLlmOutput,
+              setArtifacts,
+              editMode,
+              (stepId, result) => {
+                setIsPaused(true)
+                setPausedStepId(stepId)
+                setPausedStepResult(result)
+                setIsStreaming(false)
+              }
+            )
           },
           (err) => {
             setError(err.message)
@@ -62,28 +90,104 @@ export function useChat(conversationId: string | null) {
     [conversationId, isStreaming]
   )
 
+  const confirmStep = useCallback(
+    async (stepId: string, editedResults?: unknown[], action: 'confirm' | 'skip' = 'confirm') => {
+      try {
+        const response = await apiPost('/chat/confirm', {
+          conversation_id: conversationId,
+          step_id: stepId,
+          edited_results: editedResults,
+          action,
+        })
+        return response
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to confirm step')
+        throw err
+      }
+    },
+    [conversationId]
+  )
+
+  const resumeStep = useCallback(
+    async (editedResults?: unknown[], endpoint?: string) => {
+      if (!conversationId) return
+
+      setIsStreaming(true)
+      setIsPaused(false)
+
+      try {
+        await apiPostStream(
+          '/chat/resume',
+          {
+            conversation_id: conversationId,
+            edited_results: editedResults,
+            endpoint,
+          },
+          (event: Record<string, unknown>) => {
+            handleSSEEvent(
+              event as SSEEvent,
+              setSteps,
+              setFirstTokenTime,
+              setLlmOutput,
+              setArtifacts,
+              editModeRef.current,
+              (stepId, result) => {
+                setIsPaused(true)
+                setPausedStepId(stepId)
+                setPausedStepResult(result)
+                setIsStreaming(false)
+              }
+            )
+          },
+          (err) => {
+            setError(err.message)
+            setIsStreaming(false)
+          },
+          () => {
+            setIsStreaming(false)
+          }
+        )
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to resume')
+        setIsStreaming(false)
+      }
+    },
+    [conversationId]
+  )
+
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort()
     setIsStreaming(false)
+    setIsPaused(false)
   }, [])
 
   const reset = useCallback(() => {
     setSteps([])
     setError(null)
     setIsStreaming(false)
+    setIsPaused(false)
+    setPausedStepId(null)
+    setPausedStepResult(null)
     setFirstTokenTime(null)
     setMessageSendTime(null)
     setLlmOutput(null)
+    setArtifacts([])
   }, [])
 
   return {
     steps,
     isStreaming,
+    isPaused,
+    pausedStepId,
+    pausedStepResult,
     error,
     firstTokenTime,
     messageSendTime,
     llmOutput,
+    artifacts,
     sendMessage,
+    confirmStep,
+    resumeStep,
     cancel,
     reset,
   }
@@ -93,11 +197,23 @@ function handleSSEEvent(
   event: SSEEvent,
   setSteps: React.Dispatch<React.SetStateAction<Step[]>>,
   setFirstTokenTime: React.Dispatch<React.SetStateAction<number | null>>,
-  setLlmOutput: React.Dispatch<React.SetStateAction<string | null>>
+  setLlmOutput: React.Dispatch<React.SetStateAction<string | null>>,
+  setArtifacts: React.Dispatch<React.SetStateAction<Artifact[]>>,
+  _editMode: boolean = false,
+  onPause?: (stepId: string, result: string) => void
 ) {
   const eventRecord = event as Record<string, unknown>
 
   switch (event.type) {
+    case 'step_pause': {
+      // Edit mode step pause - stop streaming and notify
+      const stepId = eventRecord.step_id as string
+      const result = eventRecord.result as string | undefined
+      if (onPause) {
+        onPause(stepId, result || '')
+      }
+      break
+    }
     case 'iteration_start': {
       // Iteration start - don't create a step, just mark the beginning
       break
@@ -151,7 +267,7 @@ function handleSSEEvent(
 
         // Create new step
         const newStep: Step = {
-          id: (eventRecord.step_id as string) || generateStepId(),
+          id: (eventRecord.id as string) || (eventRecord.step_id as string) || generateStepId(),
           type: mapToolToStepType(toolName),
           status: 'running',
           title: stepTitle,
@@ -169,11 +285,19 @@ function handleSSEEvent(
       const toolName = eventRecord.tool as string
       const args = eventRecord.args as Record<string, unknown> | undefined
       const stepTitle = formatToolTitleSmart(toolName, args)
+      const result = eventRecord.result as string | undefined
+
+      // Detect file creation from tool result and create artifact
+      const artifact = extractArtifactFromToolResult(toolName, args, result)
+      if (artifact) {
+        setArtifacts((prev) => [...prev, artifact])
+      }
 
       setSteps((prev) =>
         prev.map((step) => {
-          // Match by step_id or by title for merged steps
-          if (step.id === eventRecord.step_id ||
+          // Match by id/step_id or by title for merged steps
+          const eventId = (eventRecord.id as string) || (eventRecord.step_id as string)
+          if (step.id === eventId ||
               (step.status === 'running' && step.title === stepTitle)) {
             const newDuration = Date.now() - step.startTime
             return {
@@ -181,9 +305,9 @@ function handleSSEEvent(
               status: (eventRecord.error ? 'failed' : 'completed') as StepStatus,
               endTime: Date.now(),
               duration: newDuration,
-              output: eventRecord.result as string | undefined,
+              output: result,
               error: eventRecord.error as string | undefined,
-              summary: extractSummary(eventRecord.result as string),
+              summary: extractSummary(result),
             }
           }
           return step
@@ -267,6 +391,25 @@ function handleSSEEvent(
     case 'ask_user':
       // These are internal events, don't create visible steps
       break
+
+    case 'artifact_created': {
+      // Handle artifact creation event
+      const artifactData = eventRecord.artifact as Record<string, unknown> | undefined
+      if (artifactData) {
+        const newArtifact: Artifact = {
+          id: (artifactData.id as string) || generateArtifactId(),
+          type: artifactData.type as Artifact['type'] || 'other',
+          filename: (artifactData.filename as string) || (artifactData.name as string) || 'Unknown file',
+          filepath: (artifactData.filepath as string) || (artifactData.path as string) || '',
+          size: artifactData.size as number | undefined,
+          downloadUrl: artifactData.downloadUrl as string | undefined,
+          createdAt: Date.now(),
+          description: artifactData.description as string | undefined,
+        }
+        setArtifacts((prev) => [...prev, newArtifact])
+      }
+      break
+    }
   }
 }
 
@@ -436,6 +579,131 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
 
   // Default: hide unknown steps (internal)
   return 'internal'
+}
+
+/**
+ * Extract artifact information from tool result
+ * Detects when files are created and returns artifact metadata
+ */
+function extractArtifactFromToolResult(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  result: string | undefined
+): Artifact | null {
+  // Check for write_file tool
+  if (toolName === 'write_file' || toolName === 'Write') {
+    const filePath = (args?.file_path as string) || (args?.path as string) || ''
+    const filename = filePath.split('/').pop() || filePath.split('\\').pop() || 'Unknown file'
+
+    // Only create artifacts for meaningful files (not temp files)
+    if (filePath &&
+        !filePath.includes('temp') &&
+        !filePath.includes('.tmp') &&
+        !filePath.includes('cache') &&
+        !filePath.includes('__pycache__')) {
+      return {
+        id: `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        type: getArtifactTypeFromExtension(filename),
+        filename,
+        filepath: filePath,
+        size: undefined,
+        downloadUrl: `/api/files/download?path=${encodeURIComponent(filePath)}`,
+        createdAt: Date.now(),
+      }
+    }
+  }
+
+  // Check for shell/Bash commands that might create files
+  if (toolName === 'run_shell' || toolName === 'Bash' || toolName === 'execute_command') {
+    const command = (args?.command as string) || ''
+    const resultText = result || ''
+
+    // Check if result contains file path mentions (e.g., "written to", "saved to", "created")
+    const filePatterns = [
+      /(?:written|saved|created|generated)\s+(?:to|as)\s+[`"']?([^\s`"']+\.(?:pdf|docx?|xlsx?|png|jpg|jpeg|gif|txt|md|py|js|ts|html|css))[`"']?/i,
+      /(?:file|output)\s*:\s*[`"']?([^\s`"']+\.(?:pdf|docx?|xlsx?|png|jpg|jpeg|gif|txt|md|py|js|ts|html|css))[`"']?/i,
+    ]
+
+    for (const pattern of filePatterns) {
+      const match = resultText.match(pattern)
+      if (match && match[1]) {
+        const filePath = match[1]
+        const filename = filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+        return {
+          id: `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: getArtifactTypeFromExtension(filename),
+          filename,
+          filepath: filePath,
+          size: undefined,
+          downloadUrl: `/api/files/download?path=${encodeURIComponent(filePath)}`,
+          createdAt: Date.now(),
+        }
+      }
+    }
+
+    // Check if command creates a PDF file
+    if (command.includes('.pdf') || resultText.includes('.pdf')) {
+      const pdfMatch = resultText.match(/[^\s`"']+\.pdf/i) || command.match(/[^\s`"']+\.pdf/i)
+      if (pdfMatch) {
+        const filePath = pdfMatch[0]
+        const filename = filePath.split('/').pop() || filePath
+        return {
+          id: `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'pdf',
+          filename,
+          filepath: filePath,
+          size: undefined,
+          downloadUrl: `/api/files/download?path=${encodeURIComponent(filePath)}`,
+          createdAt: Date.now(),
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get artifact type from file extension
+ */
+function getArtifactTypeFromExtension(filename: string): Artifact['type'] {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+  const typeMap: Record<string, Artifact['type']> = {
+    'pdf': 'pdf',
+    'doc': 'word',
+    'docx': 'word',
+    'xls': 'excel',
+    'xlsx': 'excel',
+    'csv': 'excel',
+    'jpg': 'image',
+    'jpeg': 'image',
+    'png': 'image',
+    'gif': 'image',
+    'svg': 'image',
+    'webp': 'image',
+    'js': 'code',
+    'ts': 'code',
+    'jsx': 'code',
+    'tsx': 'code',
+    'py': 'code',
+    'java': 'code',
+    'cpp': 'code',
+    'c': 'code',
+    'go': 'code',
+    'rs': 'code',
+    'html': 'code',
+    'css': 'code',
+    'json': 'code',
+    'xml': 'code',
+    'yaml': 'code',
+    'yml': 'code',
+    'md': 'code',
+    'txt': 'text',
+    'log': 'text',
+  }
+
+  return typeMap[ext] || 'other'
 }
 
 export default useChat

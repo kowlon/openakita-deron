@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from ..schemas import ChatAnswerRequest, ChatControlRequest, ChatRequest
+from ..schemas import ChatAnswerRequest, ChatControlRequest, ChatRequest, ConfirmStepRequest, ResumeRequest
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,7 @@ async def _stream_chat(
             session=session,
             gateway=None,  # Desktop Chat 没有 IM gateway
             plan_mode=chat_request.plan_mode,
+            edit_mode=chat_request.edit_mode,
             endpoint_override=chat_request.endpoint,
             attachments=chat_request.attachments,
             thinking_mode=chat_request.thinking_mode,
@@ -260,6 +261,7 @@ async def chat(request: Request, body: ChatRequest):
         + (f" (+{att_count}个附件)" if att_count else "")
         + (f" | endpoint={body.endpoint}" if body.endpoint else "")
         + (" | plan_mode" if body.plan_mode else "")
+        + (" | edit_mode" if body.edit_mode else "")
         + (f" | thinking={body.thinking_mode}" if body.thinking_mode else "")
         + (f" | depth={body.thinking_depth}" if body.thinking_depth else "")
         + (f" | conv={body.conversation_id}" if body.conversation_id else "")
@@ -362,3 +364,193 @@ async def chat_insert(request: Request, body: ChatControlRequest):
     if not ok:
         return {"status": "warning", "action": "insert", "message": "No active task, message dropped"}
     return {"status": "ok", "action": "insert", "message": body.message[:100]}
+
+
+@router.post("/api/chat/confirm")
+async def chat_confirm_step(request: Request, body: ConfirmStepRequest):
+    """
+    Confirm a paused step in Edit mode and optionally provide edited results.
+
+    This endpoint is called when the user confirms the step results in Edit mode.
+    The backend will resume execution using the (optionally edited) results.
+    """
+    agent = getattr(request.app.state, "agent", None)
+    actual_agent = _resolve_agent(agent) if agent else None
+    if actual_agent is None:
+        logger.warning("[Chat API] Confirm failed: Agent not initialized")
+        return {"status": "error", "message": "Agent not initialized"}
+
+    _conv_id = body.conversation_id or getattr(actual_agent, "_current_conversation_id", None)
+    logger.info(
+        f"[Chat API] Confirm step: step_id={body.step_id}, action={body.action}, "
+        f"has_edited_results={body.edited_results is not None}, conv_id={_conv_id}"
+    )
+
+    # Confirm the step and optionally provide edited results
+    actual_agent.confirm_step(
+        step_id=body.step_id,
+        conversation_id=_conv_id,
+        edited_results=body.edited_results,
+        action=body.action,
+    )
+
+    return {
+        "status": "ok",
+        "action": body.action,
+        "step_id": body.step_id,
+        "hint": "Step confirmed, waiting for resume stream"
+    }
+
+
+@router.post("/api/chat/resume")
+async def chat_resume(request: Request, body: ResumeRequest):
+    """
+    Resume a paused Edit mode task with edited results.
+
+    This is a streaming endpoint that continues the task execution
+    after the user confirms and optionally edits the step results.
+    """
+    agent = getattr(request.app.state, "agent", None)
+    actual_agent = _resolve_agent(agent) if agent else None
+    session_manager = getattr(request.app.state, "session_manager", None)
+
+    if actual_agent is None:
+        logger.warning("[Chat API] Resume failed: Agent not initialized")
+        return {"status": "error", "message": "Agent not initialized"}
+
+    logger.info(
+        f"[Chat API] Resume: conversation_id={body.conversation_id}, "
+        f"has_edited_results={body.edited_results is not None}"
+    )
+
+    # Check if there's a paused task
+    from openakita.core.agent_state import TaskStatus
+    task = actual_agent.agent_state.get_task_for_session(body.conversation_id)
+    if not task or task.status != TaskStatus.PAUSED:
+        logger.warning(f"[Chat API] Resume: No paused task found for conversation {body.conversation_id}")
+        return {"status": "error", "message": "No paused task to resume"}
+
+    # Set edited results if provided
+    if body.edited_results:
+        task.edited_results = body.edited_results
+
+    # Get session messages for context
+    session = None
+    session_messages: list[dict] = []
+    if session_manager and body.conversation_id:
+        try:
+            session = session_manager.get_session(
+                channel="desktop",
+                chat_id=body.conversation_id,
+                user_id="desktop_user",
+                create_if_missing=False,
+            )
+            if session:
+                session_messages = list(session.context.messages) if hasattr(session, "context") else []
+        except Exception as e:
+            logger.warning(f"[Chat API] Resume: Session management error: {e}")
+
+    # Return a streaming response that continues the task
+    return StreamingResponse(
+        _stream_resume(body, actual_agent, session_manager, session_messages, request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _stream_resume(
+    body: ResumeRequest,
+    agent: object,
+    session_manager: object | None,
+    session_messages: list[dict],
+    http_request: Request | None = None,
+) -> AsyncIterator[str]:
+    """
+    Generate SSE events for resuming a paused Edit mode task.
+    """
+    actual_agent = _resolve_agent(agent)
+    if actual_agent is None:
+        yield _sse("error", {"message": "Agent not initialized"})
+        yield _sse("done")
+        return
+
+    _reply_chars = 0
+    _reply_preview = ""
+    _full_reply = ""
+    _done_sent = False
+    _client_disconnected = False
+
+    async def _check_disconnected() -> bool:
+        nonlocal _client_disconnected
+        if _client_disconnected:
+            return True
+        if http_request is not None:
+            try:
+                if await http_request.is_disconnected():
+                    _client_disconnected = True
+                    logger.info("[Chat API] Resume: 客户端已断开连接，停止流式输出")
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _sse(event_type: str, data: dict | None = None) -> str:
+        nonlocal _reply_chars, _reply_preview, _full_reply, _done_sent
+        if event_type == "done":
+            if _done_sent:
+                return ""
+            _done_sent = True
+        payload = {"type": event_type, **(data or {})}
+        if event_type == "text_delta" and data and "content" in data:
+            chunk = data["content"]
+            _reply_chars += len(chunk)
+            _full_reply += chunk
+            if len(_reply_preview) < 120:
+                _reply_preview += chunk
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    try:
+        # Get the paused task
+        from openakita.core.agent_state import TaskStatus
+        task = actual_agent.agent_state.get_task_for_session(body.conversation_id)
+        if not task or task.status != TaskStatus.PAUSED:
+            yield _sse("error", {"message": "No paused task to resume"})
+            yield _sse("done")
+            return
+
+        # Signal the task to resume
+        task.confirm_pause(edited_results=body.edited_results)
+
+        # Build the resume message with edited results
+        resume_message = ""
+        if body.edited_results:
+            resume_message = f"[用户已编辑步骤结果，请使用以下数据继续执行：]\n{json.dumps(body.edited_results, ensure_ascii=False, indent=2)}"
+        else:
+            resume_message = "[用户确认步骤结果，请继续执行下一步]"
+
+        # Continue the reasoning stream
+        async for event in actual_agent.chat_with_session_stream(
+            message=resume_message,
+            session_messages=session_messages,
+            session_id=body.conversation_id,
+            session=None,
+            gateway=None,
+            edit_mode=True,  # Continue in edit mode
+            endpoint_override=body.endpoint,
+        ):
+            if await _check_disconnected():
+                break
+
+            event_type = event.get("type", "")
+            yield _sse(event_type, {k: v for k, v in event.items() if k != "type"})
+
+        yield _sse("done")
+
+    except Exception as e:
+        logger.error(f"[Chat API] Resume stream error: {e}", exc_info=True)
+        yield _sse("error", {"message": str(e)[:500]})
+        yield _sse("done")

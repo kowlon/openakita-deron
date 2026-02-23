@@ -1,6 +1,7 @@
-import type { Step, StepType } from '@/types/step'
 import { StepStatusIcon } from './StepStatusIcon'
 import { StepTypeIcon } from './StepTypeIcon'
+import { StepTimer } from '@/components/Timer/StepTimer'
+import type { Step, StepType } from '@/types/step'
 
 type StepCardProps = {
   step: Step
@@ -19,7 +20,14 @@ const TYPE_LABELS: Record<StepType, string> = {
   planning: 'Planning',
 }
 
-export function StepCard({ step, index, isLast, isExpanded, onToggleExpand, onClick }: StepCardProps) {
+export function StepCard({
+  step,
+  index,
+  isLast,
+  isExpanded,
+  onToggleExpand,
+  onClick,
+}: StepCardProps) {
   return (
     <div className="flex gap-4">
       {/* Timeline connector */}
@@ -34,7 +42,7 @@ export function StepCard({ step, index, isLast, isExpanded, onToggleExpand, onCl
           onClick={onClick}
           className={`rounded-xl p-4 transition-all cursor-pointer group ${
             step.status === 'running'
-              ? 'bg-background-dark border-2 border-primary shadow-lg'
+              ? 'bg-background-dark border-2 border-primary shadow-lg shadow-primary/20 animate-pulse'
               : 'bg-background-dark border border-primary/10 hover:border-primary/40 shadow-sm'
           }`}
         >
@@ -49,7 +57,12 @@ export function StepCard({ step, index, isLast, isExpanded, onToggleExpand, onCl
                   Step {index + 1}: {step.title}
                 </h4>
                 <p className="text-xs text-slate-400">
-                  {TYPE_LABELS[step.type]} • {step.duration ? `${(step.duration / 1000).toFixed(1)}s` : '...'}
+                  {TYPE_LABELS[step.type]} •{' '}
+                  <StepTimer
+                    startTime={step.startTime}
+                    endTime={step.endTime}
+                    isRunning={step.status === 'running'}
+                  />
                 </p>
               </div>
             </div>
@@ -98,6 +111,14 @@ export function StepCard({ step, index, isLast, isExpanded, onToggleExpand, onCl
                 <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
                 <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
               </div>
+            </div>
+          )}
+
+          {/* Hint for completed steps with output */}
+          {step.status === 'completed' && step.output && !isExpanded && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+              <span className="material-symbols-outlined text-sm">visibility</span>
+              <span>点击查看详情或展开 ↓</span>
             </div>
           )}
         </div>

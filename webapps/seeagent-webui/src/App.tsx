@@ -5,6 +5,7 @@ import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
 import type { Session, Step, ExecutionMode, ConversationTurn } from './types'
+import type { EditableResult } from './components/Step/EditableResultCard'
 
 // Extended Session type with conversation history
 interface ExtendedSession extends Session {
@@ -18,8 +19,10 @@ const SESSIONS_STORAGE_KEY = 'openakita_sessions'
 function loadSessions(): ExtendedSession[] {
   try {
     const saved = localStorage.getItem(SESSIONS_STORAGE_KEY)
+    console.log('[loadSessions] Raw data from localStorage:', saved ? `${saved.length} chars` : 'null')
     if (saved) {
       const parsed = JSON.parse(saved)
+      console.log('[loadSessions] Parsed sessions:', parsed.length, 'items')
       return parsed.map((s: ExtendedSession) => ({
         ...s,
         // Ensure timestamp is a number
@@ -29,13 +32,16 @@ function loadSessions(): ExtendedSession[] {
   } catch (e) {
     console.error('Failed to load sessions:', e)
   }
+  console.log('[loadSessions] Returning empty array')
   return [] // Start with empty sessions (ChatGPT style)
 }
 
 // Save sessions to localStorage
 function saveSessions(sessions: ExtendedSession[]): void {
   try {
-    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions))
+    const data = JSON.stringify(sessions)
+    localStorage.setItem(SESSIONS_STORAGE_KEY, data)
+    console.log('[saveSessions] Saved', sessions.length, 'sessions to localStorage')
   } catch (e) {
     console.error('Failed to save sessions:', e)
   }
@@ -71,8 +77,20 @@ function App() {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
 
+  // Edit mode state - editable results for each step
+  const [editableResults, setEditableResults] = useState<Record<string, EditableResult[]>>({})
+
+  // Track if this is the initial mount (to prevent saving empty array on mount in StrictMode)
+  const isInitialMountRef = useRef(true)
+
   // Save sessions to localStorage when they change
   useEffect(() => {
+    // Skip saving on initial mount in StrictMode to prevent overwriting
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
+      console.log('[saveSessions] Skipping save on initial mount')
+      return
+    }
     saveSessions(sessions)
   }, [sessions])
 
@@ -87,7 +105,21 @@ function App() {
   }>({ startTime: null, firstTokenTime: null })
 
   // Chat hook - must be before currentSteps
-  const { steps: chatSteps, sendMessage, isStreaming, reset, firstTokenTime, messageSendTime, llmOutput } = useChat(currentSessionId)
+  const {
+    steps: chatSteps,
+    sendMessage,
+    isStreaming,
+    isPaused,
+    pausedStepId,
+    // pausedStepResult - available if needed in the future
+    confirmStep,
+    resumeStep,
+    reset,
+    firstTokenTime,
+    messageSendTime,
+    llmOutput,
+    artifacts,
+  } = useChat(currentSessionId)
 
   // Track timing when messageSendTime or firstTokenTime changes
   useEffect(() => {
@@ -119,13 +151,15 @@ function App() {
   )
 
   // Save completed conversation turn when streaming ends
+  // In Edit mode, don't auto-save - wait for user confirmation
   useEffect(() => {
     // Detect when streaming transitions from true to false
     const wasStreaming = prevIsStreamingRef.current
     prevIsStreamingRef.current = isStreaming
 
     // When streaming ends and we had a conversation
-    if (wasStreaming && !isStreaming && currentSessionId) {
+    // In Edit mode, don't auto-save - the user needs to confirm first
+    if (wasStreaming && !isStreaming && currentSessionId && executionMode === 'auto') {
       const currentUserMessage = currentSession?.userMessage || ''
       const timing = currentTurnTimingRef.current
       const output = currentLlmOutputRef.current
@@ -171,7 +205,57 @@ function App() {
       currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
       currentLlmOutputRef.current = null
     }
-  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps])
+  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, executionMode])
+
+  // Handle Edit mode turn confirmation - save turn to history when user confirms
+  const handleConfirmTurn = useCallback(() => {
+    if (!currentSessionId || executionMode !== 'edit') return
+
+    const currentUserMessage = currentSession?.userMessage || ''
+    const timing = currentTurnTimingRef.current
+    const output = currentLlmOutputRef.current
+
+    if (!currentUserMessage) return
+
+    // Get steps and summary
+    const steps = chatSteps.length > 0 ? chatSteps : prevChatStepsRef.current
+    const summary = output || [...steps].reverse().find(s => s.type === 'llm')?.output || null
+
+    // Create the turn
+    const newTurn: ConversationTurn = {
+      id: `turn-${Date.now()}`,
+      userMessage: currentUserMessage,
+      steps: steps,
+      summary,
+      timestamp: Date.now(),
+      startTime: timing.startTime || undefined,
+      firstTokenTime: timing.firstTokenTime,
+      endTime: Date.now(),
+    }
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id === currentSessionId) {
+          // Check if this turn already exists (avoid duplicates)
+          const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
+          if (turnExists) return s
+
+          return {
+            ...s,
+            conversationHistory: [...s.conversationHistory, newTurn],
+            stepCount: s.conversationHistory.length + 1,
+          }
+        }
+        return s
+      })
+    )
+
+    // Clear refs and reset chat after confirmation
+    prevChatStepsRef.current = []
+    currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
+    currentLlmOutputRef.current = null
+    reset() // Clear current chat steps
+  }, [currentSessionId, currentSession?.userMessage, chatSteps, executionMode, reset])
 
   // Combine historical turns with current chat steps
   const displaySteps = useMemo(() => {
@@ -190,6 +274,39 @@ function App() {
     () => displaySteps.find((s) => s.id === selectedStepId) || null,
     [displaySteps, selectedStepId]
   )
+
+  // Handle editable results change from DetailPanel
+  const handleEditableResultsChange = useCallback((results: EditableResult[]) => {
+    if (selectedStepId) {
+      setEditableResults(prev => ({
+        ...prev,
+        [selectedStepId]: results
+      }))
+    }
+  }, [selectedStepId])
+
+  // Handle step confirmation in Edit mode (from DetailPanel)
+  const handleConfirmStep = useCallback(async () => {
+    // Use pausedStepId (from backend) instead of selectedStepId (UI generated)
+    const stepIdToConfirm = pausedStepId || selectedStepId
+    if (!stepIdToConfirm) return
+
+    // Get edited results for this step if any
+    const editedResults = editableResults[selectedStepId || '']
+
+    try {
+      // First confirm the step with the correct backend step_id
+      await confirmStep(stepIdToConfirm, editedResults, 'confirm')
+
+      // Then resume execution
+      await resumeStep(editedResults)
+
+      // Close detail panel after confirmation
+      setSelectedStepId(null)
+    } catch (err) {
+      console.error('Failed to confirm step:', err)
+    }
+  }, [pausedStepId, selectedStepId, editableResults, confirmStep, resumeStep])
 
   // Send message handler
   const handleSendMessage = useCallback(
@@ -270,9 +387,11 @@ function App() {
         )
       }
       isSendingRef.current = true
-      sendMessage(message)
+      // Reset edit mode state when sending new message
+      setEditableResults({})
+      sendMessage(message, undefined, executionMode === 'edit')
     },
-    [currentSessionId, sendMessage, chatSteps, currentSession?.userMessage]
+    [currentSessionId, sendMessage, chatSteps, currentSession?.userMessage, executionMode]
   )
 
   const handleNewSession = useCallback(() => {
@@ -369,12 +488,25 @@ function App() {
           onStepClick={setSelectedStepId}
           onSendMessage={handleSendMessage}
           isStreaming={isStreaming}
+          isPaused={isPaused}
+          pausedStepId={pausedStepId}
           firstTokenTime={firstTokenTime}
           messageSendTime={messageSendTime}
           llmOutput={llmOutput}
+          onConfirmTurn={handleConfirmTurn}
+          artifacts={artifacts}
         />
       }
-      detailPanel={selectedStep ? <DetailPanel step={selectedStep} onClose={() => setSelectedStepId(null)} /> : null}
+      detailPanel={selectedStep ? (
+        <DetailPanel
+          step={selectedStep}
+          onClose={() => setSelectedStepId(null)}
+          executionMode={executionMode}
+          editableResults={editableResults[selectedStep.id]}
+          onEditableResultsChange={handleEditableResultsChange}
+          onConfirmStep={handleConfirmStep}
+        />
+      ) : null}
     />
   )
 }

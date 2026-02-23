@@ -1,4 +1,22 @@
+import type { Step } from './step'
+import type { Artifact } from './artifact'
+
 export type SessionStatus = 'active' | 'completed' | 'paused'
+
+// Conversation turn - represents one round of user-AI conversation
+export interface ConversationTurn {
+  id: string
+  userMessage: string
+  steps: Step[]
+  summary: string | null
+  timestamp: number
+  // Timing information
+  startTime?: number
+  firstTokenTime?: number | null
+  endTime?: number | null
+  // Generated artifacts (files)
+  artifacts?: Artifact[]
+}
 
 export interface Session {
   id: string
@@ -7,6 +25,7 @@ export interface Session {
   timestamp: number
   status: SessionStatus
   userMessage?: string
+  conversationHistory?: ConversationTurn[]
 }
 
 export interface SessionState {

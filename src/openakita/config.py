@@ -301,6 +301,19 @@ class Settings(BaseSettings):
     evaluation_enabled: bool = Field(default=False, description="是否启用每日自动评估")
     evaluation_output_dir: str = Field(default="data/evaluation", description="评估报告输出目录")
 
+    # === 工具按需加载配置 ===
+    tool_lazy_loading: bool = Field(
+        default=True,
+        description="是否启用工具按需加载（减少 tokens 消耗）"
+    )
+    tool_minimal_set: list = Field(
+        default_factory=lambda: [
+            "run_shell", "read_file", "write_file", "edit_file", "list_directory",
+            "ask_user", "web_search", "get_tool_info", "get_skill_info"
+        ],
+        description="最小工具集（始终加载）"
+    )
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

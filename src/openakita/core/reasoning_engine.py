@@ -1093,6 +1093,7 @@ class ReasoningEngine:
         task_monitor: Any = None,
         session_type: str = "desktop",
         plan_mode: bool = False,
+        edit_mode: bool = False,
         endpoint_override: str | None = None,
         conversation_id: str | None = None,
         thinking_mode: str | None = None,
@@ -1107,12 +1108,16 @@ class ReasoningEngine:
         调用方（如 Agent.chat_with_session_stream）需传入 tools 和 system_prompt，
         新增参数均 optional，向后兼容老的调用方式。
 
+        Args:
+            edit_mode: 如果为 True，每个工具执行完后发送 step_pause 事件并等待用户确认。
+
         Yields dict events:
         - {"type": "iteration_start", "iteration": N}
         - {"type": "context_compressed", "before_tokens": N, "after_tokens": M}
         - {"type": "thinking_start"} / {"type": "thinking_delta"} / {"type": "thinking_end"}
         - {"type": "text_delta", "content": "..."}
         - {"type": "tool_call_start"} / {"type": "tool_call_end"}
+        - {"type": "step_pause", "step_id": "...", "tool": "...", "result": "..."} (Edit mode only)
         - {"type": "plan_created"} / {"type": "plan_step_updated"}
         - {"type": "ask_user", "question": "..."}
         - {"type": "error", "message": "..."}
@@ -1611,6 +1616,30 @@ class ReasoningEngine:
                                 "type": "tool_result", "tool_use_id": t_id, "content": r,
                             })
 
+                            # === Edit Mode: 步骤暂停 (ask_user 路径) ===
+                            _internal_tools = {"create_plan", "update_plan_step", "complete_plan", "deliver_artifacts"}
+                            if edit_mode and not _tool_is_error and t_name not in _internal_tools:
+                                state.pause_for_edit(
+                                    step_id=t_id,
+                                    tool_name=t_name,
+                                    tool_result=r,
+                                )
+                                yield {
+                                    "type": "step_pause",
+                                    "step_id": t_id,
+                                    "tool": t_name,
+                                    "result": r[:_SSE_RESULT_PREVIEW_CHARS],
+                                    "requires_confirmation": True,
+                                    "conversation_id": conversation_id,
+                                }
+                                state.original_user_messages = working_messages
+                                self._last_exit_reason = "step_pause"
+                                self._save_react_trace(
+                                    react_trace, conversation_id, session_type, "paused", _trace_started_at
+                                )
+                                yield {"type": "done"}
+                                return
+
                         # ask_user 事件
                         ask_input = ask_user_calls[0].get("input", {})
                         ask_q = ask_input.get("question", "")
@@ -1753,6 +1782,41 @@ class ReasoningEngine:
                         _result_summary = self._summarize_tool_result(tool_name, result_text)
                         if _result_summary:
                             yield {"type": "chain_text", "content": _result_summary}
+
+                        # === Edit Mode: 步骤暂停 ===
+                        # 在 Edit 模式下，每个工具执行完成后暂停，等待用户确认
+                        # 排除内部工具（plan 相关、deliver_artifacts 等）
+                        _internal_tools = {"create_plan", "update_plan_step", "complete_plan", "deliver_artifacts"}
+                        logger.info(
+                            f"[ReAct-Stream] Edit mode check: edit_mode={edit_mode}, "
+                            f"tool_is_error={_tool_is_error}, tool_name={tool_name}, "
+                            f"is_internal={tool_name in _internal_tools}"
+                        )
+                        if edit_mode and not _tool_is_error and tool_name not in _internal_tools:
+                            # 暂停任务状态
+                            state.pause_for_edit(
+                                step_id=tool_id,
+                                tool_name=tool_name,
+                                tool_result=result_text,
+                            )
+                            # 发送 step_pause 事件
+                            yield {
+                                "type": "step_pause",
+                                "step_id": tool_id,
+                                "tool": tool_name,
+                                "result": result_text[:_SSE_RESULT_PREVIEW_CHARS],
+                                "requires_confirmation": True,
+                                "conversation_id": conversation_id,
+                            }
+                            # 保存当前工作消息到状态（用于后续恢复）
+                            state.original_user_messages = working_messages
+                            # 结束流，等待用户确认
+                            self._last_exit_reason = "step_pause"
+                            self._save_react_trace(
+                                react_trace, conversation_id, session_type, "paused", _trace_started_at
+                            )
+                            yield {"type": "done"}
+                            return
 
                         # deliver_artifacts 回执收集（与 run() 一致）
                         if tool_name == "deliver_artifacts" and result_text:

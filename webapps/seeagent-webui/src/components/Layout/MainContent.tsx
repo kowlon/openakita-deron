@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import type { Session, Step, ExecutionMode, ConversationTurn } from '@/types'
+import type { Artifact } from '@/types/artifact'
 import { StepTimeline } from '@/components/Step/StepTimeline'
 import { ElapsedTimer } from '@/components/Timer/ElapsedTimer'
+import { ArtifactList } from '@/components/Artifact/ArtifactList'
 
 type MainContentProps = {
   session: Session | null
@@ -13,9 +15,13 @@ type MainContentProps = {
   onStepClick: (stepId: string) => void
   onSendMessage: (message: string) => void
   isStreaming: boolean
+  isPaused?: boolean  // True when in Edit mode and waiting for step confirmation
+  pausedStepId?: string | null  // The step ID that is paused
   firstTokenTime: number | null
   messageSendTime: number | null
   llmOutput: string | null
+  onConfirmTurn?: () => void  // Called when user confirms in Edit mode
+  artifacts?: Artifact[]  // Current turn artifacts
 }
 
 /**
@@ -33,12 +39,13 @@ function formatTime(ms: number | null): string {
 function ConversationTurnItem({
   turn,
   onStepClick,
-  isLatest = false
 }: {
   turn: ConversationTurn
-  onStepClick: (stepId: string) => void
-  isLatest?: boolean
+  onStepClick?: (stepId: string) => void
 }) {
+  // Filter to show only core steps
+  const coreSteps = turn.steps.filter(s => s.category === 'core')
+
   return (
     <>
       {/* User Message */}
@@ -69,6 +76,17 @@ function ConversationTurnItem({
               </span>
             )}
           </div>
+
+          {/* Historical Steps (only for complex tasks with tool calls) */}
+          {coreSteps.length > 0 && (
+            <div className="mb-3">
+              <StepTimeline
+                steps={coreSteps}
+                onStepClick={onStepClick || (() => {})}
+              />
+            </div>
+          )}
+
           {/* Summary */}
           {turn.summary && (
             <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
@@ -92,9 +110,13 @@ export function MainContent({
   onStepClick,
   onSendMessage,
   isStreaming,
+  isPaused = false,
+  pausedStepId = null,
   firstTokenTime,
   messageSendTime,
   llmOutput,
+  onConfirmTurn,
+  artifacts = [],
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -139,6 +161,16 @@ export function MainContent({
   const isWaiting = useMemo(() => {
     return isStreaming && steps.length === 0 && !llmOutput
   }, [isStreaming, steps.length, llmOutput])
+
+  // Check if in Edit mode and needs confirmation after completion
+  const editModeNeedsConfirmation = useMemo(() => {
+    return executionMode === 'edit' && isCompleted && !isStreaming && !isPaused
+  }, [executionMode, isCompleted, isStreaming, isPaused])
+
+  // Check if in Edit mode and paused waiting for step confirmation
+  const editModePaused = useMemo(() => {
+    return executionMode === 'edit' && isPaused && pausedStepId
+  }, [executionMode, isPaused, pausedStepId])
 
   // Get current turn summary - prefer llmOutput for simple Q&A
   const currentSummary = useMemo(() => {
@@ -264,12 +296,11 @@ export function MainContent({
       <div className="flex-1 overflow-y-auto p-6">
         <div className="space-y-6 max-w-2xl mx-auto">
           {/* Historical Conversation Turns */}
-          {conversationHistory.map((turn, index) => (
+          {conversationHistory.map((turn) => (
             <ConversationTurnItem
               key={turn.id}
               turn={turn}
               onStepClick={onStepClick}
-              isLatest={false}
             />
           ))}
 
@@ -306,7 +337,10 @@ export function MainContent({
                 {/* Current Steps (only for complex tasks with tool calls) */}
                 {steps.length > 0 && (
                   <div className="mt-3">
-                    <StepTimeline steps={steps} onStepClick={onStepClick} />
+                    <StepTimeline
+                      steps={steps}
+                      onStepClick={onStepClick}
+                    />
                   </div>
                 )}
 
@@ -329,6 +363,60 @@ export function MainContent({
                       {currentSummary}
                     </div>
                   )
+                )}
+
+                {/* Artifacts - show generated files */}
+                {artifacts.length > 0 && (
+                  <ArtifactList artifacts={artifacts} />
+                )}
+
+                {/* Edit Mode Paused - shown when step is paused waiting for confirmation */}
+                {editModePaused && pausedStepId && (
+                  <div className="mt-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-blue-400 text-lg animate-pulse">pause_circle</span>
+                        <span className="text-sm text-blue-300">
+                          Edit 模式 - 步骤暂停，等待确认
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onStepClick(pausedStepId)}
+                          className="px-4 py-2 text-sm font-medium text-blue-300 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-500/30 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-base">visibility</span>
+                          查看结果
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-blue-400/70 mt-2">
+                      点击"查看结果"在右侧面板查看步骤详情，编辑后点击"确认，继续下一步"
+                    </p>
+                  </div>
+                )}
+
+                {/* Edit Mode Hint - shown after task completion in Edit mode */}
+                {editModeNeedsConfirmation && (
+                  <div className="mt-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-amber-400 text-lg">edit_note</span>
+                        <span className="text-sm text-amber-300">
+                          Edit 模式：点击步骤卡片在右侧面板查看和编辑结果
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onConfirmTurn?.()}
+                          className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/80 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-base">check</span>
+                          确认完成
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

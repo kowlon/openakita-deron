@@ -7,7 +7,10 @@ type StepTimelineProps = {
   onStepClick: (stepId: string) => void
 }
 
-export function StepTimeline({ steps, onStepClick }: StepTimelineProps) {
+export function StepTimeline({
+  steps,
+  onStepClick,
+}: StepTimelineProps) {
   const [expandedStepIds, setExpandedStepIds] = useState<Set<string>>(new Set())
 
   // Filter to only show core steps, exclude internal steps and LLM Response (shown in summary)

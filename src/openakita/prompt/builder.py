@@ -222,8 +222,27 @@ def _build_identity_section(
     return "\n".join(parts)
 
 
+# ========== Runtime 缓存 ==========
+_RUNTIME_CACHE: str | None = None
+_RUNTIME_CACHE_TIME: float = 0
+_RUNTIME_CACHE_TTL: float = 60.0  # 缓存 60 秒
+
+
 def _build_runtime_section() -> str:
-    """构建 Runtime 层（运行时信息）"""
+    """构建 Runtime 层（运行时信息），带缓存优化"""
+    global _RUNTIME_CACHE, _RUNTIME_CACHE_TIME
+
+    import time
+
+    # 检查缓存（TTL 内直接返回）
+    if _RUNTIME_CACHE and (time.time() - _RUNTIME_CACHE_TIME) < _RUNTIME_CACHE_TTL:
+        # 只更新时间（每分钟更新一次即可）
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return _RUNTIME_CACHE.replace(
+            _RUNTIME_CACHE.split("**当前时间**: ")[1].split("\n")[0],
+            current_time
+        ) if "**当前时间**:" in _RUNTIME_CACHE else _RUNTIME_CACHE
+
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 建议 32: 检测工具可用性
@@ -288,7 +307,7 @@ def _build_runtime_section() -> str:
             path_tools.append(cmd)
     path_tools_str = ", ".join(path_tools) if path_tools else "无"
 
-    return f"""## 运行环境
+    result = f"""## 运行环境
 
 - **当前时间**: {current_time}
 - **操作系统**: {platform.system()} {platform.release()} ({platform.machine()})
@@ -309,6 +328,12 @@ def _build_runtime_section() -> str:
 
 ⚠️ **重要**：服务重启后浏览器、变量、连接等状态会丢失，执行任务前必须通过工具检查实时状态。
 如果工具不可用，允许纯文本回复并说明限制。"""
+
+    # 保存到缓存
+    _RUNTIME_CACHE = result
+    _RUNTIME_CACHE_TIME = time.time()
+
+    return result
 
 
 def _build_session_type_rules(session_type: str, persona_active: bool = False) -> str:
@@ -340,6 +365,27 @@ def _build_session_type_rules(session_type: str, persona_active: bool = False) -
 4. **对之前回复的确认/反馈**（如"好的""收到""不对"）→ 理解为对上一轮的回应，简短确认即可。
 
 关键：闲聊和简单问答类消息**完成后不需要验证任务是否完成**——它们本身不是任务。
+
+## 执行效率规则（重要）
+
+为减少不必要的迭代和工具调用，请严格遵守：
+
+1. **简单任务直接执行**：单步操作（搜索、读写文件、简单问答）直接调用工具，**无需创建计划**。
+2. **复杂任务才需要计划**：只有 3 步以上的复杂任务才使用 `create_plan`。
+3. **避免过度交付**：用户明确要求"交付文件"时才调用 `deliver_artifacts`，普通任务完成后直接返回结果。
+4. **批量工具调用**：一次请求中可以同时调用多个独立的工具（如同时搜索多个关键词）。
+5. **完成即返回**：任务完成后直接给出最终答案，无需额外的"完成确认"或"收尾贴图"。
+
+## 输出规范（重要）
+
+为提高响应效率，请严格遵守以下输出规范：
+
+1. **直接执行**：收到任务后直接调用工具执行，避免冗长的"我来帮你..."、"好的，让我看看..."等开场白。
+2. **工具优先**：能用工具解决的问题，优先调用工具，不要先用大段文字描述计划。
+3. **简洁汇报**：工具执行后简洁说明结果即可，避免重复复述工具输出的内容。
+4. **禁止空转**：每次迭代必须有实质进展（工具调用或最终回答），禁止连续两次迭代不产生任何输出。
+5. **避免废话**：不要使用"嗯..."、"让我想想..."、"这个嘛..."等无意义填充词。
+6. **代码规范**：生成代码时使用英文标点（英文引号、英文逗号等），避免中文标点导致的语法错误。
 
 ## 提问与暂停（严格规则）
 

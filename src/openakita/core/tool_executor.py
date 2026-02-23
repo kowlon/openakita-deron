@@ -26,6 +26,55 @@ from .agent_state import TaskState
 
 logger = logging.getLogger(__name__)
 
+# ========== 代码预处理常量 ==========
+# 需要预处理的工具名称（涉及代码/命令执行）
+CODE_EXECUTION_TOOLS = frozenset({
+    "run_command", "execute_command", "execute_code", "run_code",
+    "Bash", "shell", "run_shell", "run_script",
+})
+
+# 需要预处理的文件写入工具
+FILE_WRITE_TOOLS = frozenset({
+    "write_file", "Write", "edit_file", "Edit",
+})
+
+
+def preprocess_code_content(content: str) -> str:
+    """
+    预处理代码内容，修复常见的中文编码问题。
+
+    主要处理:
+    1. 中文引号 → 英文引号
+    2. 中文标点 → 英文标点
+    3. 全角字符 → 半角字符
+    """
+    if not content or not isinstance(content, str):
+        return content
+
+    # 中文引号替换
+    replacements = {
+        '"': '"',  # 左双引号
+        '"': '"',  # 右双引号
+        ''': "'",  # 左单引号
+        ''': "'",  # 右单引号
+        '，': ',',  # 中文逗号
+        '：': ':',  # 中文冒号
+        '；': ';',  # 中文分号
+        '（': '(',  # 中文左括号
+        '）': ')',  # 中文右括号
+        '【': '[',  # 中文左中括号
+        '】': ']',  # 中文右中括号
+        '｛': '{',  # 全角左花括号
+        '｝': '}',  # 全角右花括号
+    }
+
+    result = content
+    for cn_char, en_char in replacements.items():
+        result = result.replace(cn_char, en_char)
+
+    return result
+
+
 # ========== 通用截断守卫常量 ==========
 MAX_TOOL_RESULT_CHARS = 16000  # 通用截断阈值 (~8000 tokens)
 OVERFLOW_MARKER = "[OUTPUT_TRUNCATED]"  # 截断标记，已含此标记的不二次截断
@@ -96,6 +145,68 @@ class ToolExecutor:
         except Exception:
             return None
 
+    def _preprocess_tool_input(self, tool_name: str, tool_input: dict) -> dict:
+        """
+        预处理工具输入参数，修复常见的编码问题。
+
+        主要处理:
+        - 代码执行工具: 修复中文引号、标点
+        - 文件写入工具: 修复代码内容中的中文标点
+
+        Args:
+            tool_name: 工具名称
+            tool_input: 工具输入参数
+
+        Returns:
+            预处理后的工具输入参数
+        """
+        if not isinstance(tool_input, dict):
+            return tool_input
+
+        # 需要预处理的字段名
+        code_fields = {"command", "code", "script", "content"}
+
+        # 代码执行工具：预处理命令/代码
+        if tool_name in CODE_EXECUTION_TOOLS:
+            for field in code_fields:
+                if field in tool_input and isinstance(tool_input[field], str):
+                    original = tool_input[field]
+                    processed = preprocess_code_content(original)
+                    if processed != original:
+                        logger.info(
+                            f"[ToolExecutor] Preprocessed code in '{field}' "
+                            f"(fixed Chinese quotes/punctuation)"
+                        )
+                        tool_input[field] = processed
+
+        # 文件写入工具：预处理代码内容
+        if tool_name in FILE_WRITE_TOOLS:
+            content = tool_input.get("content", "")
+            if isinstance(content, str) and self._looks_like_code(content):
+                processed = preprocess_code_content(content)
+                if processed != content:
+                    logger.info(
+                        "[ToolExecutor] Preprocessed file content "
+                        "(fixed Chinese quotes/punctuation)"
+                    )
+                    tool_input["content"] = processed
+
+        return tool_input
+
+    @staticmethod
+    def _looks_like_code(content: str) -> bool:
+        """判断内容是否像代码（需要预处理）"""
+        if not content:
+            return False
+        # 简单启发式：包含 import, def, class, function, {, }, ; 等
+        code_indicators = [
+            "import ", "from ", "def ", "class ", "function ",
+            "return ", "if ", "for ", "while ", "print(",
+            "{", "}", "();", "() {", "=> ", "async ", "await ",
+        ]
+        content_lower = content.lower()
+        return any(ind in content_lower or ind in content for ind in code_indicators)
+
     async def execute_tool(
         self,
         tool_name: str,
@@ -118,6 +229,9 @@ class ToolExecutor:
             工具执行结果字符串
         """
         logger.info(f"Executing tool: {tool_name} with {tool_input}")
+
+        # ★ 代码预处理：修复中文引号等问题
+        tool_input = self._preprocess_tool_input(tool_name, tool_input)
 
         # ★ 拦截 JSON 解析失败的工具调用（参数被 API 截断）
         # convert_tool_calls_from_openai() 在 JSON 解析失败时会注入 __parse_error__

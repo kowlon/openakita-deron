@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
     message: str = Field("", description="User message text")
     conversation_id: str | None = Field(None, description="Conversation ID for context")
     plan_mode: bool = Field(False, description="Force Plan mode")
+    edit_mode: bool = Field(False, description="Enable step-by-step Edit mode with user confirmation after each step")
     endpoint: str | None = Field(None, description="Specific endpoint name (null=auto)")
     attachments: list[AttachmentInfo] | None = Field(None, description="Attached files/images")
     thinking_mode: str | None = Field(
@@ -51,6 +52,27 @@ class ChatControlRequest(BaseModel):
     conversation_id: str | None = Field(None, description="Conversation ID")
     reason: str = Field("", description="Reason for the control action")
     message: str = Field("", description="User message (only for insert)")
+
+
+class ConfirmStepRequest(BaseModel):
+    """Request body for confirming a paused step in Edit mode."""
+
+    conversation_id: str | None = Field(None, description="Conversation ID")
+    step_id: str = Field(..., description="Step ID to confirm")
+    edited_results: list[dict[str, Any]] | None = Field(
+        None, description="User-edited results to use for next step"
+    )
+    action: str = Field("confirm", description="Action: 'confirm' to continue, 'skip' to skip this step")
+
+
+class ResumeRequest(BaseModel):
+    """Request body for resuming a paused Edit mode task."""
+
+    conversation_id: str = Field(..., description="Conversation ID")
+    edited_results: list[dict[str, Any]] | None = Field(
+        None, description="User-edited results to use for next step"
+    )
+    endpoint: str | None = Field(None, description="Specific endpoint name (null=auto)")
 
 
 class HealthCheckRequest(BaseModel):

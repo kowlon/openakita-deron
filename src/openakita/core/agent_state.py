@@ -29,6 +29,7 @@ class TaskStatus(Enum):
     VERIFYING = "verifying"  # 任务完成度验证阶段
     MODEL_SWITCHING = "model_switching"  # 模型切换中
     WAITING_USER = "waiting_user"  # 等待用户回复（ask_user 工具触发）
+    PAUSED = "paused"  # 暂停，等待用户确认步骤（Edit 模式）
     COMPLETED = "completed"  # 任务完成
     FAILED = "failed"  # 任务失败
     CANCELLED = "cancelled"  # 任务被取消
@@ -44,6 +45,7 @@ _VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.VERIFYING,
         TaskStatus.COMPLETED,
         TaskStatus.WAITING_USER,
+        TaskStatus.PAUSED,
         TaskStatus.CANCELLED,
         TaskStatus.MODEL_SWITCHING,
         TaskStatus.FAILED,
@@ -52,22 +54,26 @@ _VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.OBSERVING,
         TaskStatus.REASONING,  # 恢复路径：上次任务卡在 ACTING 后新消息需回到 REASONING
         TaskStatus.WAITING_USER,
+        TaskStatus.PAUSED,
         TaskStatus.CANCELLED,
         TaskStatus.FAILED,
     },
     TaskStatus.OBSERVING: {
         TaskStatus.REASONING,
         TaskStatus.VERIFYING,
+        TaskStatus.PAUSED,
         TaskStatus.CANCELLED,
         TaskStatus.FAILED,
     },
     TaskStatus.VERIFYING: {
         TaskStatus.COMPLETED,
         TaskStatus.REASONING,
+        TaskStatus.PAUSED,
         TaskStatus.CANCELLED,
     },
     TaskStatus.MODEL_SWITCHING: {TaskStatus.REASONING, TaskStatus.FAILED},
     TaskStatus.WAITING_USER: {TaskStatus.REASONING, TaskStatus.IDLE, TaskStatus.CANCELLED},
+    TaskStatus.PAUSED: {TaskStatus.REASONING, TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.IDLE},
     TaskStatus.COMPLETED: {TaskStatus.IDLE},
     TaskStatus.FAILED: {TaskStatus.IDLE},
     TaskStatus.CANCELLED: {TaskStatus.IDLE},
@@ -100,6 +106,13 @@ class TaskState:
     # 单步跳过机制
     skip_event: asyncio.Event = field(default_factory=asyncio.Event)
     skip_reason: str = ""
+
+    # Edit 模式暂停机制
+    paused_step_id: str = ""  # 当前暂停的步骤 ID
+    paused_tool_name: str = ""  # 当前暂停的工具名称
+    paused_tool_result: str = ""  # 暂停时的工具结果
+    edited_results: Any = None  # 用户编辑后的结果
+    pause_confirm_event: asyncio.Event = field(default_factory=asyncio.Event)  # 暂停确认事件
 
     # 用户消息插入队列（任务执行期间用户发送的非指令消息）
     pending_user_inserts: list[str] = field(default_factory=list)
@@ -253,12 +266,44 @@ class TaskState:
 
     @property
     def is_active(self) -> bool:
-        """任务是否处于活跃状态（包含 WAITING_USER，因为 IM 模式下仍在等待回复）"""
+        """任务是否处于活跃状态（包含 WAITING_USER 和 PAUSED，因为仍在等待）"""
         return self.status not in (
             TaskStatus.IDLE,
             TaskStatus.COMPLETED,
             TaskStatus.FAILED,
             TaskStatus.CANCELLED,
+        )
+
+    def pause_for_edit(
+        self,
+        step_id: str,
+        tool_name: str,
+        tool_result: str,
+    ) -> None:
+        """暂停任务以等待用户编辑结果（Edit 模式）"""
+        self.paused_step_id = step_id
+        self.paused_tool_name = tool_name
+        self.paused_tool_result = tool_result
+        self.edited_results = None
+        self.pause_confirm_event.clear()
+        if self.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+            self.status = TaskStatus.PAUSED
+        logger.info(
+            f"[State] Task {self.task_id[:8]} paused for edit: "
+            f"step_id={step_id}, tool={tool_name}"
+        )
+
+    def confirm_pause(
+        self,
+        edited_results: Any = None,
+        action: str = "confirm",
+    ) -> None:
+        """确认暂停步骤，提供编辑后的结果"""
+        self.edited_results = edited_results
+        self.pause_confirm_event.set()
+        logger.info(
+            f"[State] Task {self.task_id[:8]} pause confirmed: "
+            f"action={action}, has_edited_results={edited_results is not None}"
         )
 
     @property

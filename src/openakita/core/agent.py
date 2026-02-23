@@ -65,7 +65,7 @@ from ..tools.mcp import mcp_client
 from ..tools.mcp_catalog import MCPCatalog
 from ..tools.shell import ShellTool
 from ..tools.web import WebTool
-from .agent_state import AgentState
+from .agent_state import AgentState, TaskStatus
 from .brain import Brain, Context
 from .errors import UserCancelledError
 from .context_manager import ContextManager
@@ -3324,6 +3324,7 @@ search_github → install_skill → 使用
         gateway: Any = None,
         *,
         plan_mode: bool = False,
+        edit_mode: bool = False,
         endpoint_override: str | None = None,
         attachments: list | None = None,
         thinking_mode: str | None = None,
@@ -3344,6 +3345,7 @@ search_github → install_skill → 使用
             session: Session 对象
             gateway: MessageGateway 对象
             plan_mode: 是否启用 Plan 模式
+            edit_mode: 是否启用 Edit 模式（步骤暂停等待用户确认）
             endpoint_override: 端点覆盖
             attachments: Desktop Chat 附件列表
             thinking_mode: 思考模式覆盖 ('auto'/'on'/'off'/None)
@@ -3440,6 +3442,7 @@ search_github → install_skill → 使用
                 task_monitor=task_monitor,
                 session_type=session_type,
                 plan_mode=plan_mode,
+                edit_mode=edit_mode,
                 endpoint_override=endpoint_override,
                 conversation_id=conversation_id,
                 thinking_mode=_thinking_mode,
@@ -4996,6 +4999,47 @@ NEXT: 建议的下一步（如有）"""
                 logger.info(f"[UserInsert] User message queued: {text[:50]}... (session={_sid})")
                 return True
         logger.warning(f"[UserInsert] No active task, message dropped: {text[:50]}...")
+        return False
+
+    def confirm_step(
+        self,
+        step_id: str,
+        conversation_id: str | None = None,
+        edited_results: list[dict] | None = None,
+        action: str = "confirm",
+    ) -> bool:
+        """
+        确认暂停的步骤（Edit 模式）。
+
+        当用户在 Edit 模式下确认步骤后调用此方法，后端将使用编辑后的结果继续执行。
+
+        Args:
+            step_id: 要确认的步骤 ID
+            conversation_id: 会话 ID
+            edited_results: 用户编辑后的结果（可选）
+            action: 'confirm' 继续执行，'skip' 跳过此步骤
+
+        Returns:
+            是否成功确认（False 表示没有找到暂停的任务）
+        """
+        _sid = conversation_id or getattr(self, "_current_session_id", None)
+        if hasattr(self, "agent_state") and self.agent_state:
+            task = (
+                self.agent_state.get_task_for_session(_sid) if _sid else None
+            ) or self.agent_state.current_task
+            if task and task.status == TaskStatus.PAUSED:
+                if action == "skip":
+                    # 如果是跳过，设置 skip 事件
+                    task.request_skip(f"用户在 Edit 模式跳过步骤: {step_id}")
+                task.confirm_pause(edited_results=edited_results, action=action)
+                logger.info(
+                    f"[ConfirmStep] Step confirmed: step_id={step_id}, "
+                    f"action={action}, has_edited={edited_results is not None} (session={_sid})"
+                )
+                return True
+        logger.warning(
+            f"[ConfirmStep] No paused task to confirm: step_id={step_id} (session={_sid})"
+        )
         return False
 
     async def _chat_with_tools(self, message: str) -> str:
