@@ -8,7 +8,9 @@ This module provides enterprise-grade context components:
 """
 
 from openakita.context.enterprise.system_context import SystemContext
+from openakita.context.enterprise.task_context import TaskContext
 
 __all__ = [
     "SystemContext",
+    "TaskContext",
 ]
