@@ -224,6 +224,7 @@ class Agent:
         self,
         name: str | None = None,
         api_key: str | None = None,
+        context_backend: Any | None = None,
     ):
         self.name = name or settings.agent_name
 
@@ -374,7 +375,17 @@ class Agent:
         )
 
         # 上下文管理器（委托自 _compress_context 等）
-        self.context_manager = ContextManager(brain=self.brain)
+        # 支持注入外部 ContextBackend（企业级或 Legacy 适配器）
+        # 如果未提供，使用默认的 ContextManager
+        self._context_backend = context_backend
+        if context_backend is not None:
+            # 使用注入的 ContextBackend
+            self.context_manager = context_backend
+            logger.info("Agent using injected ContextBackend")
+        else:
+            # 使用默认的 ContextManager（LLM 压缩）
+            self.context_manager = ContextManager(brain=self.brain)
+            logger.info("Agent using default ContextManager")
 
         # 响应处理器（委托自 _verify_task_completion 等）
         self.response_handler = ResponseHandler(
@@ -411,6 +422,61 @@ class Agent:
         )
 
         logger.info(f"Agent '{self.name}' created (with refactored sub-modules)")
+
+    @classmethod
+    def create_with_enterprise_context(
+        cls,
+        name: str | None = None,
+        api_key: str | None = None,
+        max_conversation_rounds: int = 20,
+        max_task_summaries: int = 20,
+        max_task_variables: int = 50,
+    ) -> "Agent":
+        """
+        创建使用企业级 ContextBackend 的 Agent 实例。
+
+        企业级 ContextBackend 使用滑动窗口替代 LLM 压缩，
+        将上下文构建延迟从 2-5s 降到 <10ms。
+
+        Args:
+            name: Agent 名称
+            api_key: API Key
+            max_conversation_rounds: 对话滑动窗口大小
+            max_task_summaries: 任务摘要最大数量
+            max_task_variables: 任务变量最大数量
+
+        Returns:
+            使用企业级 ContextBackend 的 Agent 实例
+
+        Example:
+            agent = Agent.create_with_enterprise_context(
+                name="EnterpriseBot",
+                max_conversation_rounds=30
+            )
+        """
+        from ..config import create_context_backend, ContextBackendConfig
+
+        config = ContextBackendConfig(
+            backend="enterprise",
+            max_conversation_rounds=max_conversation_rounds,
+            max_task_summaries=max_task_summaries,
+            max_task_variables=max_task_variables,
+        )
+
+        context_backend = create_context_backend(config)
+        return cls(name=name, api_key=api_key, context_backend=context_backend)
+
+    @property
+    def context_backend_type(self) -> str:
+        """获取当前使用的 ContextBackend 类型。"""
+        if self._context_backend is not None:
+            backend_type = type(self._context_backend).__name__
+            if "Enterprise" in backend_type:
+                return "enterprise"
+            elif "Legacy" in backend_type:
+                return "legacy"
+            return f"custom({backend_type})"
+        return "default(ContextManager)"
 
     def _get_tool_handler_name(self, tool_name: str) -> str | None:
         """获取工具对应的 handler 名称（用于互斥/并发策略）"""
