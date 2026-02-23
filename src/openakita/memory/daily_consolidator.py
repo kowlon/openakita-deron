@@ -104,10 +104,6 @@ class DailyConsolidator:
             await self.refresh_memory_md()
             result["memory_md_refreshed"] = True
 
-            # 4.5 晋升人格偏好到 identity
-            persona_promoted = await self._promote_persona_traits_to_identity()
-            result["persona_traits_promoted"] = persona_promoted
-
             # 5. 清理过期历史
             result["cleanup"] = self.consolidator.cleanup_history()
 
