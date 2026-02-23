@@ -14,7 +14,6 @@
 - memory.py       # Memory 工具（3 个）
 - scheduled.py    # Scheduled Tasks 工具（5 个）
 - im_channel.py   # IM Channel 工具（4 个）
-- profile.py      # User Profile 工具（3 个）
 - system.py       # System 工具（5 个）
 - mcp.py          # MCP 工具（3 个）
 - plan.py         # Plan 模式工具（4 个）
@@ -44,12 +43,9 @@ from .filesystem import FILESYSTEM_TOOLS
 from .im_channel import IM_CHANNEL_TOOLS
 from .mcp import MCP_TOOLS
 from .memory import MEMORY_TOOLS
-from .persona import PERSONA_TOOLS
 from .plan import PLAN_TOOLS
-from .profile import PROFILE_TOOLS
 from .scheduled import SCHEDULED_TOOLS
 from .skills import SKILLS_TOOLS
-from .sticker import STICKER_TOOLS
 from .system import SYSTEM_TOOLS
 from .web_search import WEB_SEARCH_TOOLS
 
@@ -62,12 +58,9 @@ BASE_TOOLS = (
     + SCHEDULED_TOOLS
     + IM_CHANNEL_TOOLS
     + SYSTEM_TOOLS
-    + PROFILE_TOOLS
     + MCP_TOOLS
     + PLAN_TOOLS
     + WEB_SEARCH_TOOLS
-    + PERSONA_TOOLS
-    + STICKER_TOOLS
 )
 
 __all__ = [
@@ -93,11 +86,8 @@ __all__ = [
     "MEMORY_TOOLS",
     "SCHEDULED_TOOLS",
     "IM_CHANNEL_TOOLS",
-    "PROFILE_TOOLS",
     "SYSTEM_TOOLS",
     "MCP_TOOLS",
     "PLAN_TOOLS",
     "WEB_SEARCH_TOOLS",
-    "PERSONA_TOOLS",
-    "STICKER_TOOLS",
 ]
