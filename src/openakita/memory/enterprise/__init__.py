@@ -5,9 +5,12 @@ This module provides enterprise-grade memory components:
 - SystemRuleStore: System-level rule storage
 - TaskContextStore: Task-level context storage
 - SkillStore: Optional skill pattern cache
+- EnterpriseMemoryRouter: Unified memory router coordinating all layers
 """
 
+from openakita.memory.enterprise.config import EnterpriseMemoryConfig
 from openakita.memory.enterprise.rules import RuleCategory, SystemRule, SystemRuleStore
+from openakita.memory.enterprise.router import EnterpriseMemoryRouter
 from openakita.memory.enterprise.task_context import (
     ErrorEntry,
     TaskContextStore,
@@ -15,6 +18,8 @@ from openakita.memory.enterprise.task_context import (
 )
 
 __all__ = [
+    "EnterpriseMemoryConfig",
+    "EnterpriseMemoryRouter",
     "ErrorEntry",
     "RuleCategory",
     "SystemRule",
