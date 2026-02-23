@@ -8,9 +8,17 @@ This module provides enterprise-grade memory components:
 """
 
 from openakita.memory.enterprise.rules import RuleCategory, SystemRule, SystemRuleStore
+from openakita.memory.enterprise.task_context import (
+    ErrorEntry,
+    TaskContextStore,
+    TaskMemory,
+)
 
 __all__ = [
+    "ErrorEntry",
     "RuleCategory",
     "SystemRule",
     "SystemRuleStore",
+    "TaskContextStore",
+    "TaskMemory",
 ]
