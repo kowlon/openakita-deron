@@ -51,12 +51,9 @@ from ..tools.handlers.filesystem import create_handler as create_filesystem_hand
 from ..tools.handlers.im_channel import create_handler as create_im_channel_handler
 from ..tools.handlers.mcp import create_handler as create_mcp_handler
 from ..tools.handlers.memory import create_handler as create_memory_handler
-from ..tools.handlers.persona import create_handler as create_persona_handler
 from ..tools.handlers.plan import create_plan_handler
-from ..tools.handlers.profile import create_handler as create_profile_handler
 from ..tools.handlers.scheduled import create_handler as create_scheduled_handler
 from ..tools.handlers.skills import create_handler as create_skills_handler
-from ..tools.handlers.sticker import create_handler as create_sticker_handler
 from ..tools.handlers.system import create_handler as create_system_handler
 from ..tools.handlers.web_search import create_handler as create_web_search_handler
 
@@ -87,7 +84,6 @@ from .response_handler import (
 from .skill_manager import SkillManager
 from .task_monitor import RETROSPECT_PROMPT, TaskMonitor
 from .tool_executor import OVERFLOW_MARKER, ToolExecutor
-from .user_profile import get_profile_manager
 
 _DESKTOP_AVAILABLE = False
 _desktop_tool_handler = None
@@ -281,48 +277,6 @@ class Agent:
             model_download_source=settings.model_download_source,
         )
 
-        # 用户档案管理器
-        self.profile_manager = get_profile_manager()
-
-        # ==================== 人格系统 + 活人感 + 表情包 ====================
-        # 恢复上次用户设置的运行时状态（角色、活人感开关等）
-        from ..config import runtime_state
-        from ..tools.sticker import StickerEngine
-        from .persona import PersonaManager
-        from .proactive import ProactiveConfig, ProactiveEngine
-        from .trait_miner import TraitMiner
-        runtime_state.load()
-
-        # 人格管理器
-        self.persona_manager = PersonaManager(
-            personas_dir=settings.personas_path,
-            active_preset=settings.persona_name,
-        )
-
-        # 偏好挖掘引擎（传入 brain，由 LLM 分析偏好而非关键词匹配）
-        self.trait_miner = TraitMiner(persona_manager=self.persona_manager, brain=self.brain)
-
-        # 活人感引擎
-        proactive_config = ProactiveConfig(
-            enabled=settings.proactive_enabled,
-            max_daily_messages=settings.proactive_max_daily_messages,
-            min_interval_minutes=settings.proactive_min_interval_minutes,
-            quiet_hours_start=settings.proactive_quiet_hours_start,
-            quiet_hours_end=settings.proactive_quiet_hours_end,
-            idle_threshold_hours=settings.proactive_idle_threshold_hours,
-        )
-        self.proactive_engine = ProactiveEngine(
-            config=proactive_config,
-            feedback_file=settings.project_root / "data" / "proactive_feedback.json",
-            persona_manager=self.persona_manager,
-            memory_manager=self.memory_manager,
-        )
-
-        # 表情包引擎
-        self.sticker_engine = StickerEngine(
-            data_dir=settings.sticker_data_path,
-        ) if settings.sticker_enabled else None
-
         # 动态工具列表（基础工具 + 技能工具）
         self._tools = list(BASE_TOOLS)
 
@@ -407,9 +361,7 @@ class Agent:
             skill_catalog=self.skill_catalog,
             mcp_catalog=self.mcp_catalog,
             memory_manager=self.memory_manager,
-            profile_manager=self.profile_manager,
             brain=self.brain,
-            persona_manager=self.persona_manager,
         )
 
         # 推理引擎（替代 _chat_with_tools_and_context）
@@ -754,25 +706,6 @@ class Agent:
             # 预热失败不应影响启动（例如 chromadb 未安装时会自动禁用）
             logger.debug(f"[Prewarm] skipped/failed: {e}")
 
-        # === 表情包引擎初始化 ===
-        if self.sticker_engine:
-            try:
-                await self.sticker_engine.initialize()
-            except Exception as e:
-                logger.debug(f"[Sticker] initialization skipped/failed: {e}")
-
-        # === 从记忆系统加载 PERSONA_TRAIT ===
-        try:
-            persona_memories = [
-                m.to_dict() for m in self.memory_manager._memories.values()
-                if m.type.value == "persona_trait"
-            ]
-            if persona_memories:
-                self.persona_manager.load_traits_from_memories(persona_memories)
-                logger.info(f"Loaded {len(persona_memories)} persona traits from memory")
-        except Exception as e:
-            logger.debug(f"[Persona] trait loading skipped: {e}")
-
         # === browser_task 依赖的 LLM 配置注入 ===
         # browser_task（browser-use）需要一个 OpenAI-compatible LLM（langchain_openai.ChatOpenAI）。
         # 项目本身使用 LLMClient（可多端点/故障切换），这里复用当前可用的 openai 协议端点配置。
@@ -869,13 +802,6 @@ class Agent:
             ["list_mcp_servers", "get_mcp_instructions", "call_mcp_tool"],
         )
 
-        # 用户档案
-        self.handler_registry.register(
-            "profile",
-            create_profile_handler(self),
-            ["get_user_profile", "update_user_profile", "skip_profile_question"],
-        )
-
         # Plan 模式
         self.handler_registry.register(
             "plan",
@@ -924,20 +850,6 @@ class Agent:
             "web_search",
             create_web_search_handler(self),
             ["web_search", "news_search"],
-        )
-
-        # 人格系统
-        self.handler_registry.register(
-            "persona",
-            create_persona_handler(self),
-            ["switch_persona", "update_persona_trait", "toggle_proactive", "get_persona_profile"],
-        )
-
-        # 表情包
-        self.handler_registry.register(
-            "sticker",
-            create_sticker_handler(self),
-            ["send_sticker"],
         )
 
         # 桌面工具（仅 Windows）
@@ -1425,10 +1337,8 @@ class Agent:
 
             # 创建执行器（gateway 稍后通过 set_scheduler_gateway 设置）
             self._task_executor = TaskExecutor(timeout_seconds=settings.scheduler_task_timeout)
-            # 预设 persona/memory/proactive 引用，供活人感心跳等系统任务使用
-            self._task_executor.persona_manager = getattr(self, "persona_manager", None)
+            # 预设 memory 引用，供系统任务使用
             self._task_executor.memory_manager = getattr(self, "memory_manager", None)
-            self._task_executor.proactive_engine = getattr(self, "proactive_engine", None)
 
             # 创建调度器
             self.task_scheduler = TaskScheduler(
@@ -1527,27 +1437,6 @@ class Agent:
                 if changed:
                     self.task_scheduler._save_tasks()
 
-        # 任务 3: 活人感心跳（每 30 分钟触发）
-        try:
-            if "system_proactive_heartbeat" not in existing_ids:
-                heartbeat_task = ScheduledTask(
-                    id="system_proactive_heartbeat",
-                    name="活人感心跳",
-                    trigger_type=TriggerType.INTERVAL,
-                    trigger_config={"interval_minutes": 30},
-                    action="system:proactive_heartbeat",
-                    prompt="检查是否需要发送主动消息（问候/提醒/跟进）",
-                    description="定时检查并发送主动消息",
-                    task_type=TaskType.TASK,
-                    enabled=True,
-                    deletable=False,
-                    metadata={"notify_on_start": False, "notify_on_complete": False},
-                )
-                await self.task_scheduler.add_task(heartbeat_task)
-                logger.info("Registered system task: proactive_heartbeat (every 30 min)")
-        except Exception as e:
-            logger.warning(f"Failed to register proactive_heartbeat task: {e}")
-
     def _build_system_prompt(
         self, base_prompt: str, task_description: str = "", use_compiled: bool = False,
         session_type: str = "cli",
@@ -1585,13 +1474,6 @@ class Agent:
 
         # 动态生成工具列表
         tools_text = self._generate_tools_text()
-
-        # 用户档案收集提示 (首次引导或日常询问)
-        profile_prompt = ""
-        if self.profile_manager.is_first_use():
-            profile_prompt = self.profile_manager.get_onboarding_prompt()
-        else:
-            profile_prompt = self.profile_manager.get_daily_question_prompt()
 
         # 系统环境信息
         import os
@@ -1910,7 +1792,7 @@ search_github → install_skill → 使用
 - 如果需要时间开发，先实际开发完成，再告诉用户结果
 
 **用户信任比看起来厉害更重要！宁可说"我做不到"也不要骗人！**
-{profile_prompt}"""
+"""
 
     def _build_system_prompt_compiled_sync(self, task_description: str = "", session_type: str = "cli") -> str:
         """同步版本：启动时构建初始系统提示词（此时事件循环可能未就绪）"""
@@ -2926,31 +2808,8 @@ search_github → install_skill → 使用
         logger.info(f"[Session:{session_id}] User: {message}")
 
         # 4. Proactive engine: 记录用户互动时间
-        if hasattr(self, "proactive_engine") and self.proactive_engine:
-            self.proactive_engine.update_user_interaction()
-
         # 5. User turn memory record
         self.memory_manager.record_turn("user", message)
-
-        # 6. Trait mining
-        if hasattr(self, "trait_miner") and self.trait_miner and self.trait_miner.brain:
-            try:
-                mined_traits = await self.trait_miner.mine_from_message(message, role="user")
-                for trait in mined_traits:
-                    from ..memory.types import Memory, MemoryPriority, MemoryType
-                    mem = Memory(
-                        type=MemoryType.PERSONA_TRAIT,
-                        priority=MemoryPriority.LONG_TERM,
-                        content=f"{trait.dimension}={trait.preference}",
-                        source=trait.source,
-                        tags=[f"dimension:{trait.dimension}", f"preference:{trait.preference}"],
-                        importance_score=trait.confidence,
-                    )
-                    self.memory_manager.add_memory(mem)
-                if mined_traits:
-                    logger.debug(f"[TraitMiner] Mined {len(mined_traits)} traits from user message")
-            except Exception as e:
-                logger.debug(f"[TraitMiner] Mining failed (non-critical): {e}")
 
         # 7. Prompt Compiler (两段式第一阶段)
         compiled_message = message
@@ -6010,10 +5869,8 @@ NEXT: 建议的下一步（如有）"""
         """
         if hasattr(self, "_task_executor") and self._task_executor:
             self._task_executor.gateway = gateway
-            # 同时传递 persona/memory/proactive 引用，供活人感心跳等系统任务使用
-            self._task_executor.persona_manager = getattr(self, "persona_manager", None)
+            # 同时传递 memory 引用，供系统任务使用
             self._task_executor.memory_manager = getattr(self, "memory_manager", None)
-            self._task_executor.proactive_engine = getattr(self, "proactive_engine", None)
             logger.info("Scheduler gateway configured")
 
     async def shutdown(
