@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ...core.tool_executor import MAX_TOOL_RESULT_CHARS, OVERFLOW_MARKER, save_overflow
+from ..executor import MAX_TOOL_RESULT_CHARS, OVERFLOW_MARKER, save_overflow
 
 if TYPE_CHECKING:
     from ...core.agent import Agent

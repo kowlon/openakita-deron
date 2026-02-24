@@ -15,9 +15,16 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from ..config import settings
+from .registry import SkillRegistry
+from .loader import SkillLoader
+from .catalog import SkillCatalog
+
+if TYPE_CHECKING:
+    from ..llm.brain import Brain
+    from ..tools.shell import ShellTool
 
 logger = logging.getLogger(__name__)
 
@@ -27,29 +34,56 @@ class SkillManager:
     技能管理器。
 
     管理 Agent Skills (SKILL.md 规范) 的加载、安装和更新。
+    作为 Skills 系统的统一入口，封装了 Registry, Loader, Catalog 和 Generator。
     """
 
     def __init__(
         self,
-        skill_registry: Any,
-        skill_loader: Any,
-        skill_catalog: Any,
-        shell_tool: Any,
+        brain: "Brain",
+        shell_tool: "ShellTool",
     ) -> None:
         """
         Args:
-            skill_registry: SkillRegistry 实例
-            skill_loader: SkillLoader 实例
-            skill_catalog: SkillCatalog 实例
+            brain: LLM Brain 实例 (用于 SkillGenerator)
             shell_tool: ShellTool 实例（用于 git 操作）
         """
-        self._registry = skill_registry
-        self._loader = skill_loader
-        self._catalog = skill_catalog
         self._shell_tool = shell_tool
+
+        # 初始化核心组件
+        self._registry = SkillRegistry()
+        self._loader = SkillLoader(self._registry)
+        self._catalog = SkillCatalog(self._registry)
+
+        # 延迟导入自进化系统（避免循环导入）
+        from ..evolution.generator import SkillGenerator
+        self._generator = SkillGenerator(
+            brain=brain,
+            skills_dir=settings.skills_path,
+            skill_registry=self._registry,
+        )
 
         # 缓存
         self._catalog_text: str = ""
+
+    @property
+    def registry(self) -> SkillRegistry:
+        """获取技能注册表"""
+        return self._registry
+
+    @property
+    def loader(self) -> SkillLoader:
+        """获取技能加载器"""
+        return self._loader
+
+    @property
+    def catalog(self) -> SkillCatalog:
+        """获取技能目录"""
+        return self._catalog
+
+    @property
+    def generator(self) -> "SkillGenerator":
+        """获取技能生成器"""
+        return self._generator
 
     @property
     def catalog_text(self) -> str:

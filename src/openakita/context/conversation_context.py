@@ -9,6 +9,7 @@
 - docs/context-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
+from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field

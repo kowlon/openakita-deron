@@ -11,6 +11,7 @@ OpenAkita 记忆系统
 """
 
 from .consolidator import MemoryConsolidator
+from .legacy import Memory as LegacyMemory
 from .manager import MemoryManager
 from .types import (
     ConversationTurn,
@@ -21,6 +22,7 @@ from .types import (
 )
 
 __all__ = [
+    "LegacyMemory",
     "MemoryManager",
     "MemoryConsolidator",
     "Memory",

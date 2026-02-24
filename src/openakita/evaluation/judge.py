@@ -17,7 +17,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..core.token_tracking import TokenTrackingContext, reset_tracking_context, set_tracking_context
+from ..infra import TokenTrackingContext, reset_tracking_context, set_tracking_context
 
 logger = logging.getLogger(__name__)
 

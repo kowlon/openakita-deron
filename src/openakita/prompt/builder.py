@@ -5,13 +5,13 @@ Prompt Builder - 消息组装模块
 
 组装顺序:
 1. Identity 层: soul.summary + agent.core + agent.tooling + policies
-2. Persona 层: 当前人格描述（预设 + 用户自定义 + 上下文适配）
-3. Runtime 层: runtime_facts (OS/CWD/时间)
-4. Catalogs 层: tools + skills + mcp 清单
-5. Memory 层: retriever 输出
-6. User 层: user.summary
+2. Runtime 层: runtime_facts (OS/CWD/时间)
+3. Catalogs 层: tools + skills + mcp 清单
+4. Memory 层: retriever 输出
+5. User 层: user.summary
 """
 
+from __future__ import annotations
 import logging
 import os
 import platform

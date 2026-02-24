@@ -245,7 +245,7 @@ class FilesystemHandler:
             return text
 
         total_lines = len(lines)
-        from ...core.tool_executor import save_overflow
+        from ..executor import save_overflow
         overflow_path = save_overflow("run_shell", text)
         truncated = "\n".join(lines[: self.SHELL_MAX_LINES])
         truncated += (

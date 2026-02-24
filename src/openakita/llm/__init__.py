@@ -8,9 +8,16 @@ LLM 统一调用层
 - 思考模式 (thinking)
 - 自动故障切换
 - 能力分流
+
+Brain: LLMClient 的高级封装，负责：
+1. 维护对话上下文 (Context)
+2. 集成记忆系统
+3. 处理思考过程
+4. 管理 Token 预算
 """
 
 from .adapter import LegacyContext, LegacyResponse, LLMAdapter, think
+from .brain import Brain, Context, Response
 from .client import LLMClient, chat, get_default_client
 from .config import get_default_config_path, load_endpoints_config
 from .types import (
@@ -56,4 +63,8 @@ __all__ = [
     "LegacyResponse",
     "LegacyContext",
     "think",
+    # Brain (backward compatibility layer)
+    "Brain",
+    "Context",
+    "Response",
 ]

@@ -27,7 +27,7 @@ from .base import ChannelAdapter
 from .types import OutgoingMessage, UnifiedMessage
 
 if TYPE_CHECKING:
-    from ..core.brain import Brain
+    from ..llm.brain import Brain
     from ..llm.stt_client import STTClient
 
 logger = logging.getLogger(__name__)

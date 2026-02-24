@@ -7,6 +7,7 @@
 - 超时自动切换模型
 - 任务完成后复盘分析
 """
+from __future__ import annotations
 
 import logging
 import time
@@ -461,6 +462,12 @@ class TaskMonitor:
             return False
         # 超时了，检查超时重试次数是否用尽
         return self._timeout_retry_count >= self.retry_before_switch
+
+    def check_model_switch_needed(self) -> str | None:
+        """检查是否需要切换模型，如果需要则返回新模型名称"""
+        if self.should_switch_model:
+            return self.fallback_model
+        return None
 
     @property
     def needs_context_reset(self) -> bool:

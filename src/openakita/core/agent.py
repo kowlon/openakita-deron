@@ -12,6 +12,7 @@ Agent 主类 - 协调所有模块
 Skills 系统遵循 Agent Skills 规范 (agentskills.io)
 MCP 系统遵循 Model Context Protocol 规范 (modelcontextprotocol.io)
 """
+from __future__ import annotations
 
 import asyncio
 import base64
@@ -28,14 +29,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
-from ..context.enterprise.conversation_context import ConversationContext
+from ..context.conversation_context import ConversationContext
 
 # 记忆系统
 from ..memory import MemoryManager
 
 # Prompt 编译管线 (v2)
 # 技能系统 (SKILL.md 规范)
-from ..skills import SkillCatalog, SkillLoader, SkillRegistry
+from ..skills import SkillManager
 
 # 系统工具目录（渐进式披露）
 from ..tools.catalog import ToolCatalog
@@ -46,44 +47,40 @@ from ..tools.file import FileTool
 
 # Handler Registry（模块化工具执行）
 from ..tools.handlers import SystemHandlerRegistry
-from ..tools.handlers.browser import create_handler as create_browser_handler
-from ..tools.handlers.desktop import create_handler as create_desktop_handler
-from ..tools.handlers.filesystem import create_handler as create_filesystem_handler
-from ..tools.handlers.im_channel import create_handler as create_im_channel_handler
-from ..tools.handlers.mcp import create_handler as create_mcp_handler
-from ..tools.handlers.memory import create_handler as create_memory_handler
-from ..tools.handlers.plan import create_plan_handler
-from ..tools.handlers.scheduled import create_handler as create_scheduled_handler
-from ..tools.handlers.skills import create_handler as create_skills_handler
-from ..tools.handlers.system import create_handler as create_system_handler
-from ..tools.handlers.web_search import create_handler as create_web_search_handler
 
 # MCP 系统
 from ..tools.mcp import mcp_client
 from ..tools.mcp_catalog import MCPCatalog
+from ..tools.mcp_manager import MCPManager
 from ..tools.shell import ShellTool
 from ..tools.web import WebTool
-from .agent_state import AgentState, TaskStatus
-from .brain import Brain, Context
+from .agent_state import AgentState, TaskState, TaskStatus
+from .helpers.tool_helper import init_handlers
+from .helpers.session_helper import (
+    cleanup_session_state,
+    finalize_session,
+    prepare_session_context,
+    resolve_conversation_id,
+)
+from ..llm.brain import Brain, Context
 from .errors import UserCancelledError
 from .identity import Identity
 from .prompt_assembler import PromptAssembler
-from .ralph import RalphLoop, Task, TaskResult
+from .ralph import RalphLoop, TaskResult
 from .reasoning_engine import ReasoningEngine
 from .response_handler import (
     ResponseHandler,
     clean_llm_response,
     strip_thinking_tags,
 )
-from .skill_manager import SkillManager
 from .task_monitor import RETROSPECT_PROMPT, TaskMonitor
-from .token_tracking import (
+from ..infra import (
     TokenTrackingContext,
     init_token_tracking,
     reset_tracking_context,
     set_tracking_context,
 )
-from .tool_executor import ToolExecutor
+from ..tools.executor import ToolExecutor
 
 _DESKTOP_AVAILABLE = False
 _desktop_tool_handler = None
@@ -228,25 +225,16 @@ class Agent:
         self.file_tool = FileTool()
         self.web_tool = WebTool()
 
-        # 初始化技能系统 (SKILL.md 规范)
-        self.skill_registry = SkillRegistry()
-        self.skill_loader = SkillLoader(self.skill_registry)
-        self.skill_catalog = SkillCatalog(self.skill_registry)
-
-        # 延迟导入自进化系统（避免循环导入）
-        from ..evolution.generator import SkillGenerator
-
-        self.skill_generator = SkillGenerator(
+        # 技能管理器（委托自 _install_skill / _load_installed_skills 等）
+        self.skill_manager = SkillManager(
             brain=self.brain,
-            skills_dir=settings.skills_path,
-            skill_registry=self.skill_registry,
+            shell_tool=self.shell_tool,
         )
 
         # MCP 系统
         self.mcp_client = mcp_client
         self.mcp_catalog = MCPCatalog()
-        self.browser_mcp = None  # 在 _start_builtin_mcp_servers 中启动
-        self._builtin_mcp_count = 0
+        self.mcp_manager = MCPManager(self.mcp_client, self.mcp_catalog)
 
         # 系统工具目录（渐进式披露）
         _all_tools = list(BASE_TOOLS)
@@ -275,7 +263,7 @@ class Agent:
             self._tools.extend(DESKTOP_TOOLS)
             logger.info(f"Desktop automation tools enabled ({len(DESKTOP_TOOLS)} tools)")
 
-        self._update_shell_tool_description()
+        self.skill_manager.update_shell_tool_description(self._tools)
 
         # 对话上下文
         self._context = Context()
@@ -297,7 +285,7 @@ class Agent:
 
         # Handler Registry（模块化工具执行）
         self.handler_registry = SystemHandlerRegistry()
-        self._init_handlers()
+        init_handlers(self)
 
         # === 工具并行执行基础设施（默认不开启并行，tool_max_parallel=1）===
         # 并行执行只影响“同一轮模型返回多个 tool_use/tool_calls”的工具批处理阶段。
@@ -333,14 +321,6 @@ class Agent:
         self.response_handler = ResponseHandler(
             brain=self.brain,
             memory_manager=self.memory_manager,
-        )
-
-        # 技能管理器（委托自 _install_skill / _load_installed_skills 等）
-        self.skill_manager = SkillManager(
-            skill_registry=self.skill_registry,
-            skill_loader=self.skill_loader,
-            skill_catalog=self.skill_catalog,
-            shell_tool=self.shell_tool,
         )
 
         # 提示词组装器（委托自 _build_system_prompt 等）
@@ -424,6 +404,53 @@ class Agent:
                 return "legacy"
             return f"custom({backend_type})"
         return "enterprise(default)"
+
+    @property
+    def skill_registry(self):
+        """[Backward Compatibility] Delegate to skill_manager.registry"""
+        return self.skill_manager.registry
+
+    @property
+    def skill_loader(self):
+        """[Backward Compatibility] Delegate to skill_manager.loader"""
+        return self.skill_manager.loader
+
+    @property
+    def skill_catalog(self):
+        """[Backward Compatibility] Delegate to skill_manager.catalog"""
+        return self.skill_manager.catalog
+
+    @property
+    def skill_generator(self):
+        """[Backward Compatibility] Delegate to skill_manager.generator"""
+        return self.skill_manager.generator
+
+    @property
+    def browser_mcp(self):
+        """[Backward Compatibility] Delegate to mcp_manager.browser_mcp"""
+        return self.mcp_manager.browser_mcp
+
+    @browser_mcp.setter
+    def browser_mcp(self, value):
+        self.mcp_manager.browser_mcp = value
+
+    @property
+    def _builtin_mcp_count(self):
+        """[Backward Compatibility] Delegate to mcp_manager.builtin_count"""
+        return self.mcp_manager.builtin_count
+
+    @_builtin_mcp_count.setter
+    def _builtin_mcp_count(self, value):
+        self.mcp_manager._builtin_mcp_count = value
+
+    @property
+    def _mcp_catalog_text(self):
+        """[Backward Compatibility] Delegate to mcp_manager.catalog_text"""
+        return self.mcp_manager.catalog_text
+
+    @_mcp_catalog_text.setter
+    def _mcp_catalog_text(self, value):
+        self.mcp_manager.catalog_text = value
 
     def _get_tool_handler_name(self, tool_name: str) -> str | None:
         """获取工具对应的 handler 名称（用于互斥/并发策略）"""
@@ -664,10 +691,12 @@ class Agent:
         self.identity.load()
 
         # 加载已安装的技能
-        await self._load_installed_skills()
+        await self.skill_manager.load_installed_skills()
+        # 更新工具描述
+        self.skill_manager.update_shell_tool_description(self._tools)
 
         # 加载 MCP 配置
-        await self._load_mcp_servers()
+        await self.mcp_manager.load_servers()
 
         # 启动记忆会话
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
@@ -702,35 +731,10 @@ class Agent:
             logger.debug(f"[Prewarm] skipped/failed: {e}")
 
         # === browser_task 依赖的 LLM 配置注入 ===
-        # browser_task（browser-use）需要一个 OpenAI-compatible LLM（langchain_openai.ChatOpenAI）。
-        # 项目本身使用 LLMClient（可多端点/故障切换），这里复用当前可用的 openai 协议端点配置。
+        # browser_task（browser-use）需要一个 OpenAI-compatible LLM。
+        # 这里将 LLMClient 传递给 MCPManager 进行配置注入。
         try:
-            if getattr(self, "browser_mcp", None):
-                llm_client = getattr(self.brain, "_llm_client", None)
-                provider = None
-                if llm_client:
-                    # 优先使用当前健康端点；若不是 openai 协议，则退化为任意健康 openai 协议端点
-                    current = llm_client.get_current_model()
-                    if current and current.name in llm_client.providers:
-                        p = llm_client.providers[current.name]
-                        if getattr(p.config, "api_type", "") == "openai" and p.is_healthy:
-                            provider = p
-                    if provider is None:
-                        for p in llm_client.providers.values():
-                            if getattr(p.config, "api_type", "") == "openai" and p.is_healthy:
-                                provider = p
-                                break
-
-                if provider:
-                    api_key = provider.config.get_api_key()
-                    if api_key:
-                        self.browser_mcp.set_llm_config(
-                            {
-                                "model": provider.config.model,
-                                "api_key": api_key,
-                                "base_url": provider.config.base_url.rstrip("/"),
-                            }
-                        )
+            self.mcp_manager.inject_llm_config(getattr(self.brain, "_llm_client", None))
         except Exception as e:
             logger.debug(f"[BrowserMCP] LLM config injection skipped/failed: {e}")
 
@@ -743,586 +747,9 @@ class Agent:
             f"{f' (builtin: {self._builtin_mcp_count})' if self._builtin_mcp_count else ''}"
         )
 
-    def _init_handlers(self) -> None:
-        """
-        初始化系统工具处理器
 
-        将各个模块的处理器注册到 handler_registry
-        """
-        # 文件系统
-        self.handler_registry.register(
-            "filesystem",
-            create_filesystem_handler(self),
-            ["run_shell", "write_file", "read_file", "list_directory"],
-        )
 
-        # 记忆系统
-        self.handler_registry.register(
-            "memory",
-            create_memory_handler(self),
-            ["add_memory", "search_memory", "get_memory_stats"],
-        )
 
-        # 浏览器
-        self.handler_registry.register(
-            "browser",
-            create_browser_handler(self),
-            [
-                "browser_task",
-                "browser_open",
-                "browser_navigate",
-                "browser_get_content",
-                "browser_screenshot",
-                "browser_close",
-            ],
-        )
-
-        # 定时任务
-        self.handler_registry.register(
-            "scheduled",
-            create_scheduled_handler(self),
-            [
-                "schedule_task",
-                "list_scheduled_tasks",
-                "cancel_scheduled_task",
-                "update_scheduled_task",
-                "trigger_scheduled_task",
-            ],
-        )
-
-        # MCP
-        self.handler_registry.register(
-            "mcp",
-            create_mcp_handler(self),
-            ["list_mcp_servers", "get_mcp_instructions", "call_mcp_tool"],
-        )
-
-        # Plan 模式
-        self.handler_registry.register(
-            "plan",
-            create_plan_handler(self),
-            ["create_plan", "update_plan_step", "get_plan_status", "complete_plan"],
-        )
-
-        # 系统工具
-        self.handler_registry.register(
-            "system",
-            create_system_handler(self),
-            [
-                "ask_user",
-                "get_tool_info",
-                "get_session_logs",
-                "enable_thinking",
-                "set_task_timeout",
-                "generate_image",
-            ],
-        )
-
-        # IM 渠道
-        self.handler_registry.register(
-            "im_channel",
-            create_im_channel_handler(self),
-            ["deliver_artifacts", "get_voice_file", "get_image_file", "get_chat_history"],
-        )
-
-        # 技能管理
-        self.handler_registry.register(
-            "skills",
-            create_skills_handler(self),
-            [
-                "list_skills",
-                "get_skill_info",
-                "run_skill_script",
-                "get_skill_reference",
-                "install_skill",
-                "load_skill",
-                "reload_skill",
-            ],
-        )
-
-        # Web 搜索
-        self.handler_registry.register(
-            "web_search",
-            create_web_search_handler(self),
-            ["web_search", "news_search"],
-        )
-
-        # 桌面工具（仅 Windows）
-        if sys.platform == "win32":
-            self.handler_registry.register(
-                "desktop",
-                create_desktop_handler(self),
-                [
-                    "desktop_screenshot",
-                    "desktop_find_element",
-                    "desktop_click",
-                    "desktop_type",
-                    "desktop_hotkey",
-                    "desktop_scroll",
-                    "desktop_window",
-                    "desktop_wait",
-                    "desktop_inspect",
-                ],
-            )
-
-        logger.info(
-            f"Initialized {len(self.handler_registry._handlers)} handlers with {len(self.handler_registry._tool_to_handler)} tools"
-        )
-
-    async def _load_installed_skills(self) -> None:
-        """
-        加载已安装的技能 (遵循 Agent Skills 规范)
-
-        技能从以下目录加载:
-        - skills/ (项目级别)
-        - .cursor/skills/ (Cursor 兼容)
-        """
-        # 从所有标准目录加载
-        loaded = self.skill_loader.load_all(settings.project_root)
-        logger.info(f"Loaded {loaded} skills from standard directories")
-
-        # 外部技能启用/禁用（系统技能永远启用）
-        # 配置文件：<workspace>/data/skills.json
-        # - 不存在 / 无 external_allowlist => 外部技能全部启用（兼容历史行为）
-        # - external_allowlist: [] => 禁用所有外部技能
-        try:
-            cfg_path = settings.project_root / "data" / "skills.json"
-            external_allowlist: set[str] | None = None
-            if cfg_path.exists():
-                raw = cfg_path.read_text(encoding="utf-8")
-                cfg = json.loads(raw) if raw.strip() else {}
-                al = cfg.get("external_allowlist", None)
-                if isinstance(al, list):
-                    external_allowlist = {str(x).strip() for x in al if str(x).strip()}
-            removed = self.skill_loader.prune_external_by_allowlist(external_allowlist)
-            if removed:
-                logger.info(f"External skills filtered by {cfg_path}")
-        except Exception as e:
-            logger.warning(f"Failed to apply skills allowlist: {e}")
-
-        # 生成技能清单 (用于系统提示)
-        self._skill_catalog_text = self.skill_catalog.generate_catalog()
-        logger.info(f"Generated skill catalog with {self.skill_catalog.skill_count} skills")
-
-        # 更新工具列表，添加技能工具
-        self._update_skill_tools()
-
-    def _update_shell_tool_description(self) -> None:
-        """动态更新 shell 工具描述，包含当前操作系统信息"""
-        import platform
-
-        # 获取操作系统信息
-        if os.name == "nt":
-            os_info = f"Windows {platform.release()} (使用 PowerShell/cmd 命令，如: dir, type, tasklist, Get-Process, findstr)"
-        else:
-            os_info = f"{platform.system()} (使用 bash 命令，如: ls, cat, ps aux, grep)"
-
-        # 更新 run_shell 工具的描述
-        for tool in self._tools:
-            if tool.get("name") == "run_shell":
-                tool["description"] = (
-                    f"执行Shell命令。当前操作系统: {os_info}。"
-                    "注意：请使用当前操作系统支持的命令；如果命令连续失败，请尝试不同的命令或放弃该方法。"
-                )
-                tool["input_schema"]["properties"]["command"]["description"] = (
-                    f"要执行的Shell命令（当前系统: {os.name}）"
-                )
-                break
-
-    def _update_skill_tools(self) -> None:
-        """更新工具列表，添加技能相关工具"""
-        # 基础工具已在 BASE_TOOLS 中定义
-        # 这里可以添加动态生成的技能工具
-        pass
-
-    async def _install_skill(
-        self,
-        source: str,
-        name: str | None = None,
-        subdir: str | None = None,
-        extra_files: list[str] | None = None,
-    ) -> str:
-        """
-        安装技能到本地 skills/ 目录
-
-        支持：
-        1. Git 仓库 URL (克隆并查找 SKILL.md)
-        2. 单个 SKILL.md 文件 URL (创建规范目录结构)
-
-        Args:
-            source: Git 仓库 URL 或 SKILL.md 文件 URL
-            name: 技能名称 (可选)
-            subdir: Git 仓库中技能所在的子目录
-            extra_files: 额外文件 URL 列表
-
-        Returns:
-            安装结果消息
-        """
-
-        skills_dir = settings.skills_path
-
-        # 判断是 Git 仓库还是文件 URL
-        is_git = self._is_git_url(source)
-
-        if is_git:
-            return await self._install_skill_from_git(source, name, subdir, skills_dir)
-        else:
-            return await self._install_skill_from_url(source, name, extra_files, skills_dir)
-
-    def _is_git_url(self, url: str) -> bool:
-        """判断是否为 Git 仓库 URL"""
-        git_patterns = [
-            r"^git@",  # SSH
-            r"\.git$",  # 以 .git 结尾
-            r"^https?://github\.com/",
-            r"^https?://gitlab\.com/",
-            r"^https?://bitbucket\.org/",
-            r"^https?://gitee\.com/",
-        ]
-        return any(re.search(pattern, url) for pattern in git_patterns)
-
-    async def _install_skill_from_git(
-        self, git_url: str, name: str | None, subdir: str | None, skills_dir: Path
-    ) -> str:
-        """从 Git 仓库安装技能"""
-        import shutil
-        import tempfile
-
-        temp_dir = None
-        try:
-            # 1. 克隆仓库到临时目录
-            temp_dir = Path(tempfile.mkdtemp(prefix="skill_install_"))
-
-            # 执行 git clone
-            result = await self.shell_tool.run(f'git clone --depth 1 "{git_url}" "{temp_dir}"')
-
-            if not result.success:
-                return f"❌ Git 克隆失败:\n{result.output}"
-
-            # 2. 查找 SKILL.md
-            search_dir = temp_dir / subdir if subdir else temp_dir
-            skill_md_path = self._find_skill_md(search_dir)
-
-            if not skill_md_path:
-                # 列出可能的技能目录
-                possible = self._list_skill_candidates(temp_dir)
-                hint = ""
-                if possible:
-                    hint = "\n\n可能的技能目录:\n" + "\n".join(f"- {p}" for p in possible[:5])
-                return f"❌ 未找到 SKILL.md 文件{hint}"
-
-            skill_source_dir = skill_md_path.parent
-
-            # 3. 解析技能元数据
-            skill_content = skill_md_path.read_text(encoding="utf-8")
-            extracted_name = self._extract_skill_name(skill_content)
-            skill_name = name or extracted_name or skill_source_dir.name
-            skill_name = self._normalize_skill_name(skill_name)
-
-            # 4. 复制到 skills 目录
-            target_dir = skills_dir / skill_name
-            if target_dir.exists():
-                shutil.rmtree(target_dir)
-
-            shutil.copytree(skill_source_dir, target_dir)
-
-            # 5. 确保有规范的目录结构
-            self._ensure_skill_structure(target_dir)
-
-            # 6. 加载技能
-            self._list_installed_files(target_dir)
-            try:
-                loaded = self.skill_loader.load_skill(target_dir)
-                if loaded:
-                    self._skill_catalog_text = self.skill_catalog.generate_catalog()
-                    logger.info(f"Skill installed from git: {skill_name}")
-            except Exception as e:
-                logger.error(f"Failed to load installed skill: {e}")
-
-            return f"""✅ 技能从 Git 安装成功！
-
-**技能名称**: {skill_name}
-**来源**: {git_url}
-**安装路径**: {target_dir}
-
-**目录结构**:
-```
-{skill_name}/
-{self._format_tree(target_dir)}
-```
-
-技能已自动加载，可以使用:
-- `get_skill_info("{skill_name}")` 查看详细指令
-- `list_skills` 查看所有已安装技能"""
-
-        except Exception as e:
-            logger.error(f"Failed to install skill from git: {e}")
-            return f"❌ Git 安装失败: {str(e)}"
-        finally:
-            # 清理临时目录
-            if temp_dir and temp_dir.exists():
-                with contextlib.suppress(BaseException):
-                    shutil.rmtree(temp_dir)
-
-    async def _install_skill_from_url(
-        self, url: str, name: str | None, extra_files: list[str] | None, skills_dir: Path
-    ) -> str:
-        """从 URL 安装技能"""
-        import httpx
-
-        try:
-            # 1. 下载 SKILL.md
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                skill_content = response.text
-
-            # 2. 提取技能名称
-            extracted_name = self._extract_skill_name(skill_content)
-            skill_name = name or extracted_name
-
-            if not skill_name:
-                # 从 URL 提取
-                from urllib.parse import urlparse
-
-                path = urlparse(url).path
-                skill_name = path.split("/")[-1].replace(".md", "").replace("skill", "").strip("-_")
-
-            skill_name = self._normalize_skill_name(skill_name or "custom-skill")
-
-            # 3. 创建技能目录结构
-            skill_dir = skills_dir / skill_name
-            skill_dir.mkdir(parents=True, exist_ok=True)
-
-            # 4. 保存 SKILL.md
-            (skill_dir / "SKILL.md").write_text(skill_content, encoding="utf-8")
-
-            # 5. 创建规范目录结构
-            self._ensure_skill_structure(skill_dir)
-
-            installed_files = ["SKILL.md"]
-
-            # 6. 下载额外文件
-            if extra_files:
-                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                    for file_url in extra_files:
-                        try:
-                            from urllib.parse import urlparse
-
-                            file_name = urlparse(file_url).path.split("/")[-1]
-                            if not file_name:
-                                continue
-
-                            response = await client.get(file_url)
-                            response.raise_for_status()
-
-                            # 根据文件类型放到对应目录
-                            if file_name.endswith(".md"):
-                                dest = skill_dir / "references" / file_name
-                            elif file_name.endswith((".py", ".sh", ".js")):
-                                dest = skill_dir / "scripts" / file_name
-                            else:
-                                dest = skill_dir / file_name
-
-                            dest.parent.mkdir(parents=True, exist_ok=True)
-                            dest.write_text(response.text, encoding="utf-8")
-                            installed_files.append(str(dest.relative_to(skill_dir)))
-                        except Exception as e:
-                            logger.warning(f"Failed to download {file_url}: {e}")
-
-            # 7. 加载技能
-            try:
-                loaded = self.skill_loader.load_skill(skill_dir)
-                if loaded:
-                    self._skill_catalog_text = self.skill_catalog.generate_catalog()
-                    logger.info(f"Skill installed from URL: {skill_name}")
-            except Exception as e:
-                logger.error(f"Failed to load installed skill: {e}")
-
-            return f"""✅ 技能安装成功！
-
-**技能名称**: {skill_name}
-**安装路径**: {skill_dir}
-
-**目录结构**:
-```
-{skill_name}/
-{self._format_tree(skill_dir)}
-```
-
-**安装文件**: {", ".join(installed_files)}
-
-技能已自动加载，可以使用:
-- `get_skill_info("{skill_name}")` 查看详细指令
-- `list_skills` 查看所有已安装技能"""
-
-        except Exception as e:
-            logger.error(f"Failed to install skill from URL: {e}")
-            return f"❌ URL 安装失败: {str(e)}"
-
-    def _extract_skill_name(self, content: str) -> str | None:
-        """从 SKILL.md 内容提取技能名称"""
-        import re
-
-        import yaml
-
-        match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
-        if match:
-            try:
-                metadata = yaml.safe_load(match.group(1))
-                return metadata.get("name")
-            except Exception:
-                pass
-        return None
-
-    def _normalize_skill_name(self, name: str) -> str:
-        """标准化技能名称"""
-        import re
-
-        name = name.lower().replace("_", "-").replace(" ", "-")
-        name = re.sub(r"[^a-z0-9-]", "", name)
-        name = re.sub(r"-+", "-", name).strip("-")
-        return name or "custom-skill"
-
-    def _find_skill_md(self, search_dir: Path) -> Path | None:
-        """在目录中查找 SKILL.md"""
-        # 先检查当前目录
-        skill_md = search_dir / "SKILL.md"
-        if skill_md.exists():
-            return skill_md
-
-        # 递归查找
-        for path in search_dir.rglob("SKILL.md"):
-            return path
-
-        return None
-
-    def _list_skill_candidates(self, base_dir: Path) -> list[str]:
-        """列出可能包含技能的目录"""
-        candidates = []
-        for path in base_dir.rglob("*.md"):
-            if path.name.lower() in ("skill.md", "readme.md"):
-                rel_path = path.parent.relative_to(base_dir)
-                if str(rel_path) != ".":
-                    candidates.append(str(rel_path))
-        return candidates
-
-    def _ensure_skill_structure(self, skill_dir: Path) -> None:
-        """确保技能目录有规范结构"""
-        (skill_dir / "scripts").mkdir(exist_ok=True)
-        (skill_dir / "references").mkdir(exist_ok=True)
-        (skill_dir / "assets").mkdir(exist_ok=True)
-
-    def _list_installed_files(self, skill_dir: Path) -> list[str]:
-        """列出已安装的文件"""
-        files = []
-        for path in skill_dir.rglob("*"):
-            if path.is_file():
-                files.append(str(path.relative_to(skill_dir)))
-        return files
-
-    def _format_tree(self, directory: Path, prefix: str = "") -> str:
-        """格式化目录树"""
-        lines = []
-        items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name))
-
-        for i, item in enumerate(items):
-            is_last = i == len(items) - 1
-            connector = "└── " if is_last else "├── "
-            lines.append(f"{prefix}{connector}{item.name}")
-
-            if item.is_dir():
-                extension = "    " if is_last else "│   "
-                sub_tree = self._format_tree(item, prefix + extension)
-                if sub_tree:
-                    lines.append(sub_tree)
-
-        return "\n".join(lines)
-
-    async def _load_mcp_servers(self) -> None:
-        """
-        加载 MCP 服务器配置
-
-        只加载项目本地的 MCP，不加载 Cursor 的（因为无法实际调用）
-        """
-        # 只加载项目本地 MCP 目录
-        possible_dirs = [
-            settings.project_root / "mcps",
-            settings.project_root / ".mcp",
-        ]
-
-        total_count = 0
-
-        for dir_path in possible_dirs:
-            if dir_path.exists():
-                count = self.mcp_catalog.scan_mcp_directory(dir_path)
-                if count > 0:
-                    total_count += count
-                    logger.info(f"Loaded {count} MCP servers from {dir_path}")
-
-        # 将扫描到的 MCP 服务器同步注册到 MCPClient（否则“目录可见但不可调用”）
-        # 目录（mcp_catalog）负责发现与提示词披露；执行（mcp_client）负责真实连接与调用。
-        try:
-            from ..tools.mcp import MCPServerConfig
-
-            for server in getattr(self.mcp_catalog, "_servers", []) or []:
-                # server 是 MCPServerInfo，包含 command/args/env/transport/url（来自 SERVER_METADATA.json）
-                if not getattr(server, "identifier", None):
-                    continue
-                transport = getattr(server, "transport", "stdio") or "stdio"
-                # stdio 模式需要 command；streamable_http 模式需要 url
-                if transport == "stdio" and not getattr(server, "command", None):
-                    continue
-                if transport == "streamable_http" and not getattr(server, "url", None):
-                    continue
-                self.mcp_client.add_server(
-                    MCPServerConfig(
-                        name=server.identifier,
-                        command=getattr(server, "command", "") or "",
-                        args=list(getattr(server, "args", []) or []),
-                        env=dict(getattr(server, "env", {}) or {}),
-                        description=getattr(server, "name", "") or "",
-                        transport=transport,
-                        url=getattr(server, "url", "") or "",
-                    )
-                )
-        except Exception as e:
-            logger.warning(f"Failed to register MCP servers into MCPClient: {e}")
-
-        # 启动内置 MCP 服务器
-        await self._start_builtin_mcp_servers()
-
-        if total_count > 0 or self._builtin_mcp_count > 0:
-            self._mcp_catalog_text = self.mcp_catalog.generate_catalog()
-            logger.info(f"Total MCP servers: {total_count + self._builtin_mcp_count}")
-        else:
-            self._mcp_catalog_text = ""
-            logger.info("No MCP servers configured")
-
-    async def _start_builtin_mcp_servers(self) -> None:
-        """启动内置服务 (如 browser-use)"""
-        self._builtin_mcp_count = 0
-
-        # 初始化浏览器服务 (作为内置工具，不是 MCP)
-        # 注意: 不自动启动浏览器，由 browser_open 工具控制启动时机和模式
-        try:
-            # 先检查 playwright 是否可用，避免假阳性日志
-            from ..tools._import_helper import import_or_hint
-            pw_hint = import_or_hint("playwright")
-            if pw_hint:
-                logger.warning(f"浏览器自动化不可用: {pw_hint}")
-            else:
-                from ..tools.browser_mcp import BrowserMCP
-
-                self.browser_mcp = BrowserMCP(headless=False)  # 默认可见模式
-                # 不在这里 await self.browser_mcp.start()，让 LLM 通过 browser_open 控制
-
-                # 注意: 浏览器工具已在 BASE_TOOLS 中定义，不需要注册到 MCP catalog
-                # 这样 LLM 就会直接使用 browser_navigate 等工具名，而不是 MCP 格式
-                self._builtin_mcp_count += 1
-                logger.info("Started builtin browser service (Playwright)")
-        except Exception as e:
-            logger.warning(f"Failed to start browser service: {e}")
 
     async def _start_scheduler(self) -> None:
         """启动定时任务调度器"""
@@ -1984,296 +1411,16 @@ search_github → install_skill → 使用
         *,
         attachments: list | None = None,
     ) -> tuple[list[dict], str, "TaskMonitor", str, Any]:
-        """
-        会话流水线 - 共享准备阶段。
-
-        chat_with_session() 和 chat_with_session_stream() 共用此方法，
-        确保 IM/Desktop 两条路径走完全一致的准备逻辑。
-
-        步骤:
-        1. Memory session align
-        2. IM context setup
-        3. Agent state / log session setup
-        4. Proactive engine update
-        5. User turn memory record
-        6. Trait mining
-        7. Prompt Compiler (两段式第一阶段)
-        8. Plan 模式自动检测
-        9. Task definition setup
-        10. Message history build (含上下文边界标记、多模态/附件)
-        11. Context compression
-        12. TaskMonitor creation
-
-        Args:
-            message: 用户消息
-            session_messages: Session 的对话历史
-            session_id: 会话 ID（用于日志）
-            session: Session 对象
-            gateway: MessageGateway 对象
-            conversation_id: 稳定对话线程 ID
-            attachments: Desktop Chat 附件列表 (可选)
-
-        Returns:
-            (messages, session_type, task_monitor, conversation_id, im_tokens)
-        """
-        # 1. 对齐 MemoryManager 会话
-        try:
-            conversation_safe_id = conversation_id.replace(":", "__")
-            conversation_safe_id = re.sub(r'[/\\+=%?*<>|"\x00-\x1f]', "_", conversation_safe_id)
-            if getattr(self.memory_manager, "_current_session_id", None) != conversation_safe_id:
-                self.memory_manager.start_session(conversation_safe_id)
-        except Exception as e:
-            logger.warning(f"[Memory] Failed to align memory session: {e}")
-
-        # 2. IM context setup（协程隔离）
-        from .im_context import set_im_context
-
-        im_tokens = set_im_context(
-            session=session if gateway else None,
-            gateway=gateway,
+        return await prepare_session_context(
+            self,
+            message,
+            session_messages,
+            session_id,
+            session,
+            gateway,
+            conversation_id,
+            attachments=attachments,
         )
-
-        # 3. Agent state / log session
-        self._current_session = session
-        self.agent_state.current_session = session
-
-        from ..logging import get_session_log_buffer
-        get_session_log_buffer().set_current_session(conversation_id)
-
-        logger.info(f"[Session:{session_id}] User: {message}")
-
-        # 4. Proactive engine: 记录用户互动时间
-        # 5. User turn memory record
-        self.memory_manager.record_turn("user", message)
-
-        # 7. Prompt Compiler (两段式第一阶段)
-        compiled_message = message
-        compiler_output = ""
-        compiler_summary = ""
-
-        if self._should_compile_prompt(message):
-            compiled_message, compiler_output = await self._compile_prompt(message)
-            if compiler_output:
-                logger.info(f"[Session:{session_id}] Prompt compiled")
-                compiler_summary = self._summarize_compiler_output(compiler_output)
-
-                # 8. Plan 模式自动检测
-                from ..tools.handlers.plan import require_plan_for_session, should_require_plan
-
-                is_compound = (
-                    "task_type: compound" in compiler_output
-                    or "task_type:compound" in compiler_output
-                )
-                has_multi_actions = should_require_plan(message)
-
-                if is_compound or has_multi_actions:
-                    require_plan_for_session(conversation_id, True)
-                    logger.info(
-                        f"[Session:{session_id}] Multi-step task detected "
-                        f"(compound={is_compound}, multi_actions={has_multi_actions}), Plan required"
-                    )
-
-        # 9. Task definition setup
-        self._current_task_definition = compiler_summary
-        self._current_task_query = compiler_summary or message
-
-        # 10. Message history build
-        # session_messages 已包含当前轮用户消息（gateway 调用前 add_message），
-        # 当前轮由下方 compiled_message 单独追加，需排除最后一条避免重复。
-        history_messages = session_messages
-        if history_messages and history_messages[-1].get("role") == "user":
-            history_messages = history_messages[:-1]
-
-        messages: list[dict] = []
-        for msg in history_messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role in ("user", "assistant") and content:
-                messages.append({"role": role, "content": content})
-
-        # 上下文边界标记
-        if messages:
-            messages.append({
-                "role": "user",
-                "content": "[上下文结束，以下是用户的最新消息]",
-            })
-            messages.append({
-                "role": "assistant",
-                "content": "好的，我已了解之前的对话上下文。请告诉我你现在的需求。",
-            })
-
-        # 当前用户消息（支持多模态）
-        pending_images = session.get_metadata("pending_images") if session else None
-        pending_videos = session.get_metadata("pending_videos") if session else None
-        pending_audio = session.get_metadata("pending_audio") if session else None
-        pending_files = session.get_metadata("pending_files") if session else None
-
-        # 处理 PDF/文档文件 — 如果 LLM 支持 PDF 则构建 DocumentBlock，否则降级为文本
-        document_blocks = []
-        if pending_files:
-            llm_client_for_pdf = getattr(self.brain, "_llm_client", None)
-            has_pdf_cap = llm_client_for_pdf and llm_client_for_pdf.has_any_endpoint_with_capability("pdf")
-            for fdata in pending_files:
-                if has_pdf_cap and fdata.get("type") == "document":
-                    document_blocks.append(fdata)
-                    logger.info(f"[Session:{session_id}] PDF → native DocumentBlock")
-                else:
-                    # 降级: 提取文本描述
-                    fname = fdata.get("filename", "unknown")
-                    compiled_message += f"\n[文档附件: {fname}，该端点不支持 PDF 原生输入]"
-
-        # 三级音频决策：LLM原生audio > 在线STT > 本地Whisper
-        audio_blocks = []
-        if pending_audio:
-            llm_client = getattr(self.brain, "_llm_client", None)
-            has_audio_cap = llm_client and llm_client.has_any_endpoint_with_capability("audio")
-
-            if has_audio_cap:
-                # Tier 1: LLM 原生音频输入
-                for aud in pending_audio:
-                    local_path = aud.get("local_path", "")
-                    if local_path and Path(local_path).exists():
-                        try:
-                            from ..channels.media.audio_utils import ensure_llm_compatible
-                            compat_path = ensure_llm_compatible(local_path)
-                            audio_blocks.append({
-                                "type": "audio",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": aud.get("mime_type", "audio/wav"),
-                                    "data": base64.b64encode(Path(compat_path).read_bytes()).decode("utf-8"),
-                                    "format": Path(compat_path).suffix.lstrip(".") or "wav",
-                                },
-                            })
-                            logger.info(f"[Session:{session_id}] Audio → native AudioBlock")
-                        except Exception as e:
-                            logger.error(f"[Session:{session_id}] Failed to build AudioBlock: {e}")
-            else:
-                # Tier 2: 在线 STT（如果可用）
-                stt_client = None
-                im_gateway = gateway or (session.get_metadata("_gateway") if session else None)
-                if im_gateway and hasattr(im_gateway, "stt_client"):
-                    stt_client = im_gateway.stt_client
-
-                if stt_client and stt_client.is_available:
-                    for aud in pending_audio:
-                        local_path = aud.get("local_path", "")
-                        existing_transcription = aud.get("transcription")
-                        if existing_transcription:
-                            continue  # 已有 Whisper 结果，不重复调用
-                        if local_path and Path(local_path).exists():
-                            try:
-                                stt_result = await stt_client.transcribe(local_path)
-                                if stt_result:
-                                    # 用在线 STT 结果替换输入
-                                    if not compiled_message.strip() or "[语音:" in compiled_message:
-                                        compiled_message = stt_result
-                                    else:
-                                        compiled_message = f"{compiled_message}\n\n[语音内容(在线识别): {stt_result}]"
-                                    logger.info(f"[Session:{session_id}] Audio → online STT: {stt_result[:50]}...")
-                            except Exception as e:
-                                logger.warning(f"[Session:{session_id}] Online STT failed: {e}")
-                # Tier 3: 本地 Whisper（已由 Gateway 处理，transcription 已在 input_text 中）
-                # 不需要额外操作
-
-        # Desktop Chat 附件处理（与 IM 的 pending_images 对齐）
-        if attachments and not pending_images:
-            content_blocks: list[dict] = []
-            if compiled_message:
-                content_blocks.append({"type": "text", "text": compiled_message})
-            for att in attachments:
-                att_type = getattr(att, "type", None) or ""
-                att_url = getattr(att, "url", None) or ""
-                att_name = getattr(att, "name", None) or "file"
-                att_mime = getattr(att, "mime_type", None) or att_type
-                if att_type == "image" and att_url:
-                    content_blocks.append({"type": "image_url", "image_url": {"url": att_url}})
-                elif att_type == "video" and att_url:
-                    content_blocks.append({"type": "video_url", "video_url": {"url": att_url}})
-                elif att_type == "document" and att_url:
-                    # PDF 等文档 — 通过 URL 下载后交给后端处理
-                    content_blocks.append({
-                        "type": "text",
-                        "text": f"[文档: {att_name} ({att_mime})] URL: {att_url}",
-                    })
-                elif att_url:
-                    content_blocks.append({
-                        "type": "text",
-                        "text": f"[附件: {att_name} ({att_mime})] URL: {att_url}",
-                    })
-            if content_blocks:
-                messages.append({"role": "user", "content": content_blocks})
-            elif compiled_message:
-                messages.append({"role": "user", "content": compiled_message})
-        elif pending_images or pending_videos or audio_blocks or document_blocks:
-            # IM 路径: 多模态（图片 + 视频 + 音频 + 文档）
-            content_parts: list[dict] = []
-            _text_for_llm = compiled_message.strip()
-            # 图片占位符替换
-            if pending_images and _text_for_llm and re.fullmatch(r"(\[图片: [^\]]+\]\s*)+", _text_for_llm):
-                _text_for_llm = (
-                    f"用户发送了 {len(pending_images)} 张图片（已附在消息中，请直接查看）。"
-                    "请描述或回应你所看到的图片内容。"
-                )
-            # 视频占位符替换
-            if pending_videos and _text_for_llm and re.fullmatch(r"(\[视频: [^\]]+\]\s*)+", _text_for_llm):
-                _text_for_llm = (
-                    f"用户发送了 {len(pending_videos)} 个视频（已附在消息中，请直接查看）。"
-                    "请描述或回应你所看到的视频内容。"
-                )
-            if _text_for_llm:
-                content_parts.append({"type": "text", "text": _text_for_llm})
-            if pending_images:
-                for img_data in pending_images:
-                    content_parts.append(img_data)
-            if pending_videos:
-                for vid_data in pending_videos:
-                    content_parts.append(vid_data)
-            if audio_blocks:
-                for aud_data in audio_blocks:
-                    content_parts.append(aud_data)
-            if document_blocks:
-                for doc_data in document_blocks:
-                    content_parts.append(doc_data)
-            messages.append({"role": "user", "content": content_parts})
-            media_info = []
-            if pending_images:
-                media_info.append(f"{len(pending_images)} images")
-            if pending_videos:
-                media_info.append(f"{len(pending_videos)} videos")
-            if audio_blocks:
-                media_info.append(f"{len(audio_blocks)} audio")
-            if document_blocks:
-                media_info.append(f"{len(document_blocks)} documents")
-            logger.info(f"[Session:{session_id}] Multimodal message with {', '.join(media_info)}")
-        else:
-            # 普通文本消息
-            messages.append({"role": "user", "content": compiled_message})
-
-        # 11. Context compression
-        messages = ConversationContext.trim_messages(
-            messages,
-            max_rounds=self._max_conversation_rounds,
-            max_tokens=self._max_conversation_tokens,
-        )
-
-        # 12. TaskMonitor creation
-        task_monitor = TaskMonitor(
-            task_id=f"{session_id}_{datetime.now().strftime('%H%M%S')}",
-            description=message,
-            session_id=session_id,
-            timeout_seconds=settings.progress_timeout_seconds,
-            hard_timeout_seconds=settings.hard_timeout_seconds,
-            retrospect_threshold=60,
-            fallback_model=self.brain.get_fallback_model(session_id),
-        )
-        task_monitor.start(self.brain.model)
-        self._current_task_monitor = task_monitor
-
-        # session_type 检测
-        session_type = "cli" if (session and session.channel == "cli") else "im"
-
-        return messages, session_type, task_monitor, conversation_id, im_tokens
 
     async def _finalize_session(
         self,
@@ -2282,82 +1429,10 @@ search_github → install_skill → 使用
         session_id: str,
         task_monitor: "TaskMonitor",
     ) -> None:
-        """
-        会话流水线 - 共享收尾阶段。
-
-        chat_with_session() 和 chat_with_session_stream() 共用此方法。
-
-        步骤:
-        1. 将 react_trace 摘要写入 session metadata（供 IM 使用）
-        2. 完成 TaskMonitor + 后台复盘
-        3. 记录 assistant 响应到 memory
-        4. 清理临时状态
-        """
-        # 1. 思维链摘要 → session metadata
-        if session:
-            try:
-                chain_summary = self._build_chain_summary(
-                    self.reasoning_engine._last_react_trace
-                )
-                if chain_summary:
-                    session.set_metadata("_last_chain_summary", chain_summary)
-            except Exception as e:
-                logger.debug(f"[ChainSummary] Failed to build chain summary: {e}")
-
-        # 2. TaskMonitor complete + retrospect
-        metrics = task_monitor.complete(success=True, response=response_text)
-        if metrics.retrospect_needed:
-            asyncio.create_task(self._do_task_retrospect_background(task_monitor, session_id))
-            logger.info(f"[Session:{session_id}] Task retrospect scheduled (background)")
-
-        # 3. Memory: 记录 assistant 响应
-        self.memory_manager.record_turn("assistant", response_text)
-        try:
-            logger.info(f"[Session:{session_id}] Agent: {response_text}")
-        except (UnicodeEncodeError, OSError):
-            logger.info(f"[Session:{session_id}] Agent: (response logged, {len(response_text)} chars)")
-
-        # 4. 自动关闭未完成的 Plan
-        # 如果 LLM 未显式调用 complete_plan，此处兜底：
-        # - 标记剩余步骤状态（in_progress→completed, pending→skipped）
-        # - 保存并注销 Plan
-        # 注意：ask_user 退出时不关闭 Plan（用户回复后需继续执行）
-        exit_reason = getattr(self.reasoning_engine, "_last_exit_reason", "normal")
-        if exit_reason != "ask_user":
-            conversation_id = getattr(self, "_current_conversation_id", "") or session_id
-            try:
-                from ..tools.handlers.plan import auto_close_plan
-                if auto_close_plan(conversation_id):
-                    logger.info(f"[Session:{session_id}] Plan auto-closed at finalize")
-            except Exception as e:
-                logger.debug(f"[Plan] auto_close_plan failed: {e}")
-
-        # 5. Cleanup（总是执行，放在 finally 中由调用方保证）
-        # 注意：此方法不做 cleanup，cleanup 统一在 _cleanup_session_state() 中
+        await finalize_session(self, response_text, session, session_id, task_monitor)
 
     def _cleanup_session_state(self, im_tokens: Any) -> None:
-        """
-        会话流水线 - 状态清理（总是在 finally 中调用）。
-
-        im_tokens 可能为 None（_prepare_session_context 在 step 2 之前/之后异常时）,
-        此时 contextvar 残留由下次 set_im_context 覆盖，这里跳过 reset 即可。
-        """
-        self._current_task_definition = ""
-        self._current_task_query = ""
-        if im_tokens is not None:
-            with contextlib.suppress(Exception):
-                from .im_context import reset_im_context
-                reset_im_context(im_tokens)
-        self._current_session = None
-        self.agent_state.current_session = None
-        self._current_task_monitor = None
-        # 重置任务状态，避免已取消/已完成的任务泄漏到下一次会话
-        _sid = getattr(self, "_current_session_id", None)
-        _task = (
-            self.agent_state.get_task_for_session(_sid) if _sid and self.agent_state else None
-        ) or (self.agent_state.current_task if self.agent_state else None)
-        if _task and not _task.is_active:
-            self.agent_state.reset_task(session_id=_sid)
+        cleanup_session_state(self, im_tokens)
 
     async def chat_with_session(
         self,
@@ -2596,6 +1671,41 @@ search_github → install_skill → 使用
                 except Exception:
                     pass
 
+            # === 适配 TaskMonitor 为 Callbacks (解耦准备) ===
+            def _on_model_switch(old_model: str, new_model: str) -> None:
+                if task_monitor:
+                    task_monitor.record_model_switch(old_model, new_model)
+
+            def _on_llm_error(error: Exception) -> str | tuple[str, str] | None:
+                if task_monitor:
+                    return task_monitor.record_llm_error(error)
+                return None
+
+            def _check_model_switch() -> str | None:
+                if task_monitor and hasattr(task_monitor, "check_model_switch_needed"):
+                    return task_monitor.check_model_switch_needed()
+                return None
+
+            def _on_iteration_start(iteration: int, model: str) -> None:
+                if task_monitor:
+                    task_monitor.begin_iteration(iteration, model)
+
+            def _on_iteration_end(result_text: str) -> None:
+                if task_monitor:
+                    task_monitor.end_iteration(result_text)
+
+            def _on_retry_reset() -> None:
+                if task_monitor:
+                    task_monitor.reset_retry_count()
+
+            def _on_tool_start(tool_name: str, tool_input: dict) -> None:
+                if task_monitor:
+                    task_monitor.begin_tool_call(tool_name, tool_input)
+
+            def _on_tool_complete(tool_name: str, tool_input: dict, result: str, success: bool, duration_ms: int) -> None:
+                if task_monitor:
+                    task_monitor.record_tool_call(tool_name, tool_input, result, success=success, duration_ms=duration_ms)
+
             # === 核心推理 (流式) ===
             async for event in self.reasoning_engine.reason_stream(
                 messages=messages,
@@ -2603,7 +1713,7 @@ search_github → install_skill → 使用
                 system_prompt=system_prompt,
                 base_system_prompt=base_system_prompt,
                 task_description=task_description,
-                task_monitor=task_monitor,
+                task_monitor=None,  # 显式传递 None，强制使用 callbacks
                 session_type=session_type,
                 plan_mode=plan_mode,
                 edit_mode=edit_mode,
@@ -2611,6 +1721,15 @@ search_github → install_skill → 使用
                 conversation_id=conversation_id,
                 thinking_mode=_thinking_mode,
                 thinking_depth=_thinking_depth,
+                # Callbacks
+                on_model_switch=_on_model_switch,
+                on_llm_error=_on_llm_error,
+                check_model_switch=_check_model_switch,
+                on_iteration_start=_on_iteration_start,
+                on_iteration_end=_on_iteration_end,
+                on_retry_reset=_on_retry_reset,
+                on_tool_start=_on_tool_start,
+                on_tool_complete=_on_tool_complete,
             ):
                 # 收集回复文本（用于 session 保存 & memory）
                 if event.get("type") == "text_delta":
@@ -2634,16 +1753,7 @@ search_github → install_skill → 使用
             self._cleanup_session_state(im_tokens)
 
     def _resolve_conversation_id(self, session: Any, session_id: str) -> str:
-        """从 session 中解析稳定的 conversation_id。"""
-        conversation_id = ""
-        try:
-            if session and hasattr(session, "session_key"):
-                conversation_id = session.session_key
-            elif session and hasattr(session, "get_metadata"):
-                conversation_id = session.get_metadata("_session_key") or ""
-        except Exception:
-            conversation_id = ""
-        return conversation_id or session_id
+        return resolve_conversation_id(self, session, session_id)
 
     def _build_chain_summary(self, react_trace: list[dict]) -> list[dict] | None:
         """
@@ -3191,20 +2301,112 @@ NEXT: 建议的下一步（如有）"""
             self, "_current_session_id", None
         )
 
-        # === 委托给 ReasoningEngine ===
-        return await self.reasoning_engine.run(
+        # === 委托给 RalphLoop ===
+        # 1. 准备任务状态
+        state = self.reasoning_engine.prepare_task(
             messages,
-            tools=self._tools,
-            system_prompt=system_prompt,
-            base_system_prompt=base_system_prompt,
             task_description=task_description,
-            task_monitor=task_monitor,
             session_type=session_type,
             conversation_id=conversation_id,
-            thinking_mode=thinking_mode,
-            thinking_depth=thinking_depth,
-            progress_callback=progress_callback,
         )
+
+        # 2. 配置执行函数
+        if session_type == "im":
+            base_force_retries = 0
+        else:
+            base_force_retries = max(0, int(getattr(settings, "force_tool_call_max_retries", 1)))
+
+        async def execute_step(task: TaskState) -> str | None:
+            # 动态注入 Plan
+            effective_base_prompt = base_system_prompt or system_prompt
+            try:
+                from ..tools.handlers.plan import get_active_plan_prompt
+                if conversation_id:
+                    plan_section = get_active_plan_prompt(conversation_id)
+                    if plan_section:
+                        effective_base_prompt += f"\n\n{plan_section}\n"
+            except Exception:
+                pass
+
+            # 构造回调适配器 (CORE-008 Decouple TaskMonitor)
+            on_model_switch = None
+            on_llm_error = None
+            check_model_switch = None
+            on_iteration_start = None
+            on_iteration_end = None
+            on_retry_reset = None
+            on_tool_start = None
+            on_tool_complete = None
+
+            if task_monitor:
+                # 1. 模型切换
+                def _on_model_switch(new_model: str, reason: str):
+                    task_monitor.switch_model(new_model, reason, reset_context=True)
+                on_model_switch = _on_model_switch
+
+                # 2. 错误处理
+                def _on_llm_error(error: Exception) -> str | tuple[str, str] | None:
+                    should_retry = task_monitor.record_error(str(error))
+                    if should_retry:
+                        return "retry"
+                    
+                    # 重试耗尽，检查 fallback
+                    fallback = getattr(task_monitor, "fallback_model", None)
+                    if fallback:
+                        return ("switch", fallback)
+                    return None
+                on_llm_error = _on_llm_error
+
+                # 3. 检查切换
+                if hasattr(task_monitor, "check_model_switch_needed"):
+                    check_model_switch = task_monitor.check_model_switch_needed
+
+                # 4. 迭代生命周期
+                on_iteration_start = task_monitor.begin_iteration
+                on_iteration_end = task_monitor.end_iteration
+                on_retry_reset = task_monitor.reset_retry_count
+
+                # 5. 工具监控
+                if hasattr(task_monitor, "begin_tool_call"):
+                    on_tool_start = task_monitor.begin_tool_call
+                
+                if hasattr(task_monitor, "record_tool_call"):
+                    def _on_tool_complete(name: str, input_data: dict, result: str, success: bool, duration: int):
+                        task_monitor.record_tool_call(
+                            name, input_data, result, success=success, duration_ms=duration
+                        )
+                    on_tool_complete = _on_tool_complete
+
+            return await self.reasoning_engine.step(
+                task,
+                tools=self._tools,
+                system_prompt=effective_base_prompt,
+                task_monitor=task_monitor,
+                conversation_id=conversation_id,
+                session_type=session_type,
+                thinking_mode=thinking_mode,
+                thinking_depth=thinking_depth,
+                progress_callback=progress_callback,
+                iteration=task.iteration,
+                base_force_retries=base_force_retries,
+                # 注入回调
+                on_model_switch=on_model_switch,
+                on_llm_error=on_llm_error,
+                check_model_switch=check_model_switch,
+                on_iteration_start=on_iteration_start,
+                on_iteration_end=on_iteration_end,
+                on_retry_reset=on_retry_reset,
+                on_tool_start=on_tool_start,
+                on_tool_complete=on_tool_complete,
+            )
+
+        # 3. 运行 Ralph 循环
+        result = await self.ralph.run(state, execute_step)
+        
+        if result.success:
+            return result.data
+        else:
+            return result.error or "Task failed"
 
         # ==================== 以下为旧代码（保留参考，后续完全清理） ====================
         max_iterations = settings.max_iterations
@@ -4480,7 +3682,7 @@ NEXT: 建议的下一步（如有）"""
             logger.error(f"Tool execution error: {e}", exc_info=True)
             return f"工具执行错误: {str(e)}"
 
-    async def execute_task(self, task: Task) -> TaskResult:
+    async def execute_task(self, task: TaskState) -> TaskResult:
         """
         执行任务（带工具调用）
 
@@ -5087,11 +4289,11 @@ NEXT: 建议的下一步（如有）"""
 
         return results
 
-    def _on_iteration(self, iteration: int, task: Task) -> None:
+    def _on_iteration(self, iteration: int, task: TaskState) -> None:
         """Ralph 循环迭代回调"""
         logger.debug(f"Ralph iteration {iteration} for task {task.id}")
 
-    def _on_error(self, error: str, task: Task) -> None:
+    def _on_error(self, error: str, task: TaskState) -> None:
         """Ralph 循环错误回调"""
         logger.warning(f"Ralph error for task {task.id}: {error}")
 

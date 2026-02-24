@@ -145,6 +145,13 @@ class TaskState:
     # 原始用户消息（用于模型切换时重置上下文）
     original_user_messages: list[dict] = field(default_factory=list)
 
+    # 当前工作消息列表（包含思维链、工具调用等中间状态）
+    working_messages: list[dict] = field(default_factory=list)
+
+    # ReAct 追踪记录（用于生成日志和调试信息）
+    react_trace: list[dict] = field(default_factory=list)
+    trace_started_at: str = ""
+
     def transition(self, new_status: TaskStatus) -> None:
         """
         执行状态转换，带合法性验证。

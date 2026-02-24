@@ -72,7 +72,6 @@ class LogAnalyzer:
 
     # 核心组件模块前缀（不自动修复）
     CORE_COMPONENTS = [
-        "openakita.core.brain",
         "openakita.core.agent",
         "openakita.core.ralph",
         "openakita.memory",

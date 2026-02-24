@@ -3,6 +3,7 @@
 
 该模块为 Agent 系统提供上下文管理能力。
 """
+from __future__ import annotations
 
 import logging
 from typing import Any

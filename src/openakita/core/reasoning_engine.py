@@ -13,6 +13,7 @@ Reason -> Act -> Observe 三阶段循环。
 - 模型切换逻辑
 - 任务完成度验证（委托给 ResponseHandler）
 """
+from __future__ import annotations
 
 import asyncio
 import copy
@@ -25,16 +26,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..config import settings
-from ..context.enterprise.conversation_context import ConversationContext
+from ..context.conversation_context import ConversationContext
 from ..tracing.tracer import get_tracer
 from .agent_state import AgentState, TaskState, TaskStatus
 from .errors import UserCancelledError
 from .response_handler import ResponseHandler, clean_llm_response, strip_thinking_tags
-from .token_tracking import TokenTrackingContext, reset_tracking_context, set_tracking_context
-from .tool_executor import ToolExecutor
+from ..infra import TokenTrackingContext, reset_tracking_context, set_tracking_context
+from ..tools.executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -370,7 +371,574 @@ class ReasoningEngine:
 
         return restored_messages, cp.iteration
 
+    async def step(
+        self,
+        state: TaskState,
+        *,
+        tools: list[dict],
+        system_prompt: str,
+        task_monitor: Any = None,
+        conversation_id: str | None = None,
+        session_type: str = "chat",
+        thinking_mode: str | None = None,
+        thinking_depth: str | None = None,
+        progress_callback: Any = None,
+        iteration: int = 0,
+        max_verify_retries: int = 3,
+        max_confirmation_text_retries: int = 2,
+        base_force_retries: int = 1,
+        # Callbacks for decoupling TaskMonitor
+        on_model_switch: Callable[[str, str], None] | None = None,
+        on_llm_error: Callable[[Exception], str | tuple[str, str] | None] | None = None,
+        check_model_switch: Callable[[], str | None] | None = None,
+        on_iteration_start: Callable[[int, str], None] | None = None,
+        on_iteration_end: Callable[[str], None] | None = None,
+        on_retry_reset: Callable[[], None] | None = None,
+        on_tool_start: Callable[[str, dict], None] | None = None,
+        on_tool_complete: Callable[[str, dict, str, bool, int], None] | None = None,
+    ) -> str | None:
+        """
+        执行 ReAct 循环的单步迭代。
+        """
+        # Compatibility layer: use task_monitor if callbacks are not provided
+        if task_monitor:
+            if not on_iteration_start:
+                on_iteration_start = task_monitor.begin_iteration
+            if not on_iteration_end:
+                on_iteration_end = task_monitor.end_iteration
+            if not on_retry_reset:
+                on_retry_reset = task_monitor.reset_retry_count
+            if not check_model_switch:
+                check_model_switch = task_monitor.check_model_switch_needed
+            if not on_model_switch:
+                on_model_switch = task_monitor.record_model_switch
+            if not on_llm_error:
+                on_llm_error = task_monitor.handle_llm_error
+            if not on_tool_start:
+                on_tool_start = task_monitor.begin_tool_call
+            if not on_tool_complete:
+                # Adapter for keyword-only arguments in TaskMonitor.record_tool_call
+                def _tm_tool_complete(name, input, result, success, duration):
+                    task_monitor.record_tool_call(name, input, result, success=success, duration_ms=duration)
+                on_tool_complete = _tm_tool_complete
+
+        async def _emit_progress(msg: str):
+            if progress_callback:
+                if asyncio.iscoroutinefunction(progress_callback):
+                    await progress_callback(msg)
+                else:
+                    progress_callback(msg)
+
+        def _build_effective_system_prompt() -> str:
+            return f"{system_prompt}\n当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+        if not state.trace_started_at:
+            state.trace_started_at = datetime.now().isoformat()
+        
+        current_model = state.current_model
+        working_messages = state.working_messages
+
+        # 1. 模型切换检查
+        switch_result = self._check_model_switch(
+            check_model_switch, on_model_switch, state, working_messages, current_model
+        )
+        if switch_result:
+            current_model, working_messages = switch_result
+            state.current_model = current_model
+            state.working_messages = working_messages
+            state.no_tool_call_count = 0
+            state.tools_executed_in_task = False
+            state.verify_incomplete_count = 0
+            state.tools_executed = []
+            state.consecutive_tool_rounds = 0
+            state.recent_tool_signatures = []
+            state.no_confirmation_text_count = 0
+
+        # 2. 上下文裁剪
+        _ctx_trimmed_info: dict | None = None
+        if len(working_messages) > 2:
+            _before_tokens = ConversationContext.estimate_messages_tokens(working_messages)
+            trimmed_messages = ConversationContext.trim_messages(
+                working_messages,
+                max_rounds=self._max_conversation_rounds,
+                max_tokens=self._max_conversation_tokens,
+            )
+            _after_tokens = ConversationContext.estimate_messages_tokens(trimmed_messages)
+            if len(trimmed_messages) != len(working_messages) or _after_tokens < _before_tokens:
+                working_messages = trimmed_messages
+                state.working_messages = working_messages
+                _ctx_trimmed_info = {
+                    "before_tokens": _before_tokens,
+                    "after_tokens": _after_tokens,
+                }
+                await _emit_progress(
+                    f"📦 上下文裁剪: {_before_tokens//1000}k → {_after_tokens//1000}k tokens"
+                )
+                logger.info(
+                    f"[ReAct] Context trimmed: {_before_tokens} → {_after_tokens} tokens"
+                )
+
+        # 3. REASON 阶段
+        if state.cancelled:
+            self._save_react_trace(state.react_trace, conversation_id, session_type, "cancelled", state.trace_started_at)
+            get_tracer().end_trace(metadata={"result": "cancelled", "iterations": iteration})
+            return await self._cancel_farewell(
+                working_messages, _build_effective_system_prompt(), current_model, state
+            )
+
+        logger.info(f"[ReAct] Iter {iteration} — REASON (model={current_model})")
+        if state.status != TaskStatus.REASONING:
+            try:
+                state.transition(TaskStatus.REASONING)
+            except ValueError:
+                pass
+
+        if on_iteration_start:
+            on_iteration_start(iteration, current_model)
+
+        _thinking_t0 = time.time()
+        try:
+            decision = await self._reason(
+                working_messages,
+                system_prompt=_build_effective_system_prompt(),
+                tools=tools,
+                current_model=current_model,
+                conversation_id=conversation_id,
+                thinking_mode=thinking_mode,
+                thinking_depth=thinking_depth,
+                iteration=iteration,
+            )
+            if on_retry_reset:
+                on_retry_reset()
+        except UserCancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"[LLM] Brain call failed: {e}")
+            retry_result = self._handle_llm_error(
+                e, on_llm_error, on_model_switch, state, working_messages, current_model
+            )
+            if retry_result == "retry":
+                await asyncio.sleep(2)
+                return None
+            elif isinstance(retry_result, tuple):
+                new_model, new_messages = retry_result
+                state.current_model = new_model
+                state.working_messages = new_messages
+                return None
+            else:
+                raise
+
+        _thinking_duration_ms = int((time.time() - _thinking_t0) * 1000)
+
+        if decision.thinking_content:
+            _think_preview = decision.thinking_content[:200].strip().replace("\n", " ")
+            if len(decision.thinking_content) > 200:
+                _think_preview += "..."
+            await _emit_progress(f"💭 {_think_preview}")
+
+        _decision_text_run = (decision.text_content or "").strip().replace("\n", " ")
+        if _decision_text_run and decision.type == DecisionType.TOOL_CALLS:
+            _text_preview = _decision_text_run[:300]
+            if len(_decision_text_run) > 300:
+                _text_preview += "..."
+            await _emit_progress(_text_preview)
+
+        if on_iteration_end:
+            on_iteration_end(decision.text_content or "")
+
+        _raw = decision.raw_response
+        _usage = getattr(_raw, "usage", None) if _raw else None
+        _in_tokens = getattr(_usage, "input_tokens", 0) if _usage else 0
+        _out_tokens = getattr(_usage, "output_tokens", 0) if _usage else 0
+        
+        _iter_trace: dict = {
+            "iteration": iteration,
+            "timestamp": datetime.now().isoformat(),
+            "decision_type": decision.type.value if hasattr(decision.type, "value") else str(decision.type),
+            "model": current_model,
+            "thinking": (decision.thinking_content or "")[:500] if decision.thinking_content else None,
+            "thinking_duration_ms": _thinking_duration_ms,
+            "text": (decision.text_content or "")[:2000] if decision.text_content else None,
+            "tool_calls": [
+                {
+                    "name": tc.get("name"),
+                    "id": tc.get("id"),
+                    "input_preview": str(tc.get("input", {}))[:500],
+                }
+                for tc in (decision.tool_calls or [])
+            ],
+            "tool_results": [],
+            "tokens": {"input": _in_tokens, "output": _out_tokens},
+            "context_compressed": _ctx_trimmed_info,
+        }
+        
+        if decision.stop_reason == "max_tokens":
+            logger.warning(f"[ReAct] Iter {iteration} — ⚠️ LLM output truncated.")
+            _iter_trace["truncated"] = True
+
+        # 4. 决策分支
+        if decision.type == DecisionType.FINAL_ANSWER:
+            answer_preview = (decision.text_content or "")[:80].replace("\n", " ")
+            logger.info(f"[ReAct] Iter {iteration} — FINAL_ANSWER: \"{answer_preview}...\"")
+            
+            result = await self._handle_final_answer(
+                decision=decision,
+                working_messages=working_messages,
+                original_messages=state.original_user_messages,
+                tools_executed_in_task=state.tools_executed_in_task,
+                executed_tool_names=state.tools_executed,
+                delivery_receipts=state.delivery_receipts,
+                no_tool_call_count=state.no_tool_call_count,
+                verify_incomplete_count=state.verify_incomplete_count,
+                no_confirmation_text_count=state.no_confirmation_text_count,
+                max_no_tool_retries=self._effective_force_retries(base_force_retries, conversation_id),
+                max_verify_retries=max_verify_retries,
+                max_confirmation_text_retries=max_confirmation_text_retries,
+                base_force_retries=base_force_retries,
+                conversation_id=conversation_id,
+            )
+
+            if isinstance(result, str):
+                state.react_trace.append(_iter_trace)
+                self._save_react_trace(state.react_trace, conversation_id, session_type, "completed", state.trace_started_at)
+                try:
+                    state.transition(TaskStatus.COMPLETED)
+                except ValueError:
+                    pass
+                get_tracer().end_trace(metadata={
+                    "result": "completed",
+                    "iterations": iteration,
+                    "tools_used": list(set(state.tools_executed)),
+                })
+                return result
+            else:
+                await _emit_progress("🔄 任务尚未完成，继续处理...")
+                state.react_trace.append(_iter_trace)
+                try:
+                    state.transition(TaskStatus.VERIFYING)
+                except ValueError:
+                    pass
+                
+                (
+                    new_working_messages,
+                    state.no_tool_call_count,
+                    state.verify_incomplete_count,
+                    state.no_confirmation_text_count,
+                    _
+                ) = result
+                state.working_messages = new_working_messages
+                return None
+
+        elif decision.type == DecisionType.TOOL_CALLS:
+            tool_names = [tc.get("name", "?") for tc in decision.tool_calls]
+            logger.info(f"[ReAct] Iter {iteration} — ACT: {tool_names}")
+            try:
+                state.transition(TaskStatus.ACTING)
+            except ValueError:
+                pass
+
+            # ask_user 拦截
+            ask_user_calls = [tc for tc in decision.tool_calls if tc.get("name") == "ask_user"]
+            other_calls = [tc for tc in decision.tool_calls if tc.get("name") != "ask_user"]
+            
+            if ask_user_calls:
+                logger.info(f"[ReAct] Iter {iteration} — ask_user intercepted")
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": decision.assistant_content,
+                }
+                if decision.thinking_content:
+                    assistant_msg["reasoning_content"] = decision.thinking_content
+                working_messages.append(assistant_msg)
+                
+                other_tool_results = []
+                if other_calls:
+                    other_results, other_executed, other_receipts = (
+                        await self._tool_executor.execute_batch(
+                            other_calls,
+                            state=state,
+                            on_tool_start=on_tool_start,
+                            on_tool_complete=on_tool_complete,
+                            allow_interrupt_checks=self._state.interrupt_enabled,
+                            capture_delivery_receipts=True,
+                        )
+                    )
+                    if other_executed:
+                        state.tools_executed_in_task = True
+                        state.tools_executed.extend(other_executed)
+                        state.record_tool_execution(other_executed)
+                    other_tool_results = other_results if other_results else []
+
+                question = ask_user_calls[0].get("input", {}).get("question", "")
+                ask_tool_id = ask_user_calls[0].get("id", "ask_user_0")
+                text_part = strip_thinking_tags(decision.text_content or "").strip()
+                final_text = f"{text_part}\n\n{question}" if text_part and question else (question or text_part or "（等待用户回复）")
+
+                try:
+                    state.transition(TaskStatus.WAITING_USER)
+                except ValueError:
+                    pass
+                
+                user_reply = await self._wait_for_user_reply(
+                    final_text, state, timeout_seconds=60, max_reminders=1,
+                )
+
+                def _build_ask_user_tool_results(content_str: str) -> list[dict]:
+                    results = list(other_tool_results)
+                    results.append({
+                        "type": "tool_result",
+                        "tool_use_id": ask_tool_id,
+                        "content": content_str,
+                    })
+                    return results
+
+                if user_reply:
+                    logger.info(f"[ReAct] Iter {iteration} — ask_user: user replied")
+                    state.react_trace.append(_iter_trace)
+                    working_messages.append({
+                        "role": "user",
+                        "content": _build_ask_user_tool_results(f"用户回复：{user_reply}"),
+                    })
+                    try:
+                        state.transition(TaskStatus.REASONING)
+                    except ValueError:
+                        pass
+                    return None
+                elif user_reply is None and self._state.current_session and hasattr(self._state.current_session, "get_metadata"):
+                    # IM mode timeout
+                    logger.info(f"[ReAct] Iter {iteration} — ask_user: user timeout")
+                    state.react_trace.append(_iter_trace)
+                    working_messages.append({
+                        "role": "user",
+                        "content": _build_ask_user_tool_results("[系统] 用户超时未回复..."),
+                    })
+                    try:
+                        state.transition(TaskStatus.REASONING)
+                    except ValueError:
+                        pass
+                    return None
+                else:
+                    # CLI mode wait
+                    get_tracer().end_trace(metadata={"result": "waiting_user", "iterations": iteration})
+                    state.react_trace.append(_iter_trace)
+                    self._save_react_trace(state.react_trace, conversation_id, session_type, "waiting_user", state.trace_started_at)
+                    return final_text
+
+            self._save_checkpoint(working_messages, state, decision, iteration)
+
+            assistant_msg = {
+                "role": "assistant",
+                "content": decision.assistant_content,
+            }
+            if decision.thinking_content:
+                assistant_msg["reasoning_content"] = decision.thinking_content
+            working_messages.append(assistant_msg)
+
+            if state.cancelled:
+                state.react_trace.append(_iter_trace)
+                self._save_react_trace(state.react_trace, conversation_id, session_type, "cancelled", state.trace_started_at)
+                get_tracer().end_trace(metadata={"result": "cancelled", "iterations": iteration})
+                return await self._cancel_farewell(
+                    working_messages, _build_effective_system_prompt(), current_model, state
+                )
+
+            for tc in (decision.tool_calls or []):
+                _tc_name = tc.get("name", "unknown")
+                _tc_args = tc.get("input", tc.get("arguments", {}))
+                await _emit_progress(f"🔧 {self._describe_tool_call(_tc_name, _tc_args)}")
+
+            tool_results, executed, receipts = await self._tool_executor.execute_batch(
+                decision.tool_calls,
+                state=state,
+                on_tool_start=on_tool_start,
+                on_tool_complete=on_tool_complete,
+                allow_interrupt_checks=self._state.interrupt_enabled,
+                capture_delivery_receipts=True,
+            )
+
+            if executed:
+                state.tools_executed_in_task = True
+                state.tools_executed.extend(executed)
+                state.record_tool_execution(executed)
+                for i, tool_name in enumerate(executed):
+                    result_content = ""
+                    if i < len(tool_results):
+                        r = tool_results[i]
+                        result_content = str(r.get("content", "")) if isinstance(r, dict) else str(r)
+                    is_error = any(m in result_content for m in ["❌", "⚠️ 工具执行错误", "错误类型:"])
+                    self._record_tool_result(tool_name, success=not is_error)
+                    _r_summary = self._summarize_tool_result(tool_name, result_content)
+                    if _r_summary:
+                        _icon = "❌" if is_error else "✅"
+                        await _emit_progress(f"{_icon} {_r_summary}")
+
+            if receipts:
+                state.delivery_receipts = receipts
+
+            logger.info(f"[ReAct] Iter {iteration} — OBSERVE: {len(tool_results)} results")
+            
+            try:
+                state.transition(TaskStatus.OBSERVING)
+            except ValueError:
+                pass
+
+            _iter_trace["tool_results"] = [
+                {
+                    "tool_use_id": tr.get("tool_use_id", ""),
+                    "result_preview": str(tr.get("content", ""))[:1000],
+                }
+                for tr in tool_results
+                if isinstance(tr, dict)
+            ]
+            
+            # Loop detection parameters
+            self_check_interval = 10
+            extreme_threshold = 50
+
+            loop_detected = self._detect_loops(
+                recent_signatures=state.recent_tool_signatures,
+                consecutive_rounds=state.consecutive_tool_rounds,
+                working_messages=working_messages,
+                text_content=decision.text_content,
+                self_check_interval=self_check_interval,
+                extreme_threshold=extreme_threshold,
+                conversation_id=conversation_id,
+            )
+            if loop_detected:
+                state.consecutive_tool_rounds += 1
+                if state.consecutive_tool_rounds >= self._max_consecutive_tool_rounds:
+                    rollback_res = self._rollback("Repeated tool calls detected")
+                    if rollback_res:
+                        restored_msgs, _ = rollback_res
+                        state.working_messages = restored_msgs
+                        return None
+                    else:
+                        working_messages.append({
+                            "role": "user",
+                            "content": "[系统提示] 你似乎陷入了重复调用的循环..."
+                        })
+            else:
+                state.consecutive_tool_rounds = 0
+            
+            state.recent_tool_signatures = self._update_tool_signatures(
+                state.recent_tool_signatures, decision.tool_calls
+            )
+
+            working_messages.append({"role": "user", "content": tool_results})
+            state.react_trace.append(_iter_trace)
+            return None
+        
+        return None
+
+    def prepare_task(
+        self,
+        messages: list[dict],
+        task_description: str = "",
+        session_type: str = "cli",
+        conversation_id: str | None = None,
+    ) -> TaskState:
+        """
+        初始化或恢复任务状态。
+        """
+        _session_key = conversation_id or ""
+        state = self._state.get_task_for_session(_session_key) if _session_key else self._state.current_task
+        if not state or not state.is_active or state.cancelled:
+            state = self._state.begin_task(session_id=_session_key)
+        elif state.status == TaskStatus.ACTING:
+            state = self._state.begin_task(session_id=_session_key)
+
+        tracer = get_tracer()
+        tracer.begin_trace(session_id=state.session_id, metadata={
+            "task_description": task_description[:200] if task_description else "",
+            "session_type": session_type,
+            "model": self._brain.model,
+        })
+        
+        if not state.working_messages:
+            state.working_messages = list(messages)
+            state.original_user_messages = [
+                msg for msg in messages if self._is_human_user_message(msg)
+            ]
+            state.tools_executed = []
+            state.tools_executed_in_task = False
+            state.no_tool_call_count = 0
+            state.verify_incomplete_count = 0
+            state.no_confirmation_text_count = 0
+            state.consecutive_tool_rounds = 0
+            state.recent_tool_signatures = []
+            state.delivery_receipts = []
+            state.react_trace = []
+        
+        state.current_model = self._brain.model
+        return state
+
     async def run(
+        self,
+        messages: list[dict],
+        *,
+        tools: list[dict],
+        system_prompt: str = "",
+        base_system_prompt: str = "",
+        task_description: str = "",
+        task_monitor: Any = None,
+        session_type: str = "cli",
+        interrupt_check_fn: Any = None,
+        conversation_id: str | None = None,
+        thinking_mode: str | None = None,
+        thinking_depth: str | None = None,
+        progress_callback: Any = None,
+    ) -> str:
+        """
+        Legacy run method - wrapper around step.
+        """
+        state = self.prepare_task(
+            messages,
+            task_description=task_description,
+            session_type=session_type,
+            conversation_id=conversation_id,
+        )
+        
+        max_iterations = settings.max_iterations
+        
+        if session_type == "im":
+            base_force_retries = 0
+        else:
+            base_force_retries = max(0, int(getattr(settings, "force_tool_call_max_retries", 1)))
+
+        logger.info(f"[ReAct] === Loop started (max_iterations={max_iterations}, model={state.current_model}) ===")
+        
+        for i in range(max_iterations):
+            state.iteration = i
+            
+            effective_base_prompt = base_system_prompt or system_prompt
+            try:
+                from ..tools.handlers.plan import get_active_plan_prompt
+                if conversation_id:
+                    plan_section = get_active_plan_prompt(conversation_id)
+                    if plan_section:
+                        effective_base_prompt += f"\n\n{plan_section}\n"
+            except Exception:
+                pass
+
+            result = await self.step(
+                state,
+                tools=tools,
+                system_prompt=effective_base_prompt,
+                task_monitor=task_monitor,
+                conversation_id=conversation_id,
+                session_type=session_type,
+                thinking_mode=thinking_mode,
+                thinking_depth=thinking_depth,
+                progress_callback=progress_callback,
+                iteration=i + 1,
+                base_force_retries=base_force_retries,
+            )
+            if result is not None:
+                return result
+        
+        return "Max iterations reached"
+
+    async def _legacy_run(
         self,
         messages: list[dict],
         *,
@@ -1098,6 +1666,13 @@ class ReasoningEngine:
         conversation_id: str | None = None,
         thinking_mode: str | None = None,
         thinking_depth: str | None = None,
+        # Callbacks for decoupling TaskMonitor
+        on_model_switch: Callable[[str, str], None] | None = None,
+        on_llm_error: Callable[[Exception], str | tuple[str, str] | None] | None = None,
+        check_model_switch: Callable[[], str | None] | None = None,
+        on_iteration_start: Callable[[int, str], None] | None = None,
+        on_iteration_end: Callable[[str], None] | None = None,
+        on_retry_reset: Callable[[], None] | None = None,
     ):
         """
         流式推理循环，为 HTTP API (SSE) 设计。
@@ -1110,6 +1685,12 @@ class ReasoningEngine:
 
         Args:
             edit_mode: 如果为 True，每个工具执行完后发送 step_pause 事件并等待用户确认。
+            on_model_switch: 模型切换回调 (old_model, new_model) -> None
+            on_llm_error: LLM 错误回调 (error) -> retry_decision
+            check_model_switch: 检查是否需要切换模型 () -> new_model_name | None
+            on_iteration_start: 迭代开始回调 (iteration, model) -> None
+            on_iteration_end: 迭代结束回调 (result_text) -> None
+            on_retry_reset: 重置重试计数回调 () -> None
 
         Yields dict events:
         - {"type": "iteration_start", "iteration": N}
@@ -1125,10 +1706,21 @@ class ReasoningEngine:
         """
         tools = tools or []
 
+        # Compatibility layer for TaskMonitor
+        if task_monitor:
+            if not on_iteration_start:
+                on_iteration_start = lambda i, m: task_monitor.begin_iteration(i, m)
+            if not on_iteration_end:
+                on_iteration_end = lambda r: task_monitor.end_iteration(r)
+            if not on_retry_reset:
+                on_retry_reset = lambda: task_monitor.reset_retry_count()
+            if not check_model_switch and hasattr(task_monitor, "check_model_switch_needed"):
+                check_model_switch = task_monitor.check_model_switch_needed
+
         # ========== 工具按需加载优化 ==========
         # 根据任务内容过滤工具，减少 tokens 消耗
         if tools and task_description:
-            from .tool_filter import get_tools_for_message
+            from ..tools.filter import get_tools_for_message
             tools = get_tools_for_message(tools, task_description, session_type)
 
         self._last_exit_reason = "normal"
@@ -1292,12 +1884,17 @@ class ReasoningEngine:
                         consecutive_empty_iterations = 0  # 重置，给模型一次机会
 
                 # --- TaskMonitor: 迭代开始 + 模型切换检查 ---
-                if task_monitor:
-                    task_monitor.begin_iteration(_iteration + 1, current_model)
-                    switch_result = self._check_model_switch(
-                        task_monitor, state, working_messages, current_model
-                    )
-                    if switch_result:
+                if on_iteration_start:
+                    on_iteration_start(_iteration + 1, current_model)
+
+                switch_result = self._check_model_switch(
+                    check_model_switch,
+                    on_model_switch,
+                    state,
+                    working_messages,
+                    current_model,
+                )
+                if switch_result:
                         current_model, working_messages = switch_result
                         no_tool_call_count = 0
                         tools_executed_in_task = False
@@ -1369,8 +1966,8 @@ class ReasoningEngine:
                     if decision is None:
                         raise RuntimeError("_reason returned no decision")
 
-                    if task_monitor:
-                        task_monitor.reset_retry_count()
+                    if on_retry_reset:
+                        on_retry_reset()
 
                 except UserCancelledError as uce:
                     # --- 用户取消中断：发起轻量 LLM 收尾 ---
@@ -1392,7 +1989,12 @@ class ReasoningEngine:
                 except Exception as e:
                     # --- LLM Error Handling（与 run() 一致） ---
                     retry_result = self._handle_llm_error(
-                        e, task_monitor, state, working_messages, current_model
+                        e,
+                        on_llm_error,
+                        on_model_switch,
+                        state,
+                        working_messages,
+                        current_model,
                     )
                     _thinking_duration = int((time.time() - _thinking_t0) * 1000)
                     yield {"type": "thinking_end", "duration_ms": _thinking_duration}
@@ -1451,8 +2053,8 @@ class ReasoningEngine:
                     # LLM 在调用工具前输出的思路文字
                     yield {"type": "chain_text", "content": _decision_text[:2000]}
 
-                if task_monitor:
-                    task_monitor.end_iteration(decision.text_content or "")
+                if on_iteration_end:
+                    on_iteration_end(decision.text_content or "")
 
                 # -- 收集 ReAct trace --
                 _raw = decision.raw_response
@@ -2822,26 +3424,60 @@ class ReasoningEngine:
 
         return None
 
+    def _update_tool_signatures(self, recent_signatures: list[str], tool_calls: list[dict]) -> list[str]:
+        """
+        更新最近的工具调用签名列表。
+        
+        生成规则: MD5(tool_name + sorted_args_json)
+        保留最近 20 个签名。
+        """
+        new_signatures = list(recent_signatures)
+        
+        for tool_call in tool_calls:
+            name = tool_call.get("name", "")
+            args = tool_call.get("input", {})
+            
+            # 规范化 args 字符串
+            try:
+                if isinstance(args, dict):
+                    args_str = json.dumps(args, sort_keys=True)
+                else:
+                    args_str = str(args)
+            except Exception:
+                args_str = str(args)
+            
+            signature = f"{name}:{args_str}"
+            # 使用 md5 生成简短签名
+            sig_hash = hashlib.md5(signature.encode("utf-8")).hexdigest()
+            new_signatures.append(sig_hash)
+        
+        # 保持最近 20 个
+        if len(new_signatures) > 20:
+            new_signatures = new_signatures[-20:]
+            
+        return new_signatures
+
     # ==================== 模型切换 ====================
 
     def _check_model_switch(
         self,
-        task_monitor: Any,
+        check_model_switch: Callable[[], str | None] | None,
+        on_model_switch: Callable[[str, str], None] | None,
         state: TaskState,
         working_messages: list[dict],
         current_model: str,
     ) -> tuple[str, list[dict]] | None:
         """检查是否需要模型切换。返回 (new_model, new_messages) 或 None"""
-        if not task_monitor or not task_monitor.should_switch_model:
+        if not check_model_switch:
             return None
 
-        new_model = task_monitor.fallback_model
+        new_model = check_model_switch()
+        if not new_model:
+            return None
+
         self._switch_llm_endpoint(new_model, reason="task_monitor timeout fallback")
-        task_monitor.switch_model(
-            new_model,
-            "任务超时后切换",
-            reset_context=True,
-        )
+        if on_model_switch:
+            on_model_switch(new_model, "任务超时后切换")
 
         try:
             llm_client = getattr(self._brain, "_llm_client", None)
@@ -2870,7 +3506,8 @@ class ReasoningEngine:
     def _handle_llm_error(
         self,
         error: Exception,
-        task_monitor: Any,
+        on_llm_error: Callable[[Exception], str | tuple[str, str] | None] | None,
+        on_model_switch: Callable[[str, str], None] | None,
         state: TaskState,
         working_messages: list[dict],
         current_model: str,
@@ -2883,14 +3520,20 @@ class ReasoningEngine:
             (new_model, new_messages) - 切换模型
             None - 重新抛出
         """
-        if not task_monitor:
+        if not on_llm_error:
             return None
 
-        should_retry = task_monitor.record_error(str(error))
+        decision = on_llm_error(error)
 
-        if should_retry:
-            logger.info(f"[LLM] Will retry (attempt {task_monitor.retry_count})")
+        if decision == "retry":
+            logger.info(f"[LLM] Will retry (policy decision)")
             return "retry"
+
+        # Check for switch decision: ("switch", "model_name")
+        if not isinstance(decision, tuple) or len(decision) != 2 or decision[0] != "switch":
+            return None
+
+        _, new_model = decision
 
         # --- 熔断：超过最大模型切换次数时终止，防止死循环 ---
         switch_count = getattr(state, '_model_switch_count', 0) + 1
@@ -2903,7 +3546,6 @@ class ReasoningEngine:
             return None  # 终止循环
 
         # --- 检查 fallback 是否与当前模型实际相同 ---
-        new_model = task_monitor.fallback_model
         resolved = self._resolve_endpoint_name(new_model)
         current_endpoint = self._resolve_endpoint_name(current_model)
         if resolved and current_endpoint and resolved == current_endpoint:
@@ -2914,7 +3556,8 @@ class ReasoningEngine:
             return None  # 切换目标与当前相同，无意义，终止循环
 
         self._switch_llm_endpoint(new_model, reason=f"LLM error fallback: {error}")
-        task_monitor.switch_model(new_model, "LLM 调用失败后切换", reset_context=True)
+        if on_model_switch:
+            on_model_switch(new_model, "LLM 调用失败后切换")
 
         try:
             llm_client = getattr(self._brain, "_llm_client", None)

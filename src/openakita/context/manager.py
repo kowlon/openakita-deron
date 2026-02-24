@@ -10,6 +10,7 @@
 - docs/context-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
+from __future__ import annotations
 
 from typing import Any
 

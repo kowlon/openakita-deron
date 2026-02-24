@@ -1,11 +1,15 @@
 """
-记忆系统
+记忆系统 (Legacy)
+
+.. deprecated:: 0.2.0
+   Use `openakita.memory.MemoryManager` instead.
 
 管理 USER.md 和 MEMORY.md，以及数据库中的记忆。
 """
 
 import logging
 import re
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -19,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 class Memory:
     """
-    记忆系统
+    记忆系统 (Legacy)
+
+    .. deprecated:: 0.2.0
+       Use `openakita.memory.MemoryManager` instead.
 
     管理:
     - MEMORY.md - 工作记忆（任务进度、经验）
@@ -33,6 +40,12 @@ class Memory:
         user_path: Path | None = None,
         database: Database | None = None,
     ):
+        warnings.warn(
+            "openakita.memory.legacy.Memory is deprecated and will be removed in a future version. "
+            "Use openakita.memory.MemoryManager instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.memory_path = memory_path or settings.memory_path
         self.user_path = user_path or settings.user_path
         self.db = database

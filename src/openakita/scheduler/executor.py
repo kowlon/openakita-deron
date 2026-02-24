@@ -181,7 +181,7 @@ class TaskExecutor:
 
             try:
                 # 使用 Brain 直接判断，不创建完整 Agent（更轻量、不会发消息）
-                from ..core.brain import Brain
+                from ..llm.brain import Brain
 
                 brain = Brain()
 
@@ -477,7 +477,7 @@ class TaskExecutor:
         """
         try:
             from ..config import settings
-            from ..core.brain import Brain
+            from ..llm.brain import Brain
             from ..memory import MemoryManager
 
             # 创建 Brain（用于 LLM 摘要）
@@ -610,7 +610,7 @@ class TaskExecutor:
             from datetime import datetime
 
             from ..config import settings
-            from ..core.brain import Brain
+            from ..llm.brain import Brain
             from ..evolution import SelfChecker
             from ..logging import LogCleaner
 

@@ -16,73 +16,13 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from ..config import settings
+from ..core.agent_state import TaskState, TaskStatus
 
 logger = logging.getLogger(__name__)
-
-
-class TaskStatus(Enum):
-    """任务状态"""
-
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    BLOCKED = "blocked"
-
-
-@dataclass
-class Task:
-    """任务定义"""
-
-    id: str
-    description: str
-    session_id: str | None = None  # 关联的会话 ID，用于隔离不同会话的任务
-    status: TaskStatus = TaskStatus.PENDING
-    priority: int = 0
-    attempts: int = 0
-    max_attempts: int = 10
-    created_at: datetime = field(default_factory=datetime.now)
-    completed_at: datetime | None = None
-    error: str | None = None
-    result: Any = None
-    subtasks: list["Task"] = field(default_factory=list)
-
-    def mark_in_progress(self) -> None:
-        """标记为进行中"""
-        self.status = TaskStatus.IN_PROGRESS
-        self.attempts += 1
-
-    def mark_completed(self, result: Any = None) -> None:
-        """标记为完成"""
-        self.status = TaskStatus.COMPLETED
-        self.completed_at = datetime.now()
-        self.result = result
-
-    def mark_failed(self, error: str) -> None:
-        """标记为失败"""
-        self.error = error
-        if self.attempts >= self.max_attempts:
-            self.status = TaskStatus.FAILED
-        else:
-            self.status = TaskStatus.PENDING  # 可重试
-
-    @property
-    def is_complete(self) -> bool:
-        """是否已完成"""
-        return self.status == TaskStatus.COMPLETED
-
-    @property
-    def can_retry(self) -> bool:
-        """是否可以重试"""
-        return (
-            self.status in (TaskStatus.PENDING, TaskStatus.FAILED)
-            and self.attempts < self.max_attempts
-        )
 
 
 @dataclass
@@ -103,17 +43,17 @@ class StopHook:
     当 Agent 试图退出但任务未完成时，拦截并继续
     """
 
-    def __init__(self, task: Task):
+    def __init__(self, task: TaskState):
         self.task = task
         self.intercepted_count = 0
 
     def should_stop(self) -> bool:
         """检查是否应该停止"""
-        if self.task.is_complete:
+        if self.task.status == TaskStatus.COMPLETED:
             return True
 
-        if not self.task.can_retry:
-            logger.warning(f"Task {self.task.id} cannot retry anymore")
+        if self.task.status in (TaskStatus.FAILED, TaskStatus.CANCELLED):
+            logger.warning(f"Task {self.task.task_id} is in terminal state: {self.task.status}")
             return True
 
         return False
@@ -130,7 +70,7 @@ class StopHook:
 
         self.intercepted_count += 1
         logger.info(
-            f"Stop hook intercepted exit attempt #{self.intercepted_count} for task {self.task.id}"
+            f"Stop hook intercepted exit attempt #{self.intercepted_count} for task {self.task.task_id}"
         )
         return True
 
@@ -153,29 +93,31 @@ class RalphLoop:
         self,
         max_iterations: int = 100,
         memory_path: Path | None = None,
-        on_iteration: Callable[[int, Task], None] | None = None,
-        on_error: Callable[[str, Task], None] | None = None,
+        on_iteration: Callable[[int, TaskState], None] | None = None,
+        on_error: Callable[[str, TaskState], None] | None = None,
     ):
         self.max_iterations = max_iterations
         self.memory_path = memory_path or settings.memory_path
         self.on_iteration = on_iteration
         self.on_error = on_error
 
-        self._current_task: Task | None = None
+        self._current_task: TaskState | None = None
         self._iteration = 0
         self._stop_hook: StopHook | None = None
 
     async def run(
         self,
-        task: Task,
-        execute_fn: Callable[[Task], Any],
+        task: TaskState,
+        execute_fn: Callable[[TaskState], Any],
     ) -> TaskResult:
         """
         运行 Ralph 循环
 
         Args:
-            task: 要执行的任务
-            execute_fn: 执行函数，接收 Task 返回结果或抛出异常
+            task: 要执行的任务 (TaskState)
+            execute_fn: 执行函数，执行一步或整个任务。
+                       如果是多步任务，函数应更新 task.status。
+                       如果任务完成，应返回结果。
 
         Returns:
             TaskResult
@@ -186,11 +128,12 @@ class RalphLoop:
 
         start_time = datetime.now()
 
-        logger.info(f"Ralph loop starting for task: {task.id}")
+        logger.info(f"Ralph loop starting for task: {task.task_id}")
         logger.info(f"Max iterations: {self.max_iterations}")
 
         while self._iteration < self.max_iterations:
             self._iteration += 1
+            task.iteration = self._iteration
 
             # 检查是否应该停止
             if self._stop_hook.should_stop():
@@ -206,33 +149,52 @@ class RalphLoop:
             logger.info(f"Iteration {self._iteration}/{self.max_iterations}")
 
             # 标记任务进行中
-            task.mark_in_progress()
+            if task.status == TaskStatus.IDLE:
+                try:
+                    task.transition(TaskStatus.REASONING)
+                except ValueError:
+                    pass  # 已经在其它状态
 
             try:
-                # 执行任务
+                # 执行任务（一步或全部）
                 result = await execute_fn(task)
 
-                # 执行成功
-                task.mark_completed(result)
-                logger.info(f"Task {task.id} completed successfully")
+                # 检查是否应该停止（例如任务被取消或失败）
+                if self._stop_hook.should_stop():
+                    break
 
+                # 如果任务已完成
+                if task.status == TaskStatus.COMPLETED or result is not None:
+                    if task.status != TaskStatus.COMPLETED:
+                         try:
+                             task.transition(TaskStatus.COMPLETED)
+                         except ValueError:
+                             pass
+                    
+                    logger.info(f"Task {task.task_id} completed successfully")
+                    
+                    # 保存进度
+                    await self._save_progress()
+
+                    duration = (datetime.now() - start_time).total_seconds()
+                    return TaskResult(
+                        success=True,
+                        data=result,
+                        iterations=self._iteration,
+                        duration_seconds=duration,
+                    )
+                
+                # 任务未完成，继续循环
                 # 保存进度
                 await self._save_progress()
-
-                duration = (datetime.now() - start_time).total_seconds()
-                return TaskResult(
-                    success=True,
-                    data=result,
-                    iterations=self._iteration,
-                    duration_seconds=duration,
-                )
 
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Iteration {self._iteration} failed: {error_msg}")
 
-                # 标记失败
-                task.mark_failed(error_msg)
+                # 标记失败（由 execute_fn 决定是否致命，或者在这里统一处理）
+                # 这里假设异常意味着当前步骤失败，但不一定是整个任务失败
+                # task.transition(TaskStatus.FAILED) # 不轻易标记失败
 
                 # 通知错误
                 if self.on_error:
@@ -245,23 +207,23 @@ class RalphLoop:
                 if not self._stop_hook.intercept():
                     break
 
-                # 分析错误并调整策略
-                await self._analyze_and_adapt(error_msg)
+                # 分析错误并调整策略（Placeholder）
+                # await self._analyze_and_adapt(error_msg)
 
         # 循环结束但任务未完成
         duration = (datetime.now() - start_time).total_seconds()
 
-        if task.is_complete:
+        if task.status == TaskStatus.COMPLETED:
             return TaskResult(
                 success=True,
-                data=task.result,
+                data=None, # result might be lost if not returned by execute_fn
                 iterations=self._iteration,
                 duration_seconds=duration,
             )
         else:
             return TaskResult(
                 success=False,
-                error=task.error or "Max iterations reached",
+                error="Max iterations reached" if task.status != TaskStatus.FAILED else "Task failed",
                 iterations=self._iteration,
                 duration_seconds=duration,
             )
@@ -303,10 +265,10 @@ class RalphLoop:
             session_line = f"- **Session**: {task.session_id}\n" if task.session_id else ""
             task_info = f"""### Active Task
 
-- **ID**: {task.id}
-{session_line}- **描述**: {task.description}
+- **ID**: {task.task_id}
+{session_line}- **描述**: {task.task_query or task.task_definition}
 - **状态**: {task.status.value}
-- **尝试次数**: {task.attempts}
+- **尝试次数**: {task.iteration}
 - **最后更新**: {datetime.now().isoformat()}
 """
 
@@ -358,6 +320,6 @@ class RalphLoop:
         return self._iteration
 
     @property
-    def current_task(self) -> Task | None:
+    def current_task(self) -> TaskState | None:
         """当前任务"""
         return self._current_task

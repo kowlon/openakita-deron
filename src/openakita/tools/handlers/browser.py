@@ -72,7 +72,7 @@ class BrowserHandler:
 
             if len(output) > max_length:
                 total_chars = len(output)
-                from ...core.tool_executor import save_overflow
+                from ..executor import save_overflow
 
                 overflow_path = save_overflow("browser_get_content", output)
                 output = output[:max_length]

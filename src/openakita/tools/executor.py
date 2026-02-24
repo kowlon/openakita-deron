@@ -11,18 +11,22 @@
 - 通用截断守卫 (大结果自动截断 + 溢出文件)
 """
 
+from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..config import settings
 from ..tools.errors import ToolError, classify_error
 from ..tools.handlers import SystemHandlerRegistry
 from ..tracing.tracer import get_tracer
-from .agent_state import TaskState
+
+if TYPE_CHECKING:
+    from ..core.agent_state import TaskState
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +311,8 @@ class ToolExecutor:
         tool_calls: list[dict],
         *,
         state: TaskState | None = None,
-        task_monitor: Any = None,
+        on_tool_start: Callable[[str, dict], None] | None = None,
+        on_tool_complete: Callable[[str, dict, str, bool, int], None] | None = None,
         allow_interrupt_checks: bool = True,
         capture_delivery_receipts: bool = False,
     ) -> tuple[list[dict], list[str], list | None]:
@@ -322,7 +327,8 @@ class ToolExecutor:
         Args:
             tool_calls: 工具调用列表 [{id, name, input}, ...]
             state: 任务状态（用于取消检查）
-            task_monitor: 任务监控器
+            on_tool_start: 工具开始回调 (name, input) -> None
+            on_tool_complete: 工具完成回调 (name, input, result, success, duration_ms) -> None
             allow_interrupt_checks: 是否允许中断检查
             capture_delivery_receipts: 是否捕获交付回执
 
@@ -372,13 +378,11 @@ class ToolExecutor:
             result_str = ""
             receipts: list | None = None
 
-            use_parallel_safe_monitor = (
-                parallel_enabled
-                and task_monitor is not None
-                and hasattr(task_monitor, "record_tool_call")
-            )
-            if (not parallel_enabled) and task_monitor:
-                task_monitor.begin_tool_call(tool_name, tool_input)
+            if on_tool_start:
+                try:
+                    on_tool_start(tool_name, tool_input)
+                except Exception as e:
+                    logger.error(f"[ToolExecutor] on_tool_start callback error: {e}")
 
             try:
                 async with self._semaphore:
@@ -427,13 +431,14 @@ class ToolExecutor:
                 logger.error(f"Tool batch execution error: {tool_name}: {e}")
                 logger.info(f"[Tool] {tool_name} ❌ 错误: {result_str[:500]}{'...' if len(result_str) > 500 else ''}")
 
-            elapsed = time.time() - t0
+            elapsed_ms = int((time.time() - t0) * 1000)
 
-            # 记录到 task_monitor
-            if use_parallel_safe_monitor and task_monitor:
-                task_monitor.record_tool_call(tool_name, tool_input, elapsed, success)
-            elif (not parallel_enabled) and task_monitor:
-                task_monitor.end_tool_call(result_str, success)
+            # 记录回调
+            if on_tool_complete:
+                try:
+                    on_tool_complete(tool_name, tool_input, result_str, success, elapsed_ms)
+                except Exception as e:
+                    logger.error(f"[ToolExecutor] on_tool_complete callback error: {e}")
 
             tool_result = {
                 "type": "tool_result",
