@@ -8,6 +8,19 @@ OpenAkita 核心模块 - 流程编排层 (Orchestration Layer)
 from .agent import Agent
 from .agent_state import AgentState, TaskState, TaskStatus
 from .identity import Identity
+from .interrupt_manager import InterruptManager
+from .prompt_assembler import PromptAssembler
 from .ralph import RalphLoop
+from .retrospect import RetrospectManager
 
-__all__ = ["Agent", "AgentState", "TaskState", "TaskStatus", "Identity", "RalphLoop"]
+__all__ = [
+    "Agent",
+    "AgentState",
+    "TaskState",
+    "TaskStatus",
+    "Identity",
+    "InterruptManager",
+    "PromptAssembler",
+    "RalphLoop",
+    "RetrospectManager",
+]
