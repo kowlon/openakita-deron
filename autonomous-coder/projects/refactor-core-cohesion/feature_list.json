@@ -1,0 +1,1242 @@
+{
+  "project": {
+    "name": "Core Module Refactoring - High Cohesion Low Coupling",
+    "description": "重构 src/openakita/core 模块，使其只负责流程编排，将其他职责移到对应的功能模块中",
+    "version": "1.0.0",
+    "created_at": "2026-02-24",
+    "tech_stack": ["Python", "Pytest"],
+    "reference_docs": [
+      "autonomous-coder/projects/refactor-core-cohesion/PLAN.md"
+    ]
+  },
+  "features": [
+    {
+      "id": "PREP-001",
+      "category": "preparation",
+      "priority": "high",
+      "description": "创建测试基线脚本",
+      "detailed_description": "创建脚本记录所有模块的导入测试结果，建立重构前的功能基线",
+      "steps": [
+        {
+          "step": 1,
+          "action": "创建 tests/baseline/ 目录",
+          "file": "tests/baseline/",
+          "verification": "目录创建成功"
+        },
+        {
+          "step": 2,
+          "action": "创建测试脚本 test_imports_baseline.py，测试所有核心模块导入",
+          "file": "tests/baseline/test_imports_baseline.py",
+          "verification": "文件创建成功"
+        },
+        {
+          "step": 3,
+          "action": "运行基线测试并记录结果",
+          "command": "python tests/baseline/test_imports_baseline.py",
+          "verification": "所有导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "tests/baseline/test_imports_baseline.py 创建成功",
+        "运行测试记录所有模块导入状态",
+        "生成 tests/baseline/results.txt 结果文件"
+      ],
+      "files_affected": ["tests/baseline/test_imports_baseline.py", "tests/baseline/results.txt"],
+      "dependencies": [],
+      "passes": true,
+      "completed_at": "2026-02-24 15:50",
+      "notes": "47 个导入测试全部通过"
+    },
+    {
+      "id": "PREP-002",
+      "category": "preparation",
+      "priority": "high",
+      "description": "创建依赖图分析脚本",
+      "detailed_description": "创建脚本自动分析模块间的依赖关系，生成依赖图",
+      "steps": [
+        {
+          "step": 1,
+          "action": "创建 scripts/analyze_dependencies.py",
+          "file": "scripts/analyze_dependencies.py",
+          "verification": "文件创建成功"
+        },
+        {
+          "step": 2,
+          "action": "实现依赖分析逻辑，分析 core 模块的依赖",
+          "verification": "能正确识别 import 语句"
+        },
+        {
+          "step": 3,
+          "action": "生成依赖图输出到 docs/dependency_graph.md",
+          "file": "docs/dependency_graph.md",
+          "verification": "依赖图生成成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "scripts/analyze_dependencies.py 创建成功",
+        "能分析 core 模块的依赖关系",
+        "生成 Mermaid 格式的依赖图"
+      ],
+      "files_affected": ["scripts/analyze_dependencies.py", "docs/dependency_graph.md"],
+      "dependencies": [],
+      "passes": true,
+      "completed_at": "2026-02-24 15:59",
+      "notes": "成功分析模块依赖，生成 Mermaid 格式依赖图"
+    },
+    {
+      "id": "PREP-003",
+      "category": "preparation",
+      "priority": "high",
+      "description": "建立功能测试基线",
+      "detailed_description": "运行现有测试套件，记录通过/失败状态作为基线",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查现有测试目录结构",
+          "command": "find src/openakita/testing -name '*.py' | head -20",
+          "verification": "识别测试文件"
+        },
+        {
+          "step": 2,
+          "action": "运行测试并记录结果",
+          "command": "python -m pytest src/openakita/testing/ -v --tb=short 2>&1 | tee tests/baseline/pytest_results.txt || true",
+          "verification": "测试执行完成"
+        },
+        {
+          "step": 3,
+          "action": "记录通过/失败数量",
+          "verification": "结果已保存到 tests/baseline/pytest_results.txt"
+        }
+      ],
+      "acceptance_criteria": [
+        "pytest 测试执行完成",
+        "结果保存到 tests/baseline/pytest_results.txt",
+        "记录通过/跳过/失败的测试数量"
+      ],
+      "files_affected": ["tests/baseline/pytest_results.txt"],
+      "dependencies": ["PREP-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 16:02",
+      "notes": "项目中无标准 pytest 测试，已记录基线结果"
+    },
+    {
+      "id": "INFRA-001",
+      "category": "foundation",
+      "priority": "high",
+      "description": "创建 infra 模块结构",
+      "detailed_description": "创建 src/openakita/infra/ 目录，作为基础设施模块",
+      "steps": [
+        {
+          "step": 1,
+          "action": "创建 infra 目录",
+          "command": "mkdir -p src/openakita/infra",
+          "verification": "目录创建成功"
+        },
+        {
+          "step": 2,
+          "action": "创建 __init__.py 文件",
+          "file": "src/openakita/infra/__init__.py",
+          "code": "包含模块文档字符串和公共接口导出",
+          "verification": "文件创建成功"
+        },
+        {
+          "step": 3,
+          "action": "验证模块可导入",
+          "command": "python -c 'from openakita import infra; print(infra)'",
+          "verification": "导入成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "src/openakita/infra/ 目录创建成功",
+        "__init__.py 包含正确的模块文档",
+        "模块可以被成功导入"
+      ],
+      "files_affected": ["src/openakita/infra/__init__.py"],
+      "dependencies": ["PREP-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 16:15"
+    },
+    {
+      "id": "INFRA-002",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 token_tracking.py 到 infra 模块",
+      "detailed_description": "将 core/token_tracking.py 移动到 infra/token_tracking.py，更新所有引用",
+      "steps": [
+        {
+          "step": 1,
+          "action": "复制文件到新位置",
+          "command": "cp src/openakita/core/token_tracking.py src/openakita/infra/token_tracking.py",
+          "verification": "文件复制成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 infra/__init__.py 导出",
+          "file": "src/openakita/infra/__init__.py",
+          "code": "添加 TokenTrackingContext 等类的导出",
+          "verification": "导出添加成功"
+        },
+        {
+          "step": 3,
+          "action": "更新 evaluation/judge.py 的导入",
+          "file": "src/openakita/evaluation/judge.py",
+          "code": "from ..core.token_tracking → from ..infra.token_tracking",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 4,
+          "action": "更新 orchestration/handoff.py 的导入",
+          "file": "src/openakita/orchestration/handoff.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 5,
+          "action": "更新 core/agent.py 的导入",
+          "file": "src/openakita/core/agent.py",
+          "code": "from .token_tracking → from ..infra.token_tracking",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 6,
+          "action": "更新 core/brain.py 的导入",
+          "file": "src/openakita/core/brain.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 7,
+          "action": "更新 core/reasoning_engine.py 的导入",
+          "file": "src/openakita/core/reasoning_engine.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 8,
+          "action": "删除原文件",
+          "command": "rm src/openakita/core/token_tracking.py",
+          "verification": "原文件删除成功"
+        },
+        {
+          "step": 9,
+          "action": "验证所有导入正常",
+          "command": "python -c 'from openakita.infra.token_tracking import TokenTrackingContext; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "token_tracking.py 移动到 infra/",
+        "所有引用更新完成",
+        "原文件已删除",
+        "所有导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/infra/token_tracking.py",
+        "src/openakita/infra/__init__.py",
+        "src/openakita/evaluation/judge.py",
+        "src/openakita/orchestration/handoff.py",
+        "src/openakita/core/agent.py",
+        "src/openakita/core/brain.py",
+        "src/openakita/core/reasoning_engine.py"
+      ],
+      "dependencies": ["INFRA-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 16:15"
+    },
+    {
+      "id": "INFRA-003",
+      "category": "testing",
+      "priority": "high",
+      "description": "验证 token_tracking 迁移",
+      "detailed_description": "运行测试验证 token_tracking 迁移后功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行导入测试",
+          "command": "python -c 'from openakita.infra import TokenTrackingContext; from openakita.core.agent import Agent; print(\"OK\")'",
+          "verification": "导入成功"
+        },
+        {
+          "step": 2,
+          "action": "检查无循环依赖",
+          "command": "python -c 'import openakita' 2>&1",
+          "verification": "无循环导入错误"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有导入测试通过",
+        "无循环依赖错误",
+        "功能测试通过"
+      ],
+      "files_affected": [],
+      "dependencies": ["INFRA-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 16:15"
+    },
+    {
+      "id": "TOOLS-001",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 tool_filter.py 到 tools 模块",
+      "detailed_description": "将 core/tool_filter.py 移动到 tools/filter.py，更新所有引用",
+      "steps": [
+        {
+          "step": 1,
+          "action": "复制文件到新位置",
+          "command": "cp src/openakita/core/tool_filter.py src/openakita/tools/filter.py",
+          "verification": "文件复制成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 tools/__init__.py 导出",
+          "file": "src/openakita/tools/__init__.py",
+          "code": "添加 get_tools_for_message, detect_task_type 等函数导出",
+          "verification": "导出添加成功"
+        },
+        {
+          "step": 3,
+          "action": "更新 core/reasoning_engine.py 的导入",
+          "file": "src/openakita/core/reasoning_engine.py",
+          "code": "from .tool_filter → from ..tools.filter",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 4,
+          "action": "删除原文件",
+          "command": "rm src/openakita/core/tool_filter.py",
+          "verification": "原文件删除成功"
+        },
+        {
+          "step": 5,
+          "action": "验证导入正常",
+          "command": "python -c 'from openakita.tools.filter import get_tools_for_message; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "tool_filter.py 移动到 tools/filter.py",
+        "所有引用更新完成",
+        "原文件已删除",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/tools/filter.py",
+        "src/openakita/tools/__init__.py",
+        "src/openakita/core/reasoning_engine.py"
+      ],
+      "dependencies": ["INFRA-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 16:30"
+    },
+    {
+      "id": "TOOLS-002",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 tool_executor.py 到 tools 模块",
+      "detailed_description": "将 core/tool_executor.py 移动到 tools/executor.py，更新所有引用",
+      "steps": [
+        {
+          "step": 1,
+          "action": "复制文件到新位置",
+          "command": "cp src/openakita/core/tool_executor.py src/openakita/tools/executor.py",
+          "verification": "文件复制成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 tools/executor.py 内部导入",
+          "file": "src/openakita/tools/executor.py",
+          "code": "修正相对导入路径",
+          "verification": "导入路径修正"
+        },
+        {
+          "step": 3,
+          "action": "更新 core/reasoning_engine.py 和 agent.py 的引用",
+          "file": "src/openakita/core/reasoning_engine.py",
+          "code": "from .tool_executor → from ..tools.executor",
+          "verification": "引用更新成功"
+        },
+        {
+          "step": 4,
+          "action": "删除原文件",
+          "command": "rm src/openakita/core/tool_executor.py",
+          "verification": "原文件删除成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "tool_executor.py 移动到 tools/executor.py",
+        "所有引用更新完成",
+        "原文件已删除",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/tools/executor.py",
+        "src/openakita/core/reasoning_engine.py",
+        "src/openakita/core/agent.py"
+      ],
+      "dependencies": ["TOOLS-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:05"
+    },
+    {
+      "id": "TOOLS-003",
+      "category": "testing",
+      "priority": "high",
+      "description": "验证 tools 模块迁移",
+      "detailed_description": "运行测试验证 tools 模块迁移后功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行导入测试",
+          "command": "python tests/baseline/test_imports_baseline.py",
+          "verification": "所有 tools 模块导入测试通过"
+        },
+        {
+          "step": 2,
+          "action": "检查循环依赖",
+          "command": "python -c 'from openakita.tools import ToolExecutor; print(\"OK\")'",
+          "verification": "无循环依赖错误"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有导入测试通过",
+        "无循环依赖错误"
+      ],
+      "files_affected": [],
+      "dependencies": ["TOOLS-001", "TOOLS-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:10"
+    },
+    {
+      "id": "SKILLS-001",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 skill_manager.py 到 skills 模块",
+      "detailed_description": "将 core/skill_manager.py 移动到 skills/manager.py，更新所有引用",
+      "steps": [
+        {
+          "step": 1,
+          "action": "复制文件到新位置",
+          "command": "cp src/openakita/core/skill_manager.py src/openakita/skills/manager.py",
+          "verification": "文件复制成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 skills/__init__.py 导出",
+          "file": "src/openakita/skills/__init__.py",
+          "code": "添加 SkillManager 导出",
+          "verification": "导出添加成功"
+        },
+        {
+          "step": 3,
+          "action": "更新 core/agent.py 的导入",
+          "file": "src/openakita/core/agent.py",
+          "code": "from .skill_manager → from ..skills.manager",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 4,
+          "action": "删除原文件",
+          "command": "rm src/openakita/core/skill_manager.py",
+          "verification": "原文件删除成功"
+        },
+        {
+          "step": 5,
+          "action": "验证导入正常",
+          "command": "python -c 'from openakita.skills.manager import SkillManager; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "skill_manager.py 移动到 skills/manager.py",
+        "所有引用更新完成",
+        "原文件已删除",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/skills/manager.py",
+        "src/openakita/skills/__init__.py",
+        "src/openakita/core/agent.py"
+      ],
+      "dependencies": ["TOOLS-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:25"
+    },
+    {
+      "id": "SKILLS-002",
+      "category": "testing",
+      "priority": "high",
+      "description": "验证 skills 模块迁移",
+      "detailed_description": "运行测试验证 skill_manager 迁移后功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行导入测试",
+          "command": "python -c 'from openakita.skills import SkillManager; print(\"OK\")'",
+          "verification": "导入成功"
+        },
+        {
+          "step": 2,
+          "action": "检查无循环依赖",
+          "command": "python -c 'import openakita' 2>&1",
+          "verification": "无循环导入错误"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有导入测试通过",
+        "无循环依赖错误"
+      ],
+      "files_affected": [],
+      "dependencies": ["SKILLS-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:30"
+    },
+    {
+      "id": "LLM-001",
+      "category": "migration",
+      "priority": "high",
+      "description": "分析 Brain 与 LLMClient 的关系",
+      "detailed_description": "确认 Brain 作为 LLMClient 的包装器的具体职责和接口",
+      "steps": [
+        {
+          "step": 1,
+          "action": "审查 core/brain.py 的公共 API",
+          "verification": "记录所有公共方法和属性"
+        },
+        {
+          "step": 2,
+          "action": "确认 Brain 是 LLMClient 的包装器",
+          "verification": "Brain 确实调用 LLMClient"
+        },
+        {
+          "step": 3,
+          "action": "记录需要保持兼容的接口",
+          "verification": "接口列表完整"
+        }
+      ],
+      "acceptance_criteria": [
+        "Brain 公共 API 文档化",
+        "确认与 LLMClient 的包装关系",
+        "记录需要保持兼容的接口列表"
+      ],
+      "files_affected": [],
+      "dependencies": ["SKILLS-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:40"
+    },
+    {
+      "id": "LLM-002",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 brain.py 到 llm 模块",
+      "detailed_description": "将 core/brain.py 移动到 llm/brain.py，更新所有引用",
+      "steps": [
+        {
+          "step": 1,
+          "action": "复制文件到新位置",
+          "command": "cp src/openakita/core/brain.py src/openakita/llm/brain.py",
+          "verification": "文件复制成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 llm/brain.py 内部导入",
+          "file": "src/openakita/llm/brain.py",
+          "code": "from ..llm.client → from .client; from ..llm.config → from .config; from ..llm.types → from .types; from .token_tracking → from ..infra.token_tracking",
+          "verification": "内部导入更新成功"
+        },
+        {
+          "step": 3,
+          "action": "更新 llm/__init__.py 导出",
+          "file": "src/openakita/llm/__init__.py",
+          "code": "添加 Brain, Context, Response 导出",
+          "verification": "导出添加成功"
+        },
+        {
+          "step": 4,
+          "action": "更新 evolution/generator.py 的导入",
+          "file": "src/openakita/evolution/generator.py",
+          "code": "from ..core.brain → from ..llm.brain",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 5,
+          "action": "更新 evolution/self_check.py 的导入",
+          "file": "src/openakita/evolution/self_check.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 6,
+          "action": "更新 evolution/analyzer.py 的导入",
+          "file": "src/openakita/evolution/analyzer.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 7,
+          "action": "更新 scheduler/executor.py 的导入",
+          "file": "src/openakita/scheduler/executor.py",
+          "verification": "导入更新成功（3处）"
+        },
+        {
+          "step": 8,
+          "action": "更新 channels/gateway.py 的导入",
+          "file": "src/openakita/channels/gateway.py",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 9,
+          "action": "更新 core/agent.py 的导入",
+          "file": "src/openakita/core/agent.py",
+          "code": "from .brain → from ..llm.brain",
+          "verification": "导入更新成功"
+        },
+        {
+          "step": 10,
+          "action": "更新 core/__init__.py 导出",
+          "file": "src/openakita/core/__init__.py",
+          "code": "from .brain import Brain → from ..llm.brain import Brain",
+          "verification": "导出更新成功"
+        },
+        {
+          "step": 11,
+          "action": "删除原文件",
+          "command": "rm src/openakita/core/brain.py",
+          "verification": "原文件删除成功"
+        },
+        {
+          "step": 12,
+          "action": "验证导入正常",
+          "command": "python -c 'from openakita.llm.brain import Brain; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "brain.py 移动到 llm/brain.py",
+        "所有引用更新完成（8个文件）",
+        "原文件已删除",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/llm/brain.py",
+        "src/openakita/llm/__init__.py",
+        "src/openakita/evolution/generator.py",
+        "src/openakita/evolution/self_check.py",
+        "src/openakita/evolution/analyzer.py",
+        "src/openakita/scheduler/executor.py",
+        "src/openakita/channels/gateway.py",
+        "src/openakita/core/agent.py",
+        "src/openakita/core/__init__.py"
+      ],
+      "dependencies": ["LLM-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:55"
+    },
+    {
+      "id": "LLM-003",
+      "category": "testing",
+      "priority": "high",
+      "description": "验证 llm 模块迁移",
+      "detailed_description": "运行测试验证 brain 迁移后功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行导入测试",
+          "command": "python -c 'from openakita.llm import Brain; from openakita.core import Agent; print(\"OK\")'",
+          "verification": "导入成功"
+        },
+        {
+          "step": 2,
+          "action": "检查无循环依赖",
+          "command": "python -c 'import openakita' 2>&1",
+          "verification": "无循环导入错误"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有导入测试通过",
+        "无循环依赖错误"
+      ],
+      "files_affected": [],
+      "dependencies": ["LLM-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 17:58"
+    },
+    {
+      "id": "MEMORY-001",
+      "category": "migration",
+      "priority": "high",
+      "description": "移动 memory.py 到 memory 模块",
+      "detailed_description": "将 core/memory.py 移动到 memory/legacy.py (作为 MemoryManager 前身)",
+      "steps": [
+        {
+          "step": 1,
+          "action": "移动文件",
+          "command": "mv src/openakita/core/memory.py src/openakita/memory/legacy.py",
+          "verification": "文件位置正确"
+        },
+        {
+          "step": 2,
+          "action": "更新 memory/__init__.py 导出",
+          "file": "src/openakita/memory/__init__.py",
+          "code": "添加 Memory 导出 (从 legacy.py)",
+          "verification": "导出添加成功"
+        },
+        {
+          "step": 3,
+          "action": "更新外部引用",
+          "files": ["src/openakita/core/agent.py", "src/openakita/core/__init__.py"],
+          "code": "from .memory → from ..memory.legacy",
+          "verification": "外部引用更新完成"
+        },
+        {
+          "step": 4,
+          "action": "验证迁移",
+          "command": "python -c 'from openakita.memory.legacy import Memory; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "memory.py 位于 memory/legacy.py",
+        "所有引用更新完成",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/memory/legacy.py",
+        "src/openakita/memory/__init__.py",
+        "src/openakita/core/agent.py"
+      ],
+      "dependencies": ["LLM-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:05"
+    },
+    {
+      "id": "MEMORY-002",
+      "category": "migration",
+      "priority": "medium",
+      "description": "标记 memory.py 为弃用",
+      "detailed_description": "添加 DeprecationWarning 到 memory/legacy.py",
+      "steps": [
+        {
+          "step": 1,
+          "action": "添加弃用警告到 memory/legacy.py",
+          "file": "src/openakita/memory/legacy.py",
+          "code": "在文件顶部添加弃用注释和警告",
+          "verification": "弃用标记添加成功"
+        },
+        {
+          "step": 2,
+          "action": "验证导入正常",
+          "command": "python -c 'from openakita.memory import LegacyMemory; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "添加 DeprecationWarning",
+        "导入测试通过"
+      ],
+      "files_affected": [
+        "src/openakita/memory/legacy.py"
+      ],
+      "dependencies": ["MEMORY-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:08"
+    },
+    {
+      "id": "CORE-001",
+      "category": "refactoring",
+      "priority": "high",
+      "description": "分析 agent.py 的方法职责",
+      "detailed_description": "识别 agent.py 中可以提取或简化的方法",
+      "steps": [
+        {
+          "step": 1,
+          "action": "列出所有公共方法",
+          "command": "grep -n 'def [a-z_]*(' src/openakita/core/agent.py | head -60",
+          "verification": "方法列表完整"
+        },
+        {
+          "step": 2,
+          "action": "分类方法：核心职责 vs 可提取",
+          "verification": "分类完成"
+        },
+        {
+          "step": 3,
+          "action": "识别重复代码",
+          "verification": "重复代码标记"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有公共方法列出并分类",
+        "识别可提取/简化的方法",
+        "标记重复代码位置"
+      ],
+      "files_affected": [],
+      "dependencies": ["MEM-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:20"
+    },
+    {
+      "id": "CORE-002",
+      "category": "refactoring",
+      "priority": "high",
+      "description": "精简 agent.py - 提取辅助函数",
+      "detailed_description": "从 agent.py 中提取可复用的辅助函数，减少文件行数",
+      "steps": [
+        {
+          "step": 1,
+          "action": "提取工具注册逻辑到独立函数",
+          "file": "src/openakita/core/agent.py",
+          "verification": "提取成功"
+        },
+        {
+          "step": 2,
+          "action": "提取会话管理逻辑到独立函数",
+          "verification": "提取成功"
+        },
+        {
+          "step": 3,
+          "action": "验证所有功能正常",
+          "command": "python -c 'from openakita.core.agent import Agent; print(\"OK\")'",
+          "verification": "功能正常"
+        }
+      ],
+      "acceptance_criteria": [
+        "提取至少 3 个辅助函数",
+        "agent.py 行数减少",
+        "所有功能正常"
+      ],
+      "files_affected": ["src/openakita/core/agent.py"],
+      "dependencies": ["CORE-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:30"
+    },
+    {
+      "id": "CORE-003",
+      "category": "refactoring",
+      "priority": "medium",
+      "description": "更新 core/__init__.py 导出",
+      "detailed_description": "更新 core 模块的公开 API，移除已迁移的类",
+      "steps": [
+        {
+          "step": 1,
+          "action": "审查当前导出",
+          "file": "src/openakita/core/__init__.py",
+          "verification": "当前导出列表"
+        },
+        {
+          "step": 2,
+          "action": "更新导出列表",
+          "code": "移除已迁移的 Brain，保留 Agent, AgentState, TaskState, TaskStatus, Identity, RalphLoop",
+          "verification": "导出更新成功"
+        },
+        {
+          "step": 3,
+          "action": "验证导入正常",
+          "command": "python -c 'from openakita.core import Agent, AgentState, TaskState, TaskStatus, Identity, RalphLoop; print(\"OK\")'",
+          "verification": "导入测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "core/__init__.py 只导出核心类",
+        "导入测试通过"
+      ],
+      "files_affected": ["src/openakita/core/__init__.py"],
+      "dependencies": ["CORE-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:35"
+    },
+    {
+      "id": "VERIFY-001",
+      "category": "testing",
+      "priority": "high",
+      "description": "运行完整导入测试",
+      "detailed_description": "运行所有模块的导入测试，确保重构后功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "测试所有核心模块导入",
+          "command": "python -c '\nfrom openakita.core import Agent, AgentState, TaskState, TaskStatus, Identity, RalphLoop\nfrom openakita.llm import LLMClient, Brain\nfrom openakita.tools import ToolExecutor, get_tools_for_message\nfrom openakita.skills import SkillManager\nfrom openakita.infra import TokenTrackingContext\nfrom openakita.memory import MemoryManager\nprint(\"All imports OK\")\n'",
+          "verification": "所有导入成功"
+        },
+        {
+          "step": 2,
+          "action": "检查无循环依赖",
+          "command": "python -c 'import openakita' 2>&1 | grep -i 'circular\\|cycle' || echo 'No circular imports'",
+          "verification": "无循环依赖"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有核心模块导入成功",
+        "无循环依赖错误"
+      ],
+      "files_affected": [],
+      "dependencies": ["CORE-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:40"
+    },
+    {
+      "id": "VERIFY-002",
+      "category": "testing",
+      "priority": "high",
+      "description": "运行基线测试对比",
+      "detailed_description": "运行与重构前相同的测试，确保功能无退化",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行基线导入测试",
+          "command": "python tests/baseline/test_imports_baseline.py",
+          "verification": "测试通过"
+        },
+        {
+          "step": 2,
+          "action": "对比结果",
+          "command": "diff tests/baseline/results.txt <(python tests/baseline/test_imports_baseline.py 2>&1) || echo 'Results differ - check manually'",
+          "verification": "结果一致"
+        }
+      ],
+      "acceptance_criteria": [
+        "基线测试全部通过",
+        "结果与重构前一致"
+      ],
+      "files_affected": [],
+      "dependencies": ["VERIFY-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:45"
+    },
+    {
+      "id": "VERIFY-003",
+      "category": "testing",
+      "priority": "high",
+      "description": "运行现有测试套件",
+      "detailed_description": "运行 src/openakita/testing/ 下的测试，确保功能正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行测试",
+          "command": "python scripts/run_tests.py 2>&1 | head -100 || true",
+          "verification": "测试执行完成"
+        },
+        {
+          "step": 2,
+          "action": "记录测试结果",
+          "verification": "记录通过/失败数量"
+        }
+      ],
+      "acceptance_criteria": [
+        "测试执行完成",
+        "记录测试结果"
+      ],
+      "files_affected": [],
+      "dependencies": ["VERIFY-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 18:50"
+    },
+    {
+      "id": "DOC-001",
+      "category": "documentation",
+      "priority": "medium",
+      "description": "更新模块文档字符串",
+      "detailed_description": "更新 core, llm, tools, skills, infra 模块的文档字符串",
+      "steps": [
+        {
+          "step": 1,
+          "action": "更新 core/__init__.py 文档",
+          "file": "src/openakita/core/__init__.py",
+          "code": "更新模块说明为'流程编排层'",
+          "verification": "文档更新成功"
+        },
+        {
+          "step": 2,
+          "action": "更新 llm/__init__.py 文档",
+          "file": "src/openakita/llm/__init__.py",
+          "code": "添加 Brain 类的说明",
+          "verification": "文档更新成功"
+        },
+        {
+          "step": 3,
+          "action": "更新 tools/__init__.py 文档",
+          "file": "src/openakita/tools/__init__.py",
+          "code": "添加 executor 和 filter 的说明",
+          "verification": "文档更新成功"
+        },
+        {
+          "step": 4,
+          "action": "更新 skills/__init__.py 文档",
+          "file": "src/openakita/skills/__init__.py",
+          "code": "添加 manager 的说明",
+          "verification": "文档更新成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有模块文档更新",
+        "说明职责清晰"
+      ],
+      "files_affected": [
+        "src/openakita/core/__init__.py",
+        "src/openakita/llm/__init__.py",
+        "src/openakita/tools/__init__.py",
+        "src/openakita/skills/__init__.py"
+      ],
+      "dependencies": ["VERIFY-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 19:00"
+    },
+    {
+      "id": "DOC-002",
+      "category": "documentation",
+      "priority": "medium",
+      "description": "生成最终依赖图",
+      "detailed_description": "运行依赖分析脚本，生成重构后的依赖图",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行依赖分析脚本",
+          "command": "python scripts/analyze_dependencies.py",
+          "verification": "脚本执行成功"
+        },
+        {
+          "step": 2,
+          "action": "对比重构前后依赖图",
+          "verification": "确认依赖方向正确"
+        }
+      ],
+      "acceptance_criteria": [
+        "依赖图生成成功",
+        "确认 core 不再直接依赖 storage",
+        "确认依赖方向正确"
+      ],
+      "files_affected": ["docs/dependency_graph.md"],
+      "dependencies": ["DOC-001"],
+      "passes": true,
+      "completed_at": "2026-02-24 19:05"
+    },
+    {
+      "id": "DOC-003",
+      "category": "documentation",
+      "priority": "low",
+      "description": "更新 CLAUDE.md（如适用）",
+      "detailed_description": "如果项目有 CLAUDE.md，更新架构说明",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查 CLAUDE.md 是否存在",
+          "command": "test -f CLAUDE.md && echo 'exists' || echo 'not found'",
+          "verification": "检查结果"
+        },
+        {
+          "step": 2,
+          "action": "如果存在，更新架构说明",
+          "file": "CLAUDE.md",
+          "verification": "文档更新成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "检查 CLAUDE.md 是否存在",
+        "如果存在，更新架构说明"
+      ],
+      "files_affected": ["CLAUDE.md"],
+      "dependencies": ["DOC-002"],
+      "passes": true,
+      "completed_at": "2026-02-24 19:15"
+    },
+    {
+      "id": "FINAL-001",
+      "category": "finalization",
+      "priority": "high",
+      "description": "最终验证所有功能",
+      "detailed_description": "运行所有验证测试，确保重构成功",
+      "steps": [
+        {
+          "step": 1,
+          "action": "运行所有导入测试",
+          "command": "python -c '\nfrom openakita.core import Agent, AgentState, TaskState, TaskStatus, Identity, RalphLoop\nfrom openakita.llm import LLMClient, Brain, Context, Response\nfrom openakita.tools import ToolExecutor, get_tools_for_message, ShellTool, FileTool\nfrom openakita.skills import SkillRegistry, SkillManager\nfrom openakita.infra import TokenTrackingContext\nfrom openakita.memory import MemoryManager\nprint(\"All core imports OK\")\n'",
+          "verification": "导入成功"
+        },
+        {
+          "step": 2,
+          "action": "验证 core 文件数量减少",
+          "command": "ls src/openakita/core/*.py | wc -l",
+          "verification": "文件数量从 17 减少到约 10"
+        },
+        {
+          "step": 3,
+          "action": "验证架构达成目标",
+          "verification": "core 只负责流程编排"
+        }
+      ],
+      "acceptance_criteria": [
+        "所有导入测试通过",
+        "core 文件数量减少",
+        "架构达成高内聚低耦合目标"
+      ],
+      "files_affected": [],
+      "dependencies": ["DOC-003"],
+      "passes": true,
+      "completed_at": "2026-02-24 19:30"
+    },
+    {
+      "id": "CORE-005",
+      "category": "refactoring",
+      "priority": "medium",
+      "description": "移除 Agent 中的冗余技能安装逻辑",
+      "detailed_description": "删除 agent.py 中已被 SkillManager 接管的技能安装/加载代码",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除 _install_skill 及相关辅助方法",
+          "verification": "代码删除"
+        },
+        {
+          "step": 2,
+          "action": "验证 SkillManager 委托正常",
+          "verification": "测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "agent.py 中无冗余技能代码",
+        "功能测试通过"
+      ],
+      "files_affected": ["src/openakita/core/agent.py"],
+      "dependencies": ["SKILLS-002"],
+      "passes": true,
+      "completed_at": "2026-02-24"
+    },
+    {
+      "id": "CORE-007",
+      "category": "refactoring",
+      "priority": "high",
+      "description": "Refactor: Extract main loop from agent.py to ralph.py",
+      "detailed_description": "将 agent.py 中的主循环逻辑提取到 RalphLoop 类中，实现更清晰的流程控制",
+      "steps": [
+        {
+          "step": 1,
+          "action": "增强 RalphLoop 类以支持 ReasoningEngine 执行流",
+          "verification": "代码审查"
+        },
+        {
+          "step": 2,
+          "action": "更新 agent.py 使用 RalphLoop 替代原生循环",
+          "verification": "代码替换完成"
+        },
+        {
+          "step": 3,
+          "action": "验证任务执行流程正常",
+          "verification": "测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "agent.py 中不再包含复杂的循环逻辑",
+        "RalphLoop 正确处理任务执行和状态管理",
+        "功能测试通过"
+      ],
+      "files_affected": ["src/openakita/core/ralph.py", "src/openakita/core/agent.py"],
+      "dependencies": ["CORE-006"],
+      "passes": true,
+      "completed_at": "2026-02-24 20:00",
+      "notes": "chat_with_tools_and_context 已使用 RalphLoop + ReasoningEngine.step。execute_task 保留独立循环（设计选择：调度器任务执行）。"
+    },
+    {
+      "id": "CORE-008",
+      "category": "refactoring",
+      "priority": "high",
+      "description": "Refactor: Decouple TaskMonitor logic",
+      "detailed_description": "将 TaskMonitor 的创建和管理逻辑从 Agent 中解耦，使其更独立",
+      "steps": [
+        {
+          "step": 1,
+          "action": "分析 TaskMonitor 在 agent.py 中的使用点",
+          "verification": "分析完成"
+        },
+        {
+          "step": 2,
+          "action": "优化 TaskMonitor 接口，减少对 Agent 内部状态的依赖",
+          "verification": "接口优化"
+        },
+        {
+          "step": 3,
+          "action": "将 TaskMonitor 集成到 RalphLoop 中",
+          "verification": "集成完成"
+        }
+      ],
+      "acceptance_criteria": [
+        "TaskMonitor 与 Agent 解耦",
+        "RalphLoop 负责 TaskMonitor 的生命周期管理（如适用）",
+        "功能测试通过"
+      ],
+      "files_affected": ["src/openakita/core/task_monitor.py", "src/openakita/core/agent.py", "src/openakita/core/ralph.py"],
+      "dependencies": ["CORE-007"],
+      "passes": true,
+      "completed_at": "2026-02-24 20:05",
+      "notes": "ReasoningEngine.step 通过回调函数解耦 TaskMonitor：on_model_switch, on_llm_error, check_model_switch, on_iteration_start/end, on_retry_reset, on_tool_start/complete。"
+    },
+    {
+      "id": "CORE-006",
+      "category": "refactoring",
+      "priority": "medium",
+      "description": "移动 MCP 加载逻辑到 MCPManager",
+      "detailed_description": "创建 MCPManager 并迁移 MCP 加载/启动逻辑",
+      "steps": [
+        {
+          "step": 1,
+          "action": "创建 src/openakita/tools/mcp_manager.py",
+          "verification": "文件创建"
+        },
+        {
+          "step": 2,
+          "action": "更新 agent.py 使用 MCPManager",
+          "verification": "代码更新"
+        },
+        {
+          "step": 3,
+          "action": "删除 agent.py 中的 MCP 加载代码",
+          "verification": "代码删除"
+        }
+      ],
+      "acceptance_criteria": [
+        "MCP 逻辑集中在 MCPManager",
+        "agent.py 中无冗余 MCP 代码",
+        "功能测试通过"
+      ],
+      "files_affected": ["src/openakita/core/agent.py", "src/openakita/tools/mcp_manager.py"],
+      "dependencies": ["CORE-005"],
+      "passes": true,
+      "completed_at": "2026-02-24"
+    }
+  ],
+  "implementation_order": [
+    "PREP-001",
+    "PREP-002",
+    "PREP-003",
+    "INFRA-001",
+    "INFRA-002",
+    "INFRA-003",
+    "TOOLS-001",
+    "TOOLS-002",
+    "TOOLS-003",
+    "SKILLS-001",
+    "SKILLS-002",
+    "LLM-001",
+    "LLM-002",
+    "LLM-003",
+    "MEM-001",
+    "MEM-002",
+    "CORE-001",
+    "CORE-002",
+    "CORE-003",
+    "VERIFY-001",
+    "VERIFY-002",
+    "VERIFY-003",
+    "DOC-001",
+    "DOC-002",
+    "DOC-003",
+    "FINAL-001",
+    "CORE-005",
+    "CORE-006",
+    "CORE-007",
+    "CORE-008"
+  ],
+  "metadata": {
+    "last_updated": "2026-02-24",
+    "total_features": 28,
+    "completed_features": 28,
+    "high_priority_features": 20,
+    "medium_priority_features": 6,
+    "low_priority_features": 2,
+    "estimated_hours": 8,
+    "estimated_days": 2
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "refactor-core-cohesion",
+  "name": "Core Module Refactoring - High Cohesion Low Coupling",
+  "status": "ready",
+  "created_at": "2026-02-24",
+  "updated_at": "2026-02-24",
+  "paused_at": null,
+  "description": "重构 src/openakita/core 模块，使其只负责流程编排，将其他职责移到对应的功能模块中，实现高内聚低耦合",
+  "target_path": "../../",
+  "total_features": 28,
+  "completed_features": 1
+}
