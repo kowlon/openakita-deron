@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Request
 
 from openakita.storage.database import Database
-from openakita.config import settings
 
 logger = logging.getLogger(__name__)
 

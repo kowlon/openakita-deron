@@ -51,12 +51,12 @@ def preprocess_code_content(content: str) -> str:
     if not content or not isinstance(content, str):
         return content
 
-    # 中文引号替换
+    # 中文引号与标点替换
     replacements = {
-        '"': '"',  # 左双引号
-        '"': '"',  # 右双引号
-        ''': "'",  # 左单引号
-        ''': "'",  # 右单引号
+        "“": '"',  # 左双引号
+        "”": '"',  # 右双引号
+        "‘": "'",  # 左单引号
+        "’": "'",  # 右单引号
         '，': ',',  # 中文逗号
         '：': ':',  # 中文冒号
         '；': ';',  # 中文分号

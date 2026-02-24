@@ -13,10 +13,10 @@
 
 from typing import Any
 
-from openakita.context.enterprise.config import ContextConfig
-from openakita.context.enterprise.conversation_context import ConversationContext
-from openakita.context.enterprise.system_context import SystemContext
-from openakita.context.enterprise.task_context import TaskContext
+from openakita.context.config import ContextConfig
+from openakita.context.conversation_context import ConversationContext
+from openakita.context.system_context import SystemContext
+from openakita.context.task_context import TaskContext
 
 
 class EnterpriseContextManager:
@@ -66,8 +66,6 @@ class EnterpriseContextManager:
         self.task_contexts: dict[str, TaskContext] = {}
         self.conversation_contexts: dict[str, ConversationContext] = {}
 
-    # ========== 初始化 ==========
-
     def initialize(
         self,
         identity: str,
@@ -90,8 +88,6 @@ class EnterpriseContextManager:
             tools_manifest=tools_manifest or "",
             max_tokens=self.config.max_system_tokens,
         )
-
-    # ========== 任务管理 ==========
 
     def start_task(
         self,
@@ -136,7 +132,6 @@ class EnterpriseContextManager:
         """
         if task_id in self.task_contexts:
             del self.task_contexts[task_id]
-            # 清理关联的会话上下文
             to_remove = [
                 sid
                 for sid in self.conversation_contexts
@@ -189,8 +184,6 @@ class EnterpriseContextManager:
             ctx.add_variables(variables)
         return True
 
-    # ========== 会话管理 ==========
-
     def add_message(
         self,
         session_id: str,
@@ -240,8 +233,6 @@ class EnterpriseContextManager:
             return True
         return False
 
-    # ========== 上下文构建 ==========
-
     def build_context(
         self, task_id: str, session_id: str
     ) -> tuple[str, list[dict[str, Any]]]:
@@ -262,25 +253,19 @@ class EnterpriseContextManager:
         """
         parts = []
 
-        # 第 1 层：系统上下文
         if self.system_ctx:
             parts.append(self.system_ctx.to_prompt())
 
-        # 第 2 层：任务上下文
         task_ctx = self.task_contexts.get(task_id)
         if task_ctx:
             parts.append(task_ctx.to_prompt())
 
-        # 合并系统部分
         system_prompt = "\n\n---\n\n".join(parts) if parts else ""
 
-        # 第 3 层：会话上下文
         conv_ctx = self.conversation_contexts.get(session_id)
         messages = conv_ctx.to_messages() if conv_ctx else []
 
         return system_prompt, messages
-
-    # ========== 统计信息 ==========
 
     def get_stats(self, task_id: str, session_id: str) -> dict[str, Any]:
         """
@@ -300,18 +285,15 @@ class EnterpriseContextManager:
             "total_estimated_tokens": 0,
         }
 
-        # 系统统计
         if self.system_ctx:
             stats["system"] = self.system_ctx.get_stats()
             stats["total_estimated_tokens"] += stats["system"]["estimated_tokens"]
 
-        # 任务统计
         task_ctx = self.task_contexts.get(task_id)
         if task_ctx:
             stats["task"] = task_ctx.get_stats()
             stats["total_estimated_tokens"] += stats["task"]["estimated_tokens"]
 
-        # 会话统计
         conv_ctx = self.conversation_contexts.get(session_id)
         if conv_ctx:
             stats["conversation"] = conv_ctx.get_stats()

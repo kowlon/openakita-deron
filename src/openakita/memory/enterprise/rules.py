@@ -141,7 +141,7 @@ class SystemRuleStore:
         if not file_path.exists():
             raise FileNotFoundError(f"Rules file not found: {path}")
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         self._parse_rules_data(data)
@@ -161,7 +161,7 @@ class SystemRuleStore:
         if not file_path.exists():
             raise FileNotFoundError(f"Rules file not found: {path}")
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
 
         self._parse_rules_data(data)

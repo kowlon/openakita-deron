@@ -17,7 +17,7 @@ import os
 import platform
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from .budget import BudgetConfig, apply_budget, estimate_tokens
 from .compiler import check_compiled_outdated, compile_all, get_compiled_content
@@ -35,16 +35,16 @@ logger = logging.getLogger(__name__)
 def build_system_prompt(
     identity_dir: Path,
     tools_enabled: bool = True,
-    tool_catalog: Optional["ToolCatalog"] = None,
-    skill_catalog: Optional["SkillCatalog"] = None,
-    mcp_catalog: Optional["MCPCatalog"] = None,
-    memory_manager: Optional["MemoryManager"] = None,
+    tool_catalog: "ToolCatalog" | None = None,
+    skill_catalog: "SkillCatalog" | None = None,
+    mcp_catalog: "MCPCatalog" | None = None,
+    memory_manager: "MemoryManager" | None = None,
     task_description: str = "",
     budget_config: BudgetConfig | None = None,
     include_tools_guide: bool = False,
     session_type: str = "cli",  # 建议 8: 区分 CLI/IM
     precomputed_memory: str | None = None,
-    persona_manager: Optional[Any] = None,  # 已废弃，保留参数兼容性
+    persona_manager: Any | None = None,  # 已废弃，保留参数兼容性
 ) -> str:
     """
     组装系统提示词
@@ -407,9 +407,9 @@ C. 方案三
 
 
 def _build_catalogs_section(
-    tool_catalog: Optional["ToolCatalog"],
-    skill_catalog: Optional["SkillCatalog"],
-    mcp_catalog: Optional["MCPCatalog"],
+    tool_catalog: "ToolCatalog" | None,
+    skill_catalog: "SkillCatalog" | None,
+    mcp_catalog: "MCPCatalog" | None,
     budget_tokens: int,
     include_tools_guide: bool = False,
 ) -> str:
@@ -462,7 +462,7 @@ def _build_catalogs_section(
 
 
 def _build_memory_section(
-    memory_manager: Optional["MemoryManager"],
+    memory_manager: "MemoryManager" | None,
     task_description: str,
     budget_tokens: int,
 ) -> str:
@@ -514,10 +514,10 @@ def _get_tools_guide_short() -> str:
 
 def get_prompt_debug_info(
     identity_dir: Path,
-    tool_catalog: Optional["ToolCatalog"] = None,
-    skill_catalog: Optional["SkillCatalog"] = None,
-    mcp_catalog: Optional["MCPCatalog"] = None,
-    memory_manager: Optional["MemoryManager"] = None,
+    tool_catalog: "ToolCatalog" | None = None,
+    skill_catalog: "SkillCatalog" | None = None,
+    mcp_catalog: "MCPCatalog" | None = None,
+    memory_manager: "MemoryManager" | None = None,
     task_description: str = "",
 ) -> dict:
     """

@@ -5,6 +5,7 @@
 """
 
 import base64
+import logging as _multimodal_logging
 import re
 
 from ..types import (
@@ -16,7 +17,6 @@ from ..types import (
     ImageBlock,
     ImageContent,
     TextBlock,
-    UnsupportedMediaError,
     VideoBlock,
     VideoContent,
 )
@@ -304,8 +304,6 @@ DOCUMENT_CONVERTERS: dict[str, object] = {
     "google": convert_document_to_gemini,
 }
 
-
-import logging as _multimodal_logging
 
 _converter_logger = _multimodal_logging.getLogger(__name__)
 

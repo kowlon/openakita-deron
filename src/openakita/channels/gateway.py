@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..sessions import Session, SessionManager
 from .base import ChannelAdapter
@@ -28,6 +28,7 @@ from .types import OutgoingMessage, UnifiedMessage
 
 if TYPE_CHECKING:
     from ..core.brain import Brain
+    from ..llm.stt_client import STTClient
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class ModelCommandHandler:
     # 命令列表
     MODEL_COMMANDS = {"/model", "/switch", "/priority", "/restore", "/cancel"}
 
-    def __init__(self, brain: Optional["Brain"] = None):
+    def __init__(self, brain: "Brain" | None = None):
         self._brain: Brain | None = brain
         # 进行中的切换会话 {session_key: ModelSwitchSession}
         self._switch_sessions: dict[str, ModelSwitchSession] = {}
@@ -568,7 +569,7 @@ class ThinkingCommandHandler:
         for key, label in self.DEPTH_LABELS.items():
             marker = " ⬅️" if key == (current_depth or "medium") else ""
             lines.append(f"• `{key}` — {label}{marker}")
-        lines.append(f"\n用法: `/thinking_depth low|medium|high`")
+        lines.append("\n用法: `/thinking_depth low|medium|high`")
         return "\n".join(lines)
 
 
@@ -730,8 +731,8 @@ class MessageGateway:
             [(base64_data, media_type), ...] 列表
         """
         import asyncio
-        import tempfile
         import shutil
+        import tempfile
 
         self._ensure_ffmpeg()
         if not shutil.which("ffmpeg"):
@@ -925,6 +926,7 @@ class MessageGateway:
                 _agent_ref = getattr(self.agent_handler, "_agent_ref", None) if self.agent_handler else None
                 _resolved_sid = self._resolve_task_session_id(session_key, _agent_ref)
                 _session_matches = _resolved_sid is not None
+                _agent_session = getattr(_agent_ref, "_current_session_id", None)
 
                 logger.debug(
                     f"[Interrupt] Session check: resolved_sid={_resolved_sid!r}, "

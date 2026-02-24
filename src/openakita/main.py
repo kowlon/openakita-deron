@@ -252,8 +252,8 @@ async def start_im_channels(agent_or_master):
     logger.info("SessionManager started")
 
     # 初始化在线 STT 客户端（可选）
-    from .llm.stt_client import STTClient
     from .llm.config import load_endpoints_config as _load_ep_config
+    from .llm.stt_client import STTClient
 
     stt_client = None
     try:
@@ -1162,7 +1162,6 @@ def serve():
     import threading
     import time
     import warnings
-
     from pathlib import Path
 
     from openakita import config as cfg
@@ -1191,7 +1190,7 @@ def serve():
         """写入一次心跳（原子写入：先写临时文件再重命名）"""
         try:
             _heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
-            from openakita import __version__, __git_hash__
+            from openakita import __git_hash__, __version__
             data = {
                 "pid": os.getpid(),
                 "timestamp": time.time(),
@@ -1245,7 +1244,7 @@ def serve():
         shutdown_triggered = False
         _heartbeat_phase = "initializing"
 
-        from openakita import __version__, __git_hash__, get_version_string
+        from openakita import get_version_string
         _version_str = get_version_string()
         logger.info(f"OpenAkita {_version_str} starting...")
 
@@ -1386,7 +1385,7 @@ def serve():
     # 首次进入时 _restart_requested 为 False，正常启动。
     # 当 /api/config/restart 设置 _restart_requested=True 并触发 shutdown 后，
     # 循环会重新加载配置、重置全局状态并重新初始化所有组件。
-    heartbeat_thread = _start_heartbeat()
+    _start_heartbeat()
     first_run = True
     while first_run or cfg._restart_requested:
         first_run = False

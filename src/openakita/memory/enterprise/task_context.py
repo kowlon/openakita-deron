@@ -9,7 +9,6 @@
 - autonomous-coder/enterprise_refactor_plan.md
 """
 
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any

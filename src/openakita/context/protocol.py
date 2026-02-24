@@ -19,8 +19,8 @@ class ContextBackend(Protocol):
 
 这是定义上下文系统接口的抽象协议。
 支持多种后端实现：
-    - LegacyContextBackend: 包装现有 ContextManager 以向后兼容
     - EnterpriseContextManager: 企业级三层上下文实现
+    - 自定义后端：实现本协议即可扩展
 
 上下文系统提供：
     1. 系统上下文（身份、规则、工具清单）- 永久层

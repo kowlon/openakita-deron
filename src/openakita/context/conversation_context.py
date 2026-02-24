@@ -35,7 +35,7 @@ class ConversationContext:
     max_tokens: token 预算提示（不严格强制）
     min_keep_rounds: 始终保留的最小轮数（默认 4）
 
-    示例：
+示例：
     ctx = ConversationContext()
     ctx.add_message("user", "你好")
     ctx.add_message("assistant", "你好！")
@@ -131,6 +131,30 @@ class ConversationContext:
             消息列表的副本
         """
         return self.messages.copy()
+
+    @staticmethod
+    def trim_messages(
+        messages: list[dict[str, Any]],
+        max_rounds: int,
+        max_tokens: int = 8000,
+    ) -> list[dict[str, Any]]:
+        ctx = ConversationContext(
+            max_rounds=max_rounds,
+            max_tokens=max_tokens,
+        )
+        for msg in messages:
+            ctx.messages.append(msg)
+            ctx._trim_if_needed()
+        return ctx.to_messages()
+
+    @staticmethod
+    def estimate_messages_tokens(
+        messages: list[dict[str, Any]],
+        chars_per_token: float = 4.0,
+    ) -> int:
+        ctx = ConversationContext()
+        ctx.messages = list(messages)
+        return ctx.estimate_tokens(chars_per_token=chars_per_token)
 
     def clear(self) -> None:
         """清空所有消息。"""

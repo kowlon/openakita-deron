@@ -51,7 +51,6 @@ class TaskContext:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
-    # 约束
     MAX_STEP_SUMMARIES = 20
     MAX_KEY_VARIABLES = 50
     MAX_TOKENS = 16000
@@ -64,13 +63,11 @@ class TaskContext:
             step_name: 步骤名称
             summary: 完成内容的简要摘要
         """
-        # 将摘要截断到 100 字符
         truncated = summary[:100] if len(summary) > 100 else summary
         entry = f"[{step_name}] {truncated}"
 
         self.step_summaries.append(entry)
 
-        # 强制滑动窗口限制
         if len(self.step_summaries) > self.MAX_STEP_SUMMARIES:
             self.step_summaries = self.step_summaries[-self.MAX_STEP_SUMMARIES:]
 
@@ -85,7 +82,6 @@ class TaskContext:
             key: 变量名
             value: 变量值
         """
-        # 达到上限且新增 key 时，移除最早条目
         if (
             len(self.key_variables) >= self.MAX_KEY_VARIABLES
             and key not in self.key_variables
@@ -115,26 +111,21 @@ class TaskContext:
         """
         parts = []
 
-        # 任务描述
         parts.append(f"# Current Task\n{self.task_description}")
 
-        # 进度指示
         if self.total_steps > 0:
             parts.append(f"\nProgress: Step {self.current_step}/{self.total_steps}")
         elif self.current_step > 0:
             parts.append(f"\nProgress: Step {self.current_step}")
 
-        # 步骤摘要
         if self.step_summaries:
             parts.append("\n# Completed Steps")
             for i, summary in enumerate(self.step_summaries, 1):
                 parts.append(f"{i}. {summary}")
 
-        # 关键变量
         if self.key_variables:
             parts.append("\n# Key Variables")
             for key, value in self.key_variables.items():
-                # 截断过长的值
                 value_str = str(value)
                 if len(value_str) > 100:
                     value_str = value_str[:100] + "..."

@@ -276,10 +276,7 @@ class SkillStore:
         返回：
             用于提示词注入的格式化技能列表
         """
-        if task_type:
-            skills = self.get_skills_for_task(task_type)
-        else:
-            skills = self.get_all_skills()
+        skills = self.get_skills_for_task(task_type) if task_type else self.get_all_skills()
 
         if not skills:
             return ""

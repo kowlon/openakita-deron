@@ -8,7 +8,7 @@
 - autonomous-coder/enterprise_refactor_plan.md
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 

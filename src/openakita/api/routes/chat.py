@@ -14,7 +14,13 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from ..schemas import ChatAnswerRequest, ChatControlRequest, ChatRequest, ConfirmStepRequest, ResumeRequest
+from ..schemas import (
+    ChatAnswerRequest,
+    ChatControlRequest,
+    ChatRequest,
+    ConfirmStepRequest,
+    ResumeRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +352,7 @@ async def chat_insert(request: Request, body: ChatControlRequest):
         _conv_id = body.conversation_id or getattr(actual_agent, "_current_conversation_id", None)
         logger.info(f"[Chat API] Insert -> STOP: reason={reason!r}, conv_id={_conv_id!r}")
         actual_agent.cancel_current_task(reason, session_id=_conv_id)
-        logger.info(f"[Chat API] Insert -> STOP 执行完成")
+        logger.info("[Chat API] Insert -> STOP 执行完成")
         return {"status": "ok", "action": "cancel", "reason": reason}
 
     if msg_type == "skip":
@@ -472,31 +478,11 @@ async def _stream_resume(
     """
     Generate SSE events for resuming a paused Edit mode task.
     """
-    actual_agent = _resolve_agent(agent)
-    if actual_agent is None:
-        yield _sse("error", {"message": "Agent not initialized"})
-        yield _sse("done")
-        return
-
     _reply_chars = 0
     _reply_preview = ""
     _full_reply = ""
     _done_sent = False
     _client_disconnected = False
-
-    async def _check_disconnected() -> bool:
-        nonlocal _client_disconnected
-        if _client_disconnected:
-            return True
-        if http_request is not None:
-            try:
-                if await http_request.is_disconnected():
-                    _client_disconnected = True
-                    logger.info("[Chat API] Resume: 客户端已断开连接，停止流式输出")
-                    return True
-            except Exception:
-                pass
-        return False
 
     def _sse(event_type: str, data: dict | None = None) -> str:
         nonlocal _reply_chars, _reply_preview, _full_reply, _done_sent
@@ -512,6 +498,27 @@ async def _stream_resume(
             if len(_reply_preview) < 120:
                 _reply_preview += chunk
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    actual_agent = _resolve_agent(agent)
+    if actual_agent is None:
+        yield _sse("error", {"message": "Agent not initialized"})
+        yield _sse("done")
+        return
+
+    async def _check_disconnected() -> bool:
+        nonlocal _client_disconnected
+        if _client_disconnected:
+            return True
+        if http_request is not None:
+            try:
+                if await http_request.is_disconnected():
+                    _client_disconnected = True
+                    logger.info("[Chat API] Resume: 客户端已断开连接，停止流式输出")
+                    return True
+            except Exception:
+                pass
+        return False
+
 
     try:
         # Get the paused task

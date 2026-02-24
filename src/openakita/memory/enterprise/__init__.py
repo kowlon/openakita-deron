@@ -9,13 +9,9 @@
 """
 
 from openakita.memory.enterprise.config import EnterpriseMemoryConfig
-from openakita.memory.enterprise.rules import RuleCategory, SystemRule, SystemRuleStore
 from openakita.memory.enterprise.router import EnterpriseMemoryRouter
-from openakita.memory.enterprise.task_context import (
-    ErrorEntry,
-    TaskContextStore,
-    TaskMemory,
-)
+from openakita.memory.enterprise.rules import RuleCategory, SystemRule, SystemRuleStore
+from openakita.memory.enterprise.task_context import ErrorEntry, TaskContextStore, TaskMemory
 
 __all__ = [
     "EnterpriseMemoryConfig",

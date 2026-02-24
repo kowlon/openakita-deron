@@ -8,7 +8,7 @@ Reason -> Act -> Observe 三阶段循环。
 - 显式推理循环管理（Reason / Act / Observe）
 - LLM 响应解析与 Decision 分类
 - 工具调用编排（委托给 ToolExecutor）
-- 上下文压缩触发（委托给 ContextManager）
+- 上下文裁剪（滑动窗口，企业版）
 - 循环检测（签名重复、自检间隔、安全阈值）
 - 模型切换逻辑
 - 任务完成度验证（委托给 ResponseHandler）
@@ -28,12 +28,12 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
+from ..context.enterprise.conversation_context import ConversationContext
 from ..tracing.tracer import get_tracer
 from .agent_state import AgentState, TaskState, TaskStatus
-from .context_manager import ContextManager, _CancelledError as _CtxCancelledError
 from .errors import UserCancelledError
 from .response_handler import ResponseHandler, clean_llm_response, strip_thinking_tags
-from .token_tracking import TokenTrackingContext, set_tracking_context, reset_tracking_context
+from .token_tracking import TokenTrackingContext, reset_tracking_context, set_tracking_context
 from .tool_executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
@@ -96,13 +96,15 @@ class ReasoningEngine:
         self,
         brain: Any,
         tool_executor: ToolExecutor,
-        context_manager: ContextManager,
+        max_conversation_rounds: int,
+        max_conversation_tokens: int,
         response_handler: ResponseHandler,
         agent_state: AgentState,
     ) -> None:
         self._brain = brain
         self._tool_executor = tool_executor
-        self._context_manager = context_manager
+        self._max_conversation_rounds = max_conversation_rounds
+        self._max_conversation_tokens = max_conversation_tokens
         self._response_handler = response_handler
         self._state = agent_state
 
@@ -425,7 +427,6 @@ class ReasoningEngine:
             state.cancel_reason = ""
             state.cancel_event = asyncio.Event()
 
-        self._context_manager.set_cancel_event(state.cancel_event)
 
         tracer = get_tracer()
         tracer.begin_trace(session_id=state.session_id, metadata={
@@ -550,28 +551,26 @@ class ReasoningEngine:
                     recent_tool_signatures = []
                     no_confirmation_text_count = 0
 
-            _ctx_compressed_info: dict | None = None
+            _ctx_trimmed_info: dict | None = None
             if len(working_messages) > 2:
-                _before_tokens = self._context_manager.estimate_messages_tokens(working_messages)
-                try:
-                    working_messages = await self._context_manager.compress_if_needed(
-                        working_messages,
-                        system_prompt=_build_effective_system_prompt(),
-                        tools=tools,
-                    )
-                except _CtxCancelledError:
-                    raise UserCancelledError(reason=state.cancel_reason or "用户请求停止", source="context_compress")
-                _after_tokens = self._context_manager.estimate_messages_tokens(working_messages)
-                if _after_tokens < _before_tokens:
-                    _ctx_compressed_info = {
+                _before_tokens = ConversationContext.estimate_messages_tokens(working_messages)
+                trimmed_messages = ConversationContext.trim_messages(
+                    working_messages,
+                    max_rounds=self._max_conversation_rounds,
+                    max_tokens=self._max_conversation_tokens,
+                )
+                _after_tokens = ConversationContext.estimate_messages_tokens(trimmed_messages)
+                if len(trimmed_messages) != len(working_messages) or _after_tokens < _before_tokens:
+                    working_messages = trimmed_messages
+                    _ctx_trimmed_info = {
                         "before_tokens": _before_tokens,
                         "after_tokens": _after_tokens,
                     }
                     await _emit_progress(
-                        f"📦 上下文压缩: {_before_tokens//1000}k → {_after_tokens//1000}k tokens"
+                        f"📦 上下文裁剪: {_before_tokens//1000}k → {_after_tokens//1000}k tokens"
                     )
                     logger.info(
-                        f"[ReAct] Context compressed: {_before_tokens} → {_after_tokens} tokens"
+                        f"[ReAct] Context trimmed: {_before_tokens} → {_after_tokens} tokens"
                     )
 
             # ==================== REASON 阶段 ====================
@@ -663,6 +662,7 @@ class ReasoningEngine:
             _usage = getattr(_raw, "usage", None) if _raw else None
             _in_tokens = getattr(_usage, "input_tokens", 0) if _usage else 0
             _out_tokens = getattr(_usage, "output_tokens", 0) if _usage else 0
+            _ctx_compressed_info = None
             _iter_trace: dict = {
                 "iteration": iteration + 1,
                 "timestamp": datetime.now().isoformat(),
@@ -1156,7 +1156,6 @@ class ReasoningEngine:
             state.cancel_reason = ""
             state.cancel_event = asyncio.Event()
 
-        self._context_manager.set_cancel_event(state.cancel_event)
 
         try:
             # === 动态 System Prompt（追加活跃 Plan） ===
@@ -1316,34 +1315,26 @@ class ReasoningEngine:
                 if state.status != TaskStatus.REASONING:
                     state.transition(TaskStatus.REASONING)
 
-                _ctx_compressed_info: dict | None = None
+                _ctx_trimmed_info: dict | None = None
                 if len(working_messages) > 2:
-                    effective_prompt = _build_effective_prompt()
-                    _before_tokens = self._context_manager.estimate_messages_tokens(working_messages)
-                    try:
-                        working_messages = await self._context_manager.compress_if_needed(
-                            working_messages,
-                            system_prompt=effective_prompt,
-                            tools=tools,
-                        )
-                    except _CtxCancelledError:
-                        async for ev in self._stream_cancel_farewell(
-                            working_messages, effective_prompt, current_model, state
-                        ):
-                            yield ev
-                        yield {"type": "done"}
-                        return
-                    _after_tokens = self._context_manager.estimate_messages_tokens(working_messages)
-                    if _after_tokens < _before_tokens:
-                        _ctx_compressed_info = {
+                    _before_tokens = ConversationContext.estimate_messages_tokens(working_messages)
+                    trimmed_messages = ConversationContext.trim_messages(
+                        working_messages,
+                        max_rounds=self._max_conversation_rounds,
+                        max_tokens=self._max_conversation_tokens,
+                    )
+                    _after_tokens = ConversationContext.estimate_messages_tokens(trimmed_messages)
+                    if len(trimmed_messages) != len(working_messages) or _after_tokens < _before_tokens:
+                        working_messages = trimmed_messages
+                        _ctx_trimmed_info = {
                             "before_tokens": _before_tokens,
                             "after_tokens": _after_tokens,
                         }
                         logger.info(
-                            f"[ReAct-Stream] Context compressed: {_before_tokens} → {_after_tokens} tokens"
+                            f"[ReAct-Stream] Context trimmed: {_before_tokens} → {_after_tokens} tokens"
                         )
                         yield {
-                            "type": "context_compressed",
+                            "type": "context_trimmed",
                             "before_tokens": _before_tokens,
                             "after_tokens": _after_tokens,
                         }
@@ -1468,6 +1459,7 @@ class ReasoningEngine:
                 _usage = getattr(_raw, "usage", None) if _raw else None
                 _in_tokens = getattr(_usage, "input_tokens", 0) if _usage else 0
                 _out_tokens = getattr(_usage, "output_tokens", 0) if _usage else 0
+                _ctx_compressed_info = None
                 _iter_trace: dict = {
                     "iteration": _iteration + 1,
                     "timestamp": datetime.now().isoformat(),
@@ -1922,7 +1914,7 @@ class ReasoningEngine:
                         for _new_msg in working_messages[_msg_count_before:]:
                             _content = _new_msg.get("content", "")
                             if "[系统提示-用户跳过步骤]" in _content:
-                                yield {"type": "chain_text", "content": f"用户跳过了当前步骤"}
+                                yield {"type": "chain_text", "content": "用户跳过了当前步骤"}
                             elif "[用户插入消息]" in _content:
                                 _preview = _content.split("]")[1].split("\n")[0].strip() if "]" in _content else _content[:60]
                                 yield {"type": "chain_text", "content": f"用户插入消息: {_preview[:60]}"}
@@ -2331,7 +2323,7 @@ class ReasoningEngine:
                     farewell_text = block.text.strip()
                     break
             logger.info(f"[ReAct][CancelFarewell] LLM farewell 成功: {farewell_text[:120]}")
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             logger.warning("[ReAct][CancelFarewell] LLM farewell 超时 (5s)，使用默认文本")
         except Exception as e:
             logger.error(
@@ -2417,7 +2409,7 @@ class ReasoningEngine:
                     farewell_text = block.text.strip()
                     break
             logger.info(f"[ReAct-Stream][CancelFarewell] LLM farewell 成功: {farewell_text[:120]}")
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             logger.warning("[ReAct-Stream][CancelFarewell] LLM farewell 超时 (5s)，使用默认文本")
         except Exception as e:
             logger.error(

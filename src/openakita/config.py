@@ -5,10 +5,12 @@ OpenAkita 配置模块
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
+from openakita.context import create_context_backend as _create_context_backend
 
 logger = logging.getLogger(__name__)
 
@@ -588,8 +590,8 @@ def create_memory_backend(
     if config is None:
         config = MemoryConfig()
 
-    from openakita.memory.enterprise.router import EnterpriseMemoryRouter
     from openakita.memory.enterprise.config import EnterpriseMemoryConfig
+    from openakita.memory.enterprise.router import EnterpriseMemoryRouter
 
     enterprise_config = EnterpriseMemoryConfig(
         rules_path=config.rules_path,
@@ -603,38 +605,13 @@ def create_memory_backend(
         logger.warning(f"[MemoryBackend] {warning}")
 
     backend = EnterpriseMemoryRouter(enterprise_config)
-    logger.info(f"[MemoryBackend] Created EnterpriseMemoryRouter")
+    logger.info("[MemoryBackend] Created EnterpriseMemoryRouter")
     return backend
 
 
 def create_context_backend(
     config: ContextConfig | None = None,
-    brain: Any = None,  # kept for backward compatibility, ignored
-    cancel_event: Any = None,  # kept for backward compatibility, ignored
+    brain: Any = None,
+    cancel_event: Any = None,
 ) -> Any:
-    """
-    创建 Context 后端实例（企业级）。
-
-    Args:
-        config: Context 配置。如果为 None，使用默认配置
-        brain: 已废弃，忽略
-        cancel_event: 已废弃，忽略
-
-    Returns:
-        EnterpriseContextManager 实例
-    """
-    if config is None:
-        config = ContextConfig()
-
-    from openakita.context.enterprise.manager import EnterpriseContextManager
-    from openakita.context.enterprise.config import ContextConfig as EnterpriseContextConfig
-
-    enterprise_config = EnterpriseContextConfig(
-        max_conversation_rounds=config.max_conversation_rounds,
-        max_task_summaries=config.max_task_summaries,
-        max_task_variables=config.max_task_variables,
-    )
-
-    backend = EnterpriseContextManager(enterprise_config)
-    logger.info(f"[ContextBackend] Created EnterpriseContextManager")
-    return backend
+    return _create_context_backend(config=config, brain=brain, cancel_event=cancel_event)
