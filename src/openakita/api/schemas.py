@@ -1,4 +1,4 @@
-"""Pydantic request/response models for the HTTP API."""
+"""HTTP API 的 Pydantic 请求/响应模型。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    """Chat request body."""
+    """聊天请求体。"""
 
     message: str = Field("", description="User message text")
     conversation_id: str | None = Field(None, description="Conversation ID for context")
@@ -27,7 +27,7 @@ class ChatRequest(BaseModel):
 
 
 class AttachmentInfo(BaseModel):
-    """Attachment metadata."""
+    """附件元数据。"""
 
     type: str = Field(..., description="image | file | voice")
     name: str = Field(..., description="Filename")
@@ -35,19 +35,19 @@ class AttachmentInfo(BaseModel):
     mime_type: str | None = Field(None, description="MIME type")
 
 
-# Fix forward reference
+# 修复前向引用
 ChatRequest.model_rebuild()
 
 
 class ChatAnswerRequest(BaseModel):
-    """Answer to an ask_user event."""
+    """对 ask_user 事件的回答。"""
 
     conversation_id: str | None = None
     answer: str = ""
 
 
 class ChatControlRequest(BaseModel):
-    """Request body for chat control operations (cancel/skip/insert)."""
+    """聊天控制操作（取消/跳过/插入）的请求体。"""
 
     conversation_id: str | None = Field(None, description="Conversation ID")
     reason: str = Field("", description="Reason for the control action")
@@ -55,7 +55,7 @@ class ChatControlRequest(BaseModel):
 
 
 class ConfirmStepRequest(BaseModel):
-    """Request body for confirming a paused step in Edit mode."""
+    """用于确认 Edit 模式暂停步骤的请求体。"""
 
     conversation_id: str | None = Field(None, description="Conversation ID")
     step_id: str = Field(..., description="Step ID to confirm")
@@ -66,7 +66,7 @@ class ConfirmStepRequest(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    """Request body for resuming a paused Edit mode task."""
+    """用于恢复 Edit 模式暂停任务的请求体。"""
 
     conversation_id: str = Field(..., description="Conversation ID")
     edited_results: list[dict[str, Any]] | None = Field(
@@ -76,17 +76,17 @@ class ResumeRequest(BaseModel):
 
 
 class HealthCheckRequest(BaseModel):
-    """Health check request."""
+    """健康检查请求。"""
 
     endpoint_name: str | None = None
     channel: str | None = None
 
 
 class HealthResult(BaseModel):
-    """Single endpoint health result."""
+    """单个端点健康结果。"""
 
     name: str
-    status: str  # healthy | degraded | unhealthy | unknown
+    status: str  # 健康 | 降级 | 不健康 | 未知
     latency_ms: float | None = None
     error: str | None = None
     error_category: str | None = None
@@ -97,7 +97,7 @@ class HealthResult(BaseModel):
 
 
 class ModelInfo(BaseModel):
-    """Available model/endpoint info."""
+    """可用模型/端点信息。"""
 
     name: str
     provider: str
@@ -107,7 +107,7 @@ class ModelInfo(BaseModel):
 
 
 class SkillInfoResponse(BaseModel):
-    """Skill information for the API."""
+    """API 的技能信息。"""
 
     name: str
     description: str

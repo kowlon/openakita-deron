@@ -14,14 +14,23 @@ from enum import Enum
 
 
 class MemoryType(Enum):
-    """记忆类型 (参考 Memori)"""
+    """记忆类型（企业级简化版）
 
-    FACT = "fact"  # 事实信息 (用户偏好、技术栈)
-    PREFERENCE = "preference"  # 用户偏好 (交互风格、代码风格)
-    SKILL = "skill"  # 学到的技能 (成功模式、解决方案)
-    CONTEXT = "context"  # 上下文信息 (项目背景、当前任务)
-    RULE = "rule"  # 规则约束 (禁止行为、安全边界)
-    ERROR = "error"  # 错误教训 (失败原因、避免重复)
+    保留类型:
+    - FACT: 事实信息（项目信息、技术栈）
+    - SKILL: 技能经验（成功模式、解决方案）
+    - RULE: 规则约束（禁止行为、安全边界）
+    - ERROR: 错误教训（失败原因、避免重复）
+
+    已移除:
+    - PREFERENCE: 用户偏好（消费者端功能）
+    - CONTEXT: 上下文信息（已由 TaskContext 替代）
+    """
+
+    FACT = "fact"  # 事实信息
+    SKILL = "skill"  # 技能经验
+    RULE = "rule"  # 规则约束
+    ERROR = "error"  # 错误教训
 
 
 class MemoryPriority(Enum):

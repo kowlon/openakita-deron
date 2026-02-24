@@ -1,15 +1,15 @@
 """
-记忆管理器 - 核心记忆系统
+记忆管理器 - 核心记忆系统（企业级简化版）
 
 功能:
-1. 协调实时提取和批量整理
-2. 管理 MEMORY.md 精华摘要
-3. 提供记忆注入策略（向量搜索 + 精华摘要）
-4. 自动触发记忆更新
+1. 管理 MEMORY.md 精华摘要
+2. 提供记忆注入策略（向量搜索 + 精华摘要）
+3. 会话管理
 
 注入策略:
 - 每次对话: 加载 MEMORY.md 精华 + 向量搜索相关记忆
-- 会话结束: 保存新记忆到 memories.json 和 ChromaDB
+
+注意：消费者端的 AI 提取和每日归纳功能已移除
 """
 
 import asyncio
@@ -22,15 +22,37 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .consolidator import MemoryConsolidator
-from .extractor import MemoryExtractor
 from .types import ConversationTurn, Memory, MemoryPriority, MemoryType
 from .vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
 
+def _deduplicate_memories(memories: list[Memory], existing: list[Memory]) -> list[Memory]:
+    """
+    去重合并记忆
+
+    Args:
+        memories: 新记忆列表
+        existing: 已有记忆列表
+
+    Returns:
+        去重后的新记忆列表
+    """
+    unique = []
+    existing_contents = {m.content.lower() for m in existing}
+
+    for memory in memories:
+        content_key = memory.content.lower()
+        if content_key not in existing_contents:
+            unique.append(memory)
+            existing_contents.add(content_key)
+
+    return unique
+
+
 class MemoryManager:
-    """记忆管理器"""
+    """记忆管理器（企业级简化版）"""
 
     def __init__(
         self,
@@ -45,7 +67,7 @@ class MemoryManager:
         Args:
             data_dir: 数据目录
             memory_md_path: MEMORY.md 文件路径
-            brain: LLM 大脑实例
+            brain: LLM 大脑实例（已废弃，保留参数兼容性）
             embedding_model: embedding 模型名称（可选）
             embedding_device: 设备 (cpu 或 cuda)
             model_download_source: 模型下载源 ("auto" | "huggingface" | "hf-mirror" | "modelscope")
@@ -59,9 +81,8 @@ class MemoryManager:
         # 确保 MEMORY.md 存在
         self._ensure_memory_md_exists()
 
-        # 子组件
-        self.extractor = MemoryExtractor(brain)
-        self.consolidator = MemoryConsolidator(data_dir, brain, self.extractor)
+        # 子组件（简化版）
+        self.consolidator = MemoryConsolidator(data_dir, brain)
 
         # 向量存储（延迟初始化，支持多源下载）
         self.vector_store = VectorStore(
@@ -91,15 +112,11 @@ class MemoryManager:
         # 确保父目录存在
         self.memory_md_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 创建默认 MEMORY.md
+        # 创建默认 MEMORY.md（企业级模板）
         default_content = """# Core Memory
 
-> Agent 核心记忆，每次对话都会加载。每日凌晨自动刷新。
+> Agent 核心记忆，每次对话都会加载。
 > 最后更新: {timestamp}
-
-## 用户偏好
-
-[待学习]
 
 ## 重要规则
 
@@ -189,7 +206,7 @@ class MemoryManager:
     def record_turn(
         self, role: str, content: str, tool_calls: list = None, tool_results: list = None
     ) -> None:
-        """记录对话轮次"""
+        """记录对话轮次（简化版：不再自动提取记忆）"""
         turn = ConversationTurn(
             role=role,
             content=content,
@@ -202,58 +219,14 @@ class MemoryManager:
         if self._current_session_id:
             self.consolidator.save_conversation_turn(self._current_session_id, turn)
 
-        # 实时提取 (只从用户消息)
-        # 使用 think_lightweight 优先走编译端点，不与主推理争抢 LLM 资源
-        if role == "user":
-            try:
-                import asyncio
-
-                async def _extract_and_add() -> None:
-                    try:
-                        logger.info("[Memory] Extraction started (compiler endpoint preferred)")
-                        memories = await self.extractor.extract_from_turn_with_ai(turn)
-                        for memory in memories:
-                            # add_memory 涉及文件 IO/向量库，放到线程避免阻塞 IM 主流程
-                            await asyncio.to_thread(self.add_memory, memory)
-                        if memories:
-                            logger.info(f"[Memory] Extraction completed: {len(memories)} memories saved")
-                        else:
-                            logger.debug("[Memory] Extraction completed: no memories to save")
-                    except Exception as e:
-                        # 完全隔离：记忆提取失败不影响主流程
-                        logger.warning(f"[Memory] Extraction failed (isolated): {e}")
-
-                loop = asyncio.get_running_loop()
-                loop.create_task(_extract_and_add())
-            except RuntimeError:
-                # 没有 running loop（同步/脚本模式），跳过实时提取，依赖每日归纳或任务完成提取
-                pass
-            except Exception as e:
-                logger.warning(f"[Memory] Extraction scheduling failed: {e}")
-
     def end_session(
         self, task_description: str = "", success: bool = True, errors: list = None
     ) -> None:
-        """结束会话"""
+        """结束会话（简化版：不再自动提取记忆）"""
         if not self._current_session_id:
             return
 
-        # 从任务完成结果提取记忆
-        tool_calls = []
-        for turn in self._session_turns:
-            tool_calls.extend(turn.tool_calls)
-
-        memories = self.extractor.extract_from_task_completion(
-            task_description=task_description,
-            success=success,
-            tool_calls=tool_calls,
-            errors=errors or [],
-        )
-
-        for memory in memories:
-            self.add_memory(memory)
-
-        logger.info(f"Ended session {self._current_session_id}: {len(memories)} memories extracted")
+        logger.info(f"Ended session {self._current_session_id}")
 
         self._current_session_id = None
         self._session_turns = []
@@ -261,8 +234,6 @@ class MemoryManager:
     # ==================== 记忆操作 ====================
 
     # 向量相似度阈值（余弦距离，越小越相似）
-    # 0.25 太宽松，容易把格式相似但内容不同的记录误判为重复
-    # 0.12 更严格，只有高度相似的内容才会被去重
     DUPLICATE_DISTANCE_THRESHOLD = 0.12
 
     # 常见的通用前缀（这些前缀会导致向量相似度虚高）
@@ -273,10 +244,6 @@ class MemoryManager:
         "系统自检发现：",
         "自检发现的典型问题模式：",
         "系统自检发现的典型问题模式：",
-        "用户偏好：",
-        "用户习惯：",
-        "学习到：",
-        "记住：",
     ]
 
     def _strip_common_prefix(self, content: str) -> str:
@@ -301,7 +268,7 @@ class MemoryManager:
         with self._memories_lock:
             # 1. 字符串去重检查（快速）
             existing = list(self._memories.values())
-            unique = self.extractor.deduplicate([memory], existing)
+            unique = _deduplicate_memories([memory], existing)
 
             if not unique:
                 logger.debug(f"Memory duplicate (string match): {memory.content}")
@@ -345,37 +312,6 @@ class MemoryManager:
 
         logger.debug(f"Added memory: {memory.id} - {memory.content}")
         return memory.id
-
-    async def check_duplicate_with_llm(self, new_content: str, existing_content: str) -> bool:
-        """
-        使用 LLM 判断两条记忆是否语义重复
-
-        Args:
-            new_content: 新记忆内容
-            existing_content: 已有记忆内容
-
-        Returns:
-            是否重复
-        """
-        if not self.brain:
-            return False
-
-        prompt = f"""判断这两条记忆是否表达相同或非常相似的意思：
-
-记忆1: {existing_content}
-记忆2: {new_content}
-
-如果意思基本相同（即使表述不同），回复: DUPLICATE
-如果意思明显不同，回复: DIFFERENT
-
-只回复 DUPLICATE 或 DIFFERENT，不要其他内容。"""
-
-        try:
-            response = await self.brain.think(prompt, max_tokens=20)
-            return "DUPLICATE" in response.content.upper()
-        except Exception as e:
-            logger.error(f"LLM duplicate check failed: {e}")
-            return False
 
     def get_memory(self, memory_id: str) -> Memory | None:
         """获取单条记忆"""
@@ -448,7 +384,7 @@ class MemoryManager:
         """
         获取要注入系统提示的记忆上下文
 
-        新策略（先查后答）:
+        策略:
         1. 加载 MEMORY.md 精华（必定包含）
         2. 向量搜索任务相关记忆（可选）
 
@@ -521,27 +457,20 @@ class MemoryManager:
         results.sort(key=lambda m: m.importance_score, reverse=True)
         return results[:limit]
 
-    # ==================== 批量整理 ====================
+    # ==================== 批量整理（简化版） ====================
 
     async def consolidate_daily(self) -> dict:
         """
-        每日批量整理
+        每日批量整理（简化版：仅清理历史）
 
-        适合在空闲时段 (如凌晨) 由定时任务调用
-        使用 DailyConsolidator 进行完整的归纳流程
+        注意：AI 自动归纳功能已移除
         """
-        from ..config import settings
-        from .daily_consolidator import DailyConsolidator
-
-        daily_consolidator = DailyConsolidator(
-            data_dir=self.data_dir,
-            memory_md_path=self.memory_md_path,
-            memory_manager=self,
-            brain=self.brain,
-            identity_dir=settings.identity_path,
-        )
-
-        return await daily_consolidator.consolidate_daily()
+        logger.info("Running memory cleanup (no AI consolidation)")
+        cleanup_result = self.consolidator.cleanup_history()
+        return {
+            "cleanup": cleanup_result,
+            "note": "AI consolidation removed in enterprise version",
+        }
 
     def _cleanup_expired_memories(self) -> int:
         """清理过期记忆"""

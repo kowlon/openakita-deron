@@ -53,7 +53,6 @@ class MemoryHandler:
 
         type_map = {
             "fact": MemoryType.FACT,
-            "preference": MemoryType.PREFERENCE,
             "skill": MemoryType.SKILL,
             "error": MemoryType.ERROR,
             "rule": MemoryType.RULE,
@@ -92,7 +91,6 @@ class MemoryHandler:
         if type_filter:
             type_map = {
                 "fact": MemoryType.FACT,
-                "preference": MemoryType.PREFERENCE,
                 "skill": MemoryType.SKILL,
                 "error": MemoryType.ERROR,
                 "rule": MemoryType.RULE,

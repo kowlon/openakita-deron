@@ -1,0 +1,932 @@
+{
+  "project": {
+    "name": "Enterprise Simplification",
+    "description": "OpenAkita 企业级精简项目 - 移除消费者端功能，保留企业级核心",
+    "version": "2.0.0",
+    "created_at": "2026-02-24",
+    "tech_stack": ["Python", "TypeScript"],
+    "reference_docs": [
+      "autonomous-coder/projects/enterprise-simplification/plan.md"
+    ]
+  },
+  "preservation_rules": {
+    "llm_registries": "全部保留，企业可能需要多种 LLM",
+    "debug_output": "全部保留，开发/排查必备",
+    "skills_mechanism": "保留加载器、注册表、运行机制",
+    "memory_context": "保留 enterprise 实现",
+    "agent_loop": "保留核心推理逻辑"
+  },
+  "features": [
+    {
+      "id": "SIM-001",
+      "category": "phase1-legacy",
+      "priority": "critical",
+      "description": "删除 Legacy Context 适配器",
+      "detailed_description": "删除 context/backends/legacy_adapter.py，这是基于 LLM 压缩的旧上下文系统",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查 legacy_adapter.py 的所有引用",
+          "command": "grep -r 'legacy_adapter' src/openakita/",
+          "verification": "无外部引用或仅为本文件"
+        },
+        {
+          "step": 2,
+          "action": "删除文件",
+          "command": "rm src/openakita/context/backends/legacy_adapter.py",
+          "verification": "文件不存在"
+        },
+        {
+          "step": 3,
+          "action": "更新 context/backends/__init__.py",
+          "verification": "无 LegacyContextBackend 导出"
+        },
+        {
+          "step": 4,
+          "action": "验证 enterprise 模块正常",
+          "command": "python -c 'from openakita.context.enterprise import EnterpriseContextManager'",
+          "verification": "导入成功"
+        }
+      ],
+      "files_affected": ["src/openakita/context/backends/legacy_adapter.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-002",
+      "category": "phase1-legacy",
+      "priority": "critical",
+      "description": "删除 Legacy Memory 适配器",
+      "detailed_description": "删除 memory/backends/legacy_adapter.py，这是基于向量搜索的旧记忆系统",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查引用",
+          "command": "grep -r 'LegacyMemoryBackend' src/openakita/"
+        },
+        {
+          "step": 2,
+          "action": "删除文件",
+          "command": "rm src/openakita/memory/backends/legacy_adapter.py"
+        },
+        {
+          "step": 3,
+          "action": "更新 __init__.py",
+          "verification": "无 LegacyMemoryBackend 导出"
+        },
+        {
+          "step": 4,
+          "action": "验证 enterprise 模块",
+          "command": "python -c 'from openakita.memory.enterprise import EnterpriseMemoryRouter'"
+        }
+      ],
+      "files_affected": ["src/openakita/memory/backends/legacy_adapter.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-003",
+      "category": "phase2-consumer",
+      "priority": "critical",
+      "description": "删除用户偏好提取器",
+      "detailed_description": "删除 memory/extractor.py，这是 AI 自动提取用户偏好的消费者端功能",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查引用",
+          "command": "grep -r 'from.*extractor' src/openakita/"
+        },
+        {
+          "step": 2,
+          "action": "删除文件",
+          "command": "rm src/openakita/memory/extractor.py"
+        },
+        {
+          "step": 3,
+          "action": "更新相关 import",
+          "verification": "无 extractor 导入错误"
+        }
+      ],
+      "files_affected": ["src/openakita/memory/extractor.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-004",
+      "category": "phase2-consumer",
+      "priority": "critical",
+      "description": "删除每日记忆归纳器",
+      "detailed_description": "删除 memory/daily_consolidator.py，这是凌晨定时归纳用户对话的消费者端功能",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查引用",
+          "command": "grep -r 'daily_consolidator' src/openakita/"
+        },
+        {
+          "step": 2,
+          "action": "删除文件",
+          "command": "rm src/openakita/memory/daily_consolidator.py"
+        },
+        {
+          "step": 3,
+          "action": "验证无导入错误",
+          "verification": "python -c 'from openakita.memory import MemoryManager' 成功"
+        }
+      ],
+      "files_affected": ["src/openakita/memory/daily_consolidator.py"],
+      "dependencies": ["SIM-003"],
+      "passes": false
+    },
+    {
+      "id": "SIM-005",
+      "category": "phase2-consumer",
+      "priority": "critical",
+      "description": "删除用户管理模块",
+      "detailed_description": "删除 sessions/user.py，这是跨平台用户绑定和偏好管理的消费者端功能",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查引用",
+          "command": "grep -r 'sessions.user' src/openakita/"
+        },
+        {
+          "step": 2,
+          "action": "删除文件",
+          "command": "rm src/openakita/sessions/user.py"
+        },
+        {
+          "step": 3,
+          "action": "更新 sessions/__init__.py",
+          "verification": "无 User 类导出"
+        }
+      ],
+      "files_affected": ["src/openakita/sessions/user.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-006",
+      "category": "phase2-consumer",
+      "priority": "critical",
+      "description": "移除 PREFERENCE MemoryType",
+      "detailed_description": "从 memory/types.py 中移除用户偏好相关的记忆类型",
+      "steps": [
+        {
+          "step": 1,
+          "action": "编辑 memory/types.py",
+          "code": "删除 PREFERENCE = 'preference' 和 CONTEXT = 'context'"
+        },
+        {
+          "step": 2,
+          "action": "检查引用",
+          "command": "grep -r 'MemoryType.PREFERENCE' src/openakita/"
+        },
+        {
+          "step": 3,
+          "action": "更新相关代码",
+          "verification": "无 PREFERENCE 引用错误"
+        }
+      ],
+      "files_affected": ["src/openakita/memory/types.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-007",
+      "category": "phase2-consumer",
+      "priority": "high",
+      "description": "删除 UserPreference 数据模型",
+      "detailed_description": "从 storage/models.py 中删除 UserPreference 数据类",
+      "steps": [
+        {
+          "step": 1,
+          "action": "编辑 storage/models.py",
+          "code": "删除 UserPreference 类定义"
+        },
+        {
+          "step": 2,
+          "action": "检查引用",
+          "command": "grep -r 'UserPreference' src/openakita/"
+        }
+      ],
+      "files_affected": ["src/openakita/storage/models.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-008",
+      "category": "phase2-consumer",
+      "priority": "high",
+      "description": "简化 config.py 移除 backend 选择",
+      "detailed_description": "移除 MemoryBackendConfig 和 ContextBackendConfig 中的 backend 选择逻辑",
+      "steps": [
+        {
+          "step": 1,
+          "action": "编辑 config.py",
+          "code": "移除 backend: Literal['legacy', 'enterprise'] 参数"
+        },
+        {
+          "step": 2,
+          "action": "简化类定义",
+          "code": "重命名为 MemoryConfig 和 ContextConfig"
+        },
+        {
+          "step": 3,
+          "action": "检查引用",
+          "command": "grep -r 'MemoryBackendConfig\\|ContextBackendConfig' src/openakita/"
+        }
+      ],
+      "files_affected": ["src/openakita/config.py"],
+      "dependencies": ["SIM-001", "SIM-002"],
+      "passes": false
+    },
+    {
+      "id": "SIM-009",
+      "category": "phase2-consumer",
+      "priority": "high",
+      "description": "清理 tool_filter.py persona/sticker",
+      "detailed_description": "从工具过滤中移除 persona 和 sticker 相关工具",
+      "steps": [
+        {
+          "step": 1,
+          "action": "编辑 core/tool_filter.py",
+          "code": "删除 persona 和 sticker 相关的工具过滤"
+        },
+        {
+          "step": 2,
+          "action": "验证文件语法正确",
+          "command": "python -m py_compile src/openakita/core/tool_filter.py"
+        }
+      ],
+      "files_affected": ["src/openakita/core/tool_filter.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-010",
+      "category": "phase2-consumer",
+      "priority": "high",
+      "description": "清理 reasoning_engine.py persona case",
+      "detailed_description": "移除 reasoning_engine.py 中 persona 相关的 case 处理",
+      "steps": [
+        {
+          "step": 1,
+          "action": "搜索 persona case",
+          "command": "grep -n 'case.*persona' src/openakita/core/reasoning_engine.py"
+        },
+        {
+          "step": 2,
+          "action": "删除相关 case 分支",
+          "verification": "无 persona case 分支"
+        },
+        {
+          "step": 3,
+          "action": "验证文件语法正确",
+          "command": "python -m py_compile src/openakita/core/reasoning_engine.py"
+        }
+      ],
+      "files_affected": ["src/openakita/core/reasoning_engine.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-011",
+      "category": "phase2-consumer",
+      "priority": "high",
+      "description": "清理 prompt/builder.py persona section",
+      "detailed_description": "移除 _build_persona_section 函数和相关逻辑",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除 _build_persona_section 函数",
+          "code": "删除整个函数定义"
+        },
+        {
+          "step": 2,
+          "action": "删除 persona_manager 参数",
+          "code": "从 build_system_prompt 签名中移除"
+        },
+        {
+          "step": 3,
+          "action": "删除调用代码块",
+          "code": "删除 if persona_manager: 代码块"
+        }
+      ],
+      "files_affected": ["src/openakita/prompt/builder.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-012",
+      "category": "phase3-im",
+      "priority": "high",
+      "description": "删除 QQ OneBot 适配器",
+      "detailed_description": "删除消费者端 QQ 机器人适配器",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除文件",
+          "command": "rm src/openakita/channels/adapters/onebot.py"
+        },
+        {
+          "step": 2,
+          "action": "更新 __init__.py",
+          "verification": "无 OneBotAdapter 导出"
+        }
+      ],
+      "files_affected": ["src/openakita/channels/adapters/onebot.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-013",
+      "category": "phase3-im",
+      "priority": "high",
+      "description": "删除 QQ 官方机器人适配器",
+      "detailed_description": "删除消费者端 QQ 官方机器人适配器",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除文件",
+          "command": "rm src/openakita/channels/adapters/qq_official.py"
+        },
+        {
+          "step": 2,
+          "action": "更新 __init__.py",
+          "verification": "无 QQOfficialAdapter 导出"
+        }
+      ],
+      "files_affected": ["src/openakita/channels/adapters/qq_official.py"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-014",
+      "category": "phase3-im",
+      "priority": "medium",
+      "description": "更新 channels/adapters/__init__.py",
+      "detailed_description": "确保只导出企业级通道适配器",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查当前导出",
+          "command": "cat src/openakita/channels/adapters/__init__.py"
+        },
+        {
+          "step": 2,
+          "action": "只保留企业级适配器",
+          "code": "FeishuAdapter, DingTalkAdapter, WeworkBotAdapter"
+        }
+      ],
+      "files_affected": ["src/openakita/channels/adapters/__init__.py"],
+      "dependencies": ["SIM-012", "SIM-013"],
+      "passes": false
+    },
+    {
+      "id": "SIM-015",
+      "category": "phase4-data",
+      "priority": "medium",
+      "description": "删除用户画像文件",
+      "detailed_description": "删除 identity/USER.md 及其示例文件",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除文件",
+          "command": "rm identity/USER.md identity/USER.md.example"
+        },
+        {
+          "step": 2,
+          "action": "检查代码引用",
+          "command": "grep -r 'USER.md' src/openakita/"
+        }
+      ],
+      "files_affected": ["identity/USER.md", "identity/USER.md.example"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-016",
+      "category": "phase4-data",
+      "priority": "medium",
+      "description": "删除用户数据和活人感反馈",
+      "detailed_description": "删除 data/user/ 目录和 proactive_feedback.json",
+      "steps": [
+        {
+          "step": 1,
+          "action": "删除用户数据目录",
+          "command": "rm -rf data/user/"
+        },
+        {
+          "step": 2,
+          "action": "删除活人感反馈",
+          "command": "rm data/proactive_feedback.json"
+        }
+      ],
+      "files_affected": ["data/user/", "data/proactive_feedback.json"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-017",
+      "category": "phase5-topdir",
+      "priority": "low",
+      "description": "删除顶层空 channels 目录",
+      "detailed_description": "删除顶层空的 channels/ 目录（实际实现在 src 下）",
+      "steps": [
+        {
+          "step": 1,
+          "action": "检查目录是否为空",
+          "command": "ls channels/"
+        },
+        {
+          "step": 2,
+          "action": "删除目录",
+          "command": "rm -rf channels/"
+        }
+      ],
+      "files_affected": ["channels/"],
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "SIM-018",
+      "category": "verification",
+      "priority": "critical",
+      "description": "最终验证测试",
+      "detailed_description": "运行所有验证测试确保精简后系统正常",
+      "steps": [
+        {
+          "step": 1,
+          "action": "验证无 legacy 引用",
+          "command": "grep -r 'legacy_adapter' src/openakita/ --include='*.py'",
+          "expected": "无结果（排除注释）"
+        },
+        {
+          "step": 2,
+          "action": "验证 LLM Registries 保留",
+          "command": "ls src/openakita/llm/registries/",
+          "expected": "所有 Provider 文件存在"
+        },
+        {
+          "step": 3,
+          "action": "验证调试目录保留",
+          "command": "ls data/llm_debug/",
+          "expected": "目录存在"
+        },
+        {
+          "step": 4,
+          "action": "验证核心模块导入",
+          "command": "python -c 'from openakita.core.agent import Agent; from openakita.context.enterprise import EnterpriseContextManager; from openakita.memory.enterprise import EnterpriseMemoryRouter'",
+          "expected": "导入成功"
+        },
+        {
+          "step": 5,
+          "action": "验证系统启动",
+          "command": "python -m openakita --help",
+          "expected": "显示帮助信息"
+        }
+      ],
+      "files_affected": [],
+      "dependencies": ["SIM-001", "SIM-002", "SIM-003", "SIM-004", "SIM-005", "SIM-006"],
+      "passes": false
+    }
+  ],
+  "webapp_test_plan": "详见 webapp-test-plan.md",
+  "backend_api_tests": [
+    {
+      "id": "API-001",
+      "category": "backend-health",
+      "priority": "critical",
+      "description": "后端健康检查测试",
+      "detailed_description": "验证后端服务正常运行",
+      "steps": [
+        {"step": 1, "action": "启动后端服务", "command": "python -m openakita --config config/enterprise.yaml"},
+        {"step": 2, "action": "测试健康检查接口", "command": "curl http://localhost:8000/health"},
+        {"step": 3, "action": "验证返回状态", "expected": "返回 200 OK"}
+      ],
+      "test_method": "curl",
+      "passes": false
+    },
+    {
+      "id": "API-002",
+      "category": "backend-sse",
+      "priority": "critical",
+      "description": "SSE 连接建立测试",
+      "detailed_description": "验证 SSE 连接可以正常建立并持续输出",
+      "steps": [
+        {"step": 1, "action": "建立 SSE 连接", "command": "curl -N http://localhost:8000/api/chat -X POST -H 'Content-Type: application/json' -d '{\"message\":\"test\"}'"},
+        {"step": 2, "action": "验证事件流", "expected": "持续输出 data: 事件"},
+        {"step": 3, "action": "检查连接状态", "expected": "连接保持，不中断"}
+      ],
+      "test_method": "curl",
+      "passes": false
+    },
+    {
+      "id": "API-003",
+      "category": "backend-sse",
+      "priority": "critical",
+      "description": "SSE 事件顺序测试",
+      "detailed_description": "验证 SSE 事件按正确顺序发送",
+      "steps": [
+        {"step": 1, "action": "编写 pytest 测试", "file": "tests/api/test_sse_events.py::test_sse_event_sequence"},
+        {"step": 2, "action": "运行测试", "command": "pytest tests/api/test_sse_events.py::test_sse_event_sequence -v"},
+        {"step": 3, "action": "验证事件顺序", "expected": "thinking_start → tool_call_start → tool_call_end → text_delta → done"}
+      ],
+      "test_method": "pytest",
+      "passes": false
+    },
+    {
+      "id": "API-004",
+      "category": "backend-timing",
+      "priority": "critical",
+      "description": "TTFT 时间记录测试",
+      "detailed_description": "验证后端正确记录 TTFT 时间",
+      "steps": [
+        {"step": 1, "action": "编写 pytest 测试", "file": "tests/api/test_sse_events.py::test_ttft_timing"},
+        {"step": 2, "action": "运行测试", "command": "pytest tests/api/test_sse_events.py::test_ttft_timing -v"},
+        {"step": 3, "action": "验证 TTFT < 5s", "expected": "TTFT 在合理范围内"}
+      ],
+      "test_method": "pytest",
+      "passes": false
+    },
+    {
+      "id": "API-005",
+      "category": "backend-events",
+      "priority": "high",
+      "description": "工具调用事件测试",
+      "detailed_description": "验证 tool_call_start 和 tool_call_end 事件成对出现",
+      "steps": [
+        {"step": 1, "action": "编写 pytest 测试", "file": "tests/api/test_sse_events.py::test_tool_call_events"},
+        {"step": 2, "action": "发送工具调用任务", "message": "帮我搜索曾德龙"},
+        {"step": 3, "action": "验证事件配对", "expected": "tool_call_start 和 tool_call_end 数量相等"}
+      ],
+      "test_method": "pytest",
+      "passes": false
+    },
+    {
+      "id": "API-006",
+      "category": "backend-events",
+      "priority": "high",
+      "description": "Artifact 事件测试",
+      "detailed_description": "验证文件生成后正确发送 artifact 事件",
+      "steps": [
+        {"step": 1, "action": "编写 pytest 测试", "file": "tests/api/test_sse_events.py::test_artifact_event"},
+        {"step": 2, "action": "发送文件生成任务", "message": "帮我生成一个测试PDF文件"},
+        {"step": 3, "action": "验证 artifact 事件", "expected": "收到 artifact_created 或类似事件"}
+      ],
+      "test_method": "pytest",
+      "passes": false
+    },
+    {
+      "id": "API-007",
+      "category": "backend-unit",
+      "priority": "high",
+      "description": "上下文管理单元测试",
+      "detailed_description": "验证 EnterpriseContextManager 功能正常",
+      "steps": [
+        {"step": 1, "action": "编写单元测试", "file": "tests/unit/test_context.py"},
+        {"step": 2, "action": "运行测试", "command": "pytest tests/unit/test_context.py -v"},
+        {"step": 3, "action": "验证通过", "expected": "所有测试通过"}
+      ],
+      "test_method": "pytest",
+      "passes": false
+    }
+  ],
+  "frontend_chrome_tests": [
+    {
+      "id": "WEB-001",
+      "category": "webapp-p0",
+      "priority": "critical",
+      "description": "TTFT 计时器锁定测试",
+      "detailed_description": "验证 TTFT 在首 token 输出后正确锁定，使用 Chrome DevTools Network 面板验证",
+      "test_method": "Chrome DevTools",
+      "test_env": {
+        "frontend": "http://localhost:5174",
+        "devtools": "Network → EventStream"
+      },
+      "steps": [
+        {"step": 1, "action": "打开 Chrome DevTools → Network 标签"},
+        {"step": 2, "action": "发送消息 '帮我查查今天天气'"},
+        {"step": 3, "action": "等待首 token，记录 TTFT 值（如 0.85s）"},
+        {"step": 4, "action": "等待后续步骤执行"},
+        {"step": 5, "action": "验证 TTFT 仍为 0.85s（不变）"},
+        {"step": 6, "action": "在 Network → EventStream 中验证首个 text_delta 时间戳"}
+      ],
+      "verification": {
+        "ui_check": "TTFT 显示值在后续步骤执行期间不变",
+        "network_check": "TTFT = text_delta时间 - 请求发起时间，与界面显示一致"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/components/Timer/ElapsedTimer.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-002",
+      "category": "webapp-p0",
+      "priority": "critical",
+      "description": "中间步骤显示测试",
+      "detailed_description": "验证复杂任务的步骤正确显示和过滤，使用 React DevTools 验证",
+      "test_method": "Chrome DevTools + React DevTools",
+      "test_env": {
+        "frontend": "http://localhost:5174",
+        "react_devtools": "Components → StepTimeline"
+      },
+      "steps": [
+        {"step": 1, "action": "发送消息 '帮我查查曾德龙是谁，并帮我写入到pdf文件里'"},
+        {"step": 2, "action": "观察步骤卡片，验证显示: 意图分析、网络搜索、PDF输出、总结"},
+        {"step": 3, "action": "验证不显示: read_file, create_plan, run_shell"},
+        {"step": 4, "action": "打开 React DevTools → Components → StepTimeline"},
+        {"step": 5, "action": "查看 steps 属性，验证 category 字段"},
+        {"step": 6, "action": "核心步骤 category='core'，内部步骤 category='internal'（被过滤）"}
+      ],
+      "verification": {
+        "ui_check": "显示 3-5 个核心步骤，无内部步骤",
+        "react_check": "StepTimeline 组件的 steps 数组中 internal 步骤被过滤"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/hooks/useChat.ts", "webapps/seeagent-webui/src/components/Step/StepTimeline.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-003",
+      "category": "webapp-p0",
+      "priority": "critical",
+      "description": "SSE 事件处理测试",
+      "detailed_description": "验证所有 SSE 事件类型正确处理，使用 Chrome DevTools Network 面板验证",
+      "test_method": "Chrome DevTools",
+      "steps": [
+        {"step": 1, "action": "打开 Chrome DevTools → Network → 筛选 EventStream"},
+        {"step": 2, "action": "发送消息，点击 SSE 连接 → EventStream 标签"},
+        {"step": 3, "action": "验证 thinking_start 事件 → 无步骤卡片显示"},
+        {"step": 4, "action": "验证 tool_call_start 事件 → 创建步骤卡片，状态=执行中"},
+        {"step": 5, "action": "验证 tool_call_end 事件 → 步骤状态=已完成，计时停止"},
+        {"step": 6, "action": "验证 text_delta 事件 → AI 回复文字追加"},
+        {"step": 7, "action": "验证 done 事件 → 总计时停止"}
+      ],
+      "verification": {
+        "event_to_ui": "每个事件触发正确的 UI 响应"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/hooks/useChat.ts"],
+      "passes": false
+    },
+    {
+      "id": "WEB-004",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "文件卡片组件测试",
+      "detailed_description": "验证 Artifact 组件正确显示和功能",
+      "test_method": "手动测试 + React DevTools",
+      "steps": [
+        {"step": 1, "action": "发送消息 '帮我生成一个PDF文件'"},
+        {"step": 2, "action": "等待任务完成，验证文件卡片显示"},
+        {"step": 3, "action": "验证文件图标 📄 红色"},
+        {"step": 4, "action": "验证文件名和大小正确显示"},
+        {"step": 5, "action": "点击下载按钮，验证文件下载成功"},
+        {"step": 6, "action": "点击预览按钮，验证 PDF 预览窗口打开"}
+      ],
+      "verification": {
+        "download_check": "文件下载到本地，可正常打开",
+        "preview_check": "PDF/图片可预览"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/components/Artifact/ArtifactCard.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-005",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "步骤计时器测试",
+      "detailed_description": "验证三种计时器（TTFT、总计时、步骤计时）正确工作",
+      "test_method": "Chrome DevTools + Console 监控",
+      "steps": [
+        {"step": 1, "action": "发送多步骤任务 '帮我搜索马斯克最新新闻，然后整理成PDF'"},
+        {"step": 2, "action": "验证 TTFT 在首 token 后锁定"},
+        {"step": 3, "action": "验证每个步骤独立计时，完成后锁定"},
+        {"step": 4, "action": "验证总计时在 done 后锁定"},
+        {"step": 5, "action": "在 Console 运行监控脚本，记录计时器值"}
+      ],
+      "console_script": "setInterval(() => { const timers = document.querySelectorAll('[data-testid*=\"timer\"]'); timers.forEach(t => console.log(t.dataset.testid, t.textContent)); }, 500);",
+      "files_affected": ["webapps/seeagent-webui/src/components/Timer/StepTimer.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-006",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "Edit 模式交互测试",
+      "detailed_description": "验证 Edit 模式完整交互流程",
+      "test_method": "手动测试",
+      "steps": [
+        {"step": 1, "action": "切换到 Edit 模式（顶部工具栏）"},
+        {"step": 2, "action": "发送消息 '查一下曾德龙是谁，然后写成pdf文件'"},
+        {"step": 3, "action": "等待步骤1完成，验证进入编辑状态（暂停）"},
+        {"step": 4, "action": "点击步骤卡片，右侧面板打开显示编辑界面"},
+        {"step": 5, "action": "取消勾选一个结果"},
+        {"step": 6, "action": "删除一个结果"},
+        {"step": 7, "action": "点击'添加自定义内容'，输入内容"},
+        {"step": 8, "action": "点击'确认，继续下一步'"},
+        {"step": 9, "action": "验证步骤2使用编辑后的数据"}
+      ],
+      "verification": {
+        "edit_flow": "完整编辑流程正常，结果传递正确"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/components/Step/EditableResultList.tsx", "webapps/seeagent-webui/src/components/Layout/DetailPanel.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-007",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "会话管理测试",
+      "detailed_description": "验证多轮对话和会话管理功能",
+      "test_method": "手动测试",
+      "steps": [
+        {"step": 1, "action": "点击'+'创建新会话"},
+        {"step": 2, "action": "发送消息 '你好'，等待 AI 回复"},
+        {"step": 3, "action": "验证会话摘要自动生成（左侧显示）"},
+        {"step": 4, "action": "发送第二条消息，验证消息追加（不替换）"},
+        {"step": 5, "action": "点击'+'创建第二个会话"},
+        {"step": 6, "action": "切换到第一个会话，验证历史对话加载"},
+        {"step": 7, "action": "删除第一个会话，验证从列表移除"}
+      ],
+      "verification": {
+        "session_summary": "摘要简洁，10-20字",
+        "message_append": "新消息追加到末尾"
+      },
+      "files_affected": ["webapps/seeagent-webui/src/components/Session/SessionList.tsx"],
+      "passes": false
+    }
+  ],
+  "automation_tests": [
+    {
+      "id": "AUTO-001",
+      "category": "automation",
+      "priority": "high",
+      "description": "后端单元测试",
+      "detailed_description": "编写 pytest 后端单元测试",
+      "test_files": ["tests/unit/test_context.py", "tests/api/test_sse_events.py"],
+      "run_command": "pytest tests/unit tests/api -v",
+      "passes": false
+    },
+    {
+      "id": "AUTO-002",
+      "category": "automation",
+      "priority": "medium",
+      "description": "前端单元测试",
+      "detailed_description": "编写 vitest 前端单元测试",
+      "test_files": ["webapps/seeagent-webui/tests/unit/stepFilter.test.ts", "webapps/seeagent-webui/tests/unit/timer.test.ts"],
+      "run_command": "cd webapps/seeagent-webui && pnpm test",
+      "passes": false
+    },
+    {
+      "id": "AUTO-003",
+      "category": "automation",
+      "priority": "medium",
+      "description": "E2E 测试",
+      "detailed_description": "编写 Playwright E2E 测试",
+      "test_files": ["webapps/seeagent-webui/tests/e2e/chat.spec.ts"],
+      "run_command": "cd webapps/seeagent-webui && pnpm test:e2e",
+      "passes": false
+    }
+  ],
+        {"step": 3, "action": "等待后续步骤执行"},
+        {"step": 4, "action": "验证 TTFT 值不变"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/components/Timer/ElapsedTimer.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-002",
+      "category": "webapp-p0",
+      "priority": "critical",
+      "description": "中间步骤显示测试",
+      "detailed_description": "验证复杂任务的执行步骤正确显示，内部步骤被过滤",
+      "steps": [
+        {"step": 1, "action": "发送复杂任务"},
+        {"step": 2, "action": "验证核心步骤显示"},
+        {"step": 3, "action": "验证内部步骤隐藏"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/hooks/useChat.ts", "webapps/seeagent-webui/src/components/Step/StepTimeline.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-003",
+      "category": "webapp-p0",
+      "priority": "critical",
+      "description": "SSE 事件处理测试",
+      "detailed_description": "验证所有 SSE 事件类型正确处理",
+      "steps": [
+        {"step": 1, "action": "监控 SSE 事件流"},
+        {"step": 2, "action": "验证事件顺序正确"},
+        {"step": 3, "action": "验证每个事件的 UI 响应"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/hooks/useChat.ts"],
+      "passes": false
+    },
+    {
+      "id": "WEB-004",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "文件卡片组件测试",
+      "detailed_description": "验证 Artifact 组件正确显示和下载功能",
+      "steps": [
+        {"step": 1, "action": "执行生成文件任务"},
+        {"step": 2, "action": "验证文件卡片显示正确"},
+        {"step": 3, "action": "验证下载功能"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/components/Artifact/ArtifactCard.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-005",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "步骤计时器测试",
+      "detailed_description": "验证每个步骤的独立计时正确",
+      "steps": [
+        {"step": 1, "action": "执行多步骤任务"},
+        {"step": 2, "action": "验证每步计时从0开始"},
+        {"step": 3, "action": "验证完成后停止计时"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/components/Timer/StepTimer.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-006",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "Edit 模式交互测试",
+      "detailed_description": "验证 Edit 模式下的完整交互流程",
+      "steps": [
+        {"step": 1, "action": "切换到 Edit 模式"},
+        {"step": 2, "action": "执行任务，验证步骤完成后暂停"},
+        {"step": 3, "action": "编辑结果，验证操作正常"},
+        {"step": 4, "action": "确认继续，验证结果传递"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/components/Step/EditableResultList.tsx", "webapps/seeagent-webui/src/components/Layout/DetailPanel.tsx"],
+      "passes": false
+    },
+    {
+      "id": "WEB-007",
+      "category": "webapp-p1",
+      "priority": "high",
+      "description": "会话管理测试",
+      "detailed_description": "验证多轮对话和会话管理功能",
+      "steps": [
+        {"step": 1, "action": "创建新会话"},
+        {"step": 2, "action": "验证会话摘要自动生成"},
+        {"step": 3, "action": "测试会话切换和删除"}
+      ],
+      "files_affected": ["webapps/seeagent-webui/src/components/Session/SessionList.tsx"],
+      "passes": false
+    }
+  ],
+  "implementation_order": [
+    "SIM-001", "SIM-002", "SIM-003", "SIM-004", "SIM-005",
+    "SIM-006", "SIM-007", "SIM-008", "SIM-009", "SIM-010", "SIM-011",
+    "SIM-012", "SIM-013", "SIM-014",
+    "SIM-015", "SIM-016",
+    "SIM-017",
+    "SIM-018",
+    "API-001", "API-002", "API-003", "API-004", "API-005", "API-006", "API-007",
+    "WEB-001", "WEB-002", "WEB-003",
+    "WEB-004", "WEB-005", "WEB-006", "WEB-007",
+    "AUTO-001", "AUTO-002", "AUTO-003"
+  ],
+  "deletion_summary": {
+    "total_simplification_tasks": 18,
+    "total_test_tasks": 17,
+    "files_to_delete": [
+      "src/openakita/context/backends/legacy_adapter.py",
+      "src/openakita/memory/backends/legacy_adapter.py",
+      "src/openakita/memory/extractor.py",
+      "src/openakita/memory/daily_consolidator.py",
+      "src/openakita/sessions/user.py",
+      "src/openakita/channels/adapters/onebot.py",
+      "src/openakita/channels/adapters/qq_official.py",
+      "identity/USER.md",
+      "identity/USER.md.example",
+      "data/proactive_feedback.json"
+    ],
+    "directories_to_delete": [
+      "data/user/",
+      "channels/"
+    ],
+    "code_modifications": [
+      "memory/types.py - 移除 PREFERENCE, CONTEXT 类型",
+      "storage/models.py - 删除 UserPreference 类",
+      "config.py - 移除 backend 选择逻辑",
+      "core/tool_filter.py - 移除 persona/sticker 过滤",
+      "core/reasoning_engine.py - 移除 persona case",
+      "prompt/builder.py - 移除 _build_persona_section"
+    ],
+    "preserved": [
+      "所有 LLM Registries",
+      "调试输出相关 (data/llm_debug, data/react_traces 等)",
+      "所有 Skills 目录（不删除任何技能）",
+      "Skills/MCP/Tools 加载机制",
+      "Memory/Context Enterprise 实现",
+      "Agent Loop 核心逻辑",
+      "企业级 IM 通道 (飞书, 钉钉, 企微)"
+    ]
+  }
+}

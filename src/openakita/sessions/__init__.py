@@ -4,12 +4,12 @@
 提供统一的会话管理能力:
 - Session: 会话对象，包含上下文和配置
 - SessionManager: 会话生命周期管理
-- UserManager: 跨平台用户管理
+
+注意：跨平台用户管理功能已移除（消费者端功能）
 """
 
 from .manager import SessionManager
 from .session import Session, SessionConfig, SessionContext, SessionState
-from .user import User, UserManager
 
 __all__ = [
     "Session",
@@ -17,6 +17,4 @@ __all__ = [
     "SessionContext",
     "SessionConfig",
     "SessionManager",
-    "User",
-    "UserManager",
 ]

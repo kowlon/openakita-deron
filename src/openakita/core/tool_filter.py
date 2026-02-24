@@ -83,8 +83,6 @@ ALWAYS_INCLUDE = {
 
 # 低频工具（通常不需要）
 RARELY_NEEDED = {
-    "switch_persona", "get_persona_profile", "create_persona",
-    "send_sticker", "get_sticker", "list_stickers",
     "schedule_task", "list_scheduled_tasks", "cancel_scheduled_task",
 }
 

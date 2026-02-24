@@ -2071,11 +2071,6 @@ class ReasoningEngine:
                 idx = args.get("step_index", "")
                 status = args.get("status", "")
                 return f"更新计划步骤 {idx} → {status}"
-            case "switch_persona":
-                preset = args.get("preset_name", "")
-                return f"切换角色: {preset}..."
-            case "get_persona_profile":
-                return "获取当前人格配置..."
             case "ask_user":
                 q = str(args.get("question") or "")[:40]
                 return f'向用户提问: "{q}"...'
@@ -2117,8 +2112,6 @@ class ReasoningEngine:
                 return "写入成功" if "成功" in r or "ok" in r.lower() or r_len < 100 else f"完成 ({r_len} 字符)"
             case "browser_screenshot":
                 return "截图已获取"
-            case "switch_persona":
-                return f"切换完成"
             case _:
                 if r_len < 100:
                     return r[:100]

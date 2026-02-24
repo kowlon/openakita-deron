@@ -1,12 +1,8 @@
 """
-Memory Backends Module
+记忆后端模块。
 
-This module provides backend adapters for the Memory system:
-- LegacyMemoryBackend: Wraps existing Memory class for backward compatibility
+注意：Legacy 后端已移除，请使用 openakita.memory.enterprise 模块。
+企业级实现：EnterpriseMemoryRouter
 """
 
-from openakita.memory.backends.legacy_adapter import LegacyMemoryBackend
-
-__all__ = [
-    "LegacyMemoryBackend",
-]
+__all__: list[str] = []

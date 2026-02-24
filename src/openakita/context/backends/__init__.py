@@ -1,9 +1,8 @@
 """
-Context Backends Module
+上下文后端模块。
 
-This module provides backend implementations for the Context system.
+注意：Legacy 后端已移除，请使用 openakita.context.enterprise 模块。
+企业级实现：EnterpriseContextManager
 """
 
-from openakita.context.backends.legacy_adapter import LegacyContextBackend
-
-__all__ = ["LegacyContextBackend"]
+__all__: list[str] = []

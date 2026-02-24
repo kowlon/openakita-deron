@@ -1,11 +1,11 @@
 """
-Enterprise Context Module
+企业级上下文模块
 
-This module provides enterprise-grade context components:
-- SystemContext: Permanent system-level context
-- TaskContext: Task-level context with lifecycle
-- ConversationContext: Conversation history with sliding window (CORE OPTIMIZATION)
-- EnterpriseContextManager: Unified context coordinator
+本模块提供企业级上下文组件：
+- SystemContext: 永久的系统级上下文
+- TaskContext: 具备生命周期的任务级上下文
+- ConversationContext: 带滑动窗口的对话历史（核心优化）
+- EnterpriseContextManager: 统一的上下文协调器
 """
 
 from openakita.context.enterprise.config import ContextConfig

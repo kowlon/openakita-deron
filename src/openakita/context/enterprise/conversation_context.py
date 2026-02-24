@@ -1,11 +1,11 @@
 """
-Conversation Context
+会话上下文
 
-Manages conversation history with sliding window trimming.
-This is the CORE OPTIMIZATION: uses deterministic sliding window
-instead of LLM compression, reducing latency from 2-5s to <10ms.
+使用滑动窗口裁剪来管理对话历史。
+这是核心优化：用确定性的滑动窗口替代 LLM 压缩，
+将延迟从 2-5 秒降低到 <10ms。
 
-Reference:
+参考：
 - docs/context-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -18,29 +18,28 @@ from typing import Any
 @dataclass
 class ConversationContext:
     """
-    Conversation Context - Sliding window message history.
+    会话上下文 - 滑动窗口消息历史。
 
-    This is the core optimization of the enterprise context system:
-    instead of using LLM compression (2-5 seconds latency), we use
-    a deterministic sliding window algorithm (<10ms latency).
+这是企业级上下文系统的核心优化：
+不使用 LLM 压缩（2-5 秒延迟），改为确定性滑动窗口算法（<10ms 延迟）。
 
-    Key features:
-    - No LLM calls for compression
-    - Deterministic sliding window based on round count
-    - Preserves tool_use/tool_result pairing
-    - Configurable limits
+关键特性：
+    - 压缩时不调用 LLM
+    - 基于轮次计数的确定性滑动窗口
+    - 保留 tool_use/tool_result 的配对关系
+    - 可配置上限
 
-    Attributes:
-        messages: List of conversation messages
-        max_rounds: Maximum conversation rounds to keep (default 20)
-        max_tokens: Token budget hint (not strictly enforced)
-        min_keep_rounds: Minimum rounds to always keep (default 4)
+属性：
+    messages: 对话消息列表
+    max_rounds: 保留的最大对话轮数（默认 20）
+    max_tokens: token 预算提示（不严格强制）
+    min_keep_rounds: 始终保留的最小轮数（默认 4）
 
-    Example:
-        ctx = ConversationContext()
-        ctx.add_message("user", "Hello")
-        ctx.add_message("assistant", "Hi there!")
-        messages = ctx.to_messages()
+    示例：
+    ctx = ConversationContext()
+    ctx.add_message("user", "你好")
+    ctx.add_message("assistant", "你好！")
+    messages = ctx.to_messages()
     """
 
     messages: list[dict[str, Any]] = field(default_factory=list)
@@ -50,14 +49,14 @@ class ConversationContext:
 
     def add_message(self, role: str, content: str | list[dict[str, Any]]) -> None:
         """
-        Add a message and apply sliding window if needed.
+        添加消息，并在需要时应用滑动窗口。
 
-        This is a synchronous, deterministic operation with no LLM calls.
-        Latency is guaranteed to be <10ms.
+        这是同步且确定性的操作，不调用 LLM。
+        延迟保证 <10ms。
 
-        Args:
-            role: Message role ("user", "assistant", "tool", "system")
-            content: Message content (string or content block list)
+        参数：
+            role: 消息角色（"user"、"assistant"、"tool"、"system"）
+            content: 消息内容（字符串或内容块列表）
         """
         self.messages.append({
             "role": role,
@@ -67,29 +66,28 @@ class ConversationContext:
 
     def _trim_if_needed(self) -> float:
         """
-        Apply sliding window trimming if round limit exceeded.
+        若超过轮数上限则执行滑动窗口裁剪。
 
-        This is the CORE OPTIMIZATION - a deterministic algorithm
-        instead of LLM compression.
+        这是核心优化：使用确定性算法替代 LLM 压缩。
 
-        Returns:
-            Time taken in milliseconds (for performance monitoring)
+        返回：
+            耗时（毫秒，用于性能监控）
         """
         start_time = time.perf_counter()
 
-        # Count rounds (user messages)
+        # 统计轮数（用户消息）
         rounds = self._count_rounds()
 
-        # If within limit, no trimming needed
+        # 若未超限，则无需裁剪
         if rounds <= self.max_rounds:
             return 0.0
 
-        # Find the boundary to trim to
-        # Keep the most recent max_rounds rounds
+        # 找到裁剪边界
+        # 保留最近 max_rounds 轮
         keep_from_round = rounds - self.max_rounds
         keep_from_index = self._find_round_boundary(keep_from_round)
 
-        # Trim messages
+        # 裁剪消息
         self.messages = self.messages[keep_from_index:]
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -97,25 +95,25 @@ class ConversationContext:
 
     def _count_rounds(self) -> int:
         """
-        Count conversation rounds.
+        统计对话轮数。
 
-        A round is defined as a user message and its response(s).
-        We count by the number of user messages.
+        一轮定义为一条用户消息及其响应。
+        按用户消息数量计数。
 
-        Returns:
-            Number of conversation rounds
+        返回：
+            对话轮数
         """
         return sum(1 for m in self.messages if m.get("role") == "user")
 
     def _find_round_boundary(self, target_round: int) -> int:
         """
-        Find the starting index for a specific round.
+        查找指定轮次的起始索引。
 
-        Args:
-            target_round: The round number to find (0-indexed from start)
+        参数：
+            target_round: 需要查找的轮次编号（从 0 开始）
 
-        Returns:
-            Index in messages list where that round begins
+        返回：
+            该轮在消息列表中的起始索引
         """
         round_count = 0
         for i, msg in enumerate(self.messages):
@@ -127,23 +125,23 @@ class ConversationContext:
 
     def to_messages(self) -> list[dict[str, Any]]:
         """
-        Get messages list for LLM API.
+        获取用于 LLM API 的消息列表。
 
-        Returns:
-            Copy of messages list
+        返回：
+            消息列表的副本
         """
         return self.messages.copy()
 
     def clear(self) -> None:
-        """Clear all messages."""
+        """清空所有消息。"""
         self.messages = []
 
     def get_stats(self) -> dict[str, Any]:
         """
-        Get conversation statistics.
+        获取会话统计信息。
 
-        Returns:
-            Dictionary with conversation stats
+        返回：
+            会话统计字典
         """
         return {
             "message_count": len(self.messages),
@@ -158,13 +156,13 @@ class ConversationContext:
 
     def estimate_tokens(self, chars_per_token: float = 4.0) -> int:
         """
-        Estimate total tokens in conversation.
+        估算对话总 token 数。
 
-        Args:
-            chars_per_token: Average characters per token
+        参数：
+            chars_per_token: 每个 token 的平均字符数
 
-        Returns:
-            Estimated token count
+        返回：
+            估算的 token 数量
         """
         total_chars = 0
         for msg in self.messages:
@@ -181,10 +179,10 @@ class ConversationContext:
 
     def has_tool_use(self) -> bool:
         """
-        Check if conversation contains tool use blocks.
+        检查对话是否包含工具调用块。
 
-        Returns:
-            True if any message has tool_use content
+        返回：
+            若存在 tool_use 内容则为 True
         """
         for msg in self.messages:
             content = msg.get("content")
@@ -196,10 +194,10 @@ class ConversationContext:
 
     def get_last_user_message(self) -> dict[str, Any] | None:
         """
-        Get the last user message.
+        获取最后一条用户消息。
 
-        Returns:
-            Last user message dict or None
+        返回：
+            最后一条用户消息字典或 None
         """
         for msg in reversed(self.messages):
             if msg.get("role") == "user":
@@ -208,10 +206,10 @@ class ConversationContext:
 
     def get_last_assistant_message(self) -> dict[str, Any] | None:
         """
-        Get the last assistant message.
+        获取最后一条助手消息。
 
-        Returns:
-            Last assistant message dict or None
+        返回：
+            最后一条助手消息字典或 None
         """
         for msg in reversed(self.messages):
             if msg.get("role") == "assistant":
@@ -219,7 +217,7 @@ class ConversationContext:
         return None
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
+        """转换为用于序列化的字典。"""
         return {
             "messages": self.messages,
             "max_rounds": self.max_rounds,
@@ -229,7 +227,7 @@ class ConversationContext:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ConversationContext":
-        """Create from dictionary."""
+        """从字典创建。"""
         return cls(
             messages=data.get("messages", []),
             max_rounds=data.get("max_rounds", 20),
@@ -238,15 +236,15 @@ class ConversationContext:
         )
 
     def __len__(self) -> int:
-        """Return message count."""
+        """返回消息数量。"""
         return len(self.messages)
 
     def __str__(self) -> str:
-        """String representation."""
+        """字符串表示。"""
         return f"ConversationContext(rounds={self._count_rounds()}, messages={len(self.messages)})"
 
     def __repr__(self) -> str:
-        """Detailed representation."""
+        """详细表示。"""
         return (
             f"ConversationContext(messages={len(self.messages)}, "
             f"rounds={self._count_rounds()}/{self.max_rounds})"

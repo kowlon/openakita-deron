@@ -72,12 +72,3 @@ class TaskRecord:
     result: Any = None
     error: str | None = None
     metadata: dict = field(default_factory=dict)
-
-
-@dataclass
-class UserPreference:
-    """用户偏好"""
-
-    key: str
-    value: Any
-    updated_at: datetime = field(default_factory=datetime.now)

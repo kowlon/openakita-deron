@@ -1,9 +1,9 @@
 """
-Memory Backend Protocol
+记忆后端协议
 
-Define abstract protocol interface for Memory backends (Legacy/Enterprise).
+定义记忆后端（Legacy/Enterprise）的抽象协议接口。
 
-Reference:
+参考：
 - docs/memory-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -14,49 +14,48 @@ from typing import Any, Protocol, runtime_checkable
 @runtime_checkable
 class MemoryBackend(Protocol):
     """
-    Memory Backend Protocol.
+    记忆后端协议。
 
-    This is an abstract protocol defining the interface for Memory systems.
-    Supports multiple backend implementations:
-    - LegacyMemoryBackend: Wraps existing MemoryManager for backward compatibility
-    - EnterpriseMemoryRouter: Enterprise three-layer storage implementation
+这是定义记忆系统接口的抽象协议。
+支持多种后端实现：
+    - LegacyMemoryBackend: 包装现有 MemoryManager 以向后兼容
+    - EnterpriseMemoryRouter: 企业级三层存储实现
 
-    Example:
-        def process_with_memory(backend: MemoryBackend):
-            backend.start_task("task-001", "tenant-001", "search", "Search task")
-            context = await backend.get_injection_context("task-001", "search", "query")
-            backend.end_task("task-001")
+示例：
+    def process_with_memory(backend: MemoryBackend):
+        backend.start_task("task-001", "tenant-001", "search", "搜索任务")
+        context = await backend.get_injection_context("task-001", "search", "query")
+        backend.end_task("task-001")
     """
 
     async def get_injection_context(
         self, task_id: str, task_type: str, query: str
     ) -> str:
         """
-        Get memory context for injection into system prompt.
+        获取用于注入系统提示词的记忆上下文。
 
-        This is the core read method for the Memory system. Returns a formatted
-        context string that can be directly injected into the LLM system prompt.
+        这是记忆系统的核心读取方法。返回可直接注入 LLM 系统提示词的格式化上下文字符串。
 
-        For Enterprise backend, the return includes:
-        1. System Rules - permanent business constraints
-        2. Task Context - step summaries and key variables for current task
-        3. Skill Cache - skill patterns matching task type (optional)
+        对于 Enterprise 后端，返回内容包括：
+        1. 系统规则 - 永久业务约束
+        2. 任务上下文 - 当前任务的步骤摘要与关键变量
+        3. 技能缓存 - 匹配任务类型的技能模式（可选）
 
-        Args:
-            task_id: Unique task identifier for associating task context
-            task_type: Task type (e.g., "search", "analysis", "generation")
-                      for matching skill cache
-            query: User query content for semantic matching (used by Legacy backend)
+        参数：
+            task_id: 关联任务上下文的任务唯一标识
+            task_type: 任务类型（例如 "search"、"analysis"、"generation"）
+                      用于匹配技能缓存
+            query: 用于语义匹配的用户查询内容（Legacy 后端使用）
 
-        Returns:
-            str: Formatted context string for system prompt injection.
-                 Returns empty string if no relevant context.
+        返回：
+            str: 用于注入系统提示词的格式化上下文字符串。
+                 若无相关上下文则返回空字符串。
 
-        Example:
+        示例：
             context = await backend.get_injection_context(
                 task_id="task-001",
                 task_type="search",
-                query="Who is John Doe"
+                query="John Doe 是谁"
             )
         """
         ...
@@ -70,29 +69,29 @@ class MemoryBackend(Protocol):
         variables: dict[str, Any],
     ) -> None:
         """
-        Record step completion.
+        记录步骤完成情况。
 
-        Called when Agent completes a step. The recorded content is used for:
-        1. Building task context (for reference by subsequent steps)
-        2. Generating step summaries (for context injection)
-        3. Extracting key variables (for task tracking)
+        当 Agent 完成步骤时调用。记录内容用于：
+        1. 构建任务上下文（供后续步骤参考）
+        2. 生成步骤摘要（用于上下文注入）
+        3. 提取关键变量（用于任务跟踪）
 
-        Note: This is "rule-based write" mode, no AI auto-extraction needed,
-        caller explicitly passes in values.
+        注意：这是“规则写入”模式，无需 AI 自动提取，
+        调用方显式传入值。
 
-        Args:
-            task_id: Unique task identifier
-            step_id: Unique step identifier
-            step_name: Step name (e.g., "Web Search", "Data Organization")
-            summary: Step completion summary (recommended under 100 chars)
-            variables: Key variables extracted/produced by this step
+        参数：
+            task_id: 任务唯一标识
+            step_id: 步骤唯一标识
+            step_name: 步骤名称（例如 "网页搜索"、"数据整理"）
+            summary: 步骤完成摘要（建议少于 100 字符）
+            variables: 本步骤提取/产出的关键变量
 
-        Example:
+        示例：
             backend.record_step_completion(
                 task_id="task-001",
                 step_id="step-001",
-                step_name="Web Search",
-                summary="Search completed, found 5 relevant results",
+                step_name="网页搜索",
+                summary="搜索完成，找到 5 条相关结果",
                 variables={"query": "John Doe", "result_count": 5}
             )
         """
@@ -107,37 +106,36 @@ class MemoryBackend(Protocol):
         resolution: str | None,
     ) -> None:
         """
-        Record error.
+        记录错误。
 
-        Called when a step fails or encounters an exception. The recorded error
-        is used for:
-        1. Error tracking and debugging
-        2. Generating error reports
-        3. Reference by subsequent steps for known errors
+        当步骤失败或出现异常时调用。记录的错误用于：
+        1. 错误跟踪与调试
+        2. 生成错误报告
+        3. 供后续步骤参考已知错误
 
-        Args:
-            task_id: Unique task identifier
-            step_id: ID of the step where error occurred
-            error_type: Error type (e.g., "NetworkError", "TimeoutError")
-            error_message: Detailed error message
-            resolution: Resolution if resolved, None if unresolved
+        参数：
+            task_id: 任务唯一标识
+            step_id: 发生错误的步骤 ID
+            error_type: 错误类型（例如 "NetworkError"、"TimeoutError"）
+            error_message: 详细错误信息
+            resolution: 若已解决则为解决方式，未解决则为 None
 
-        Example:
+        示例：
             backend.record_error(
                 task_id="task-001",
                 step_id="step-002",
                 error_type="NetworkError",
-                error_message="Request timeout, connection failed",
-                resolution=None  # Unresolved
+                error_message="请求超时，连接失败",
+                resolution=None  # 未解决
             )
 
-            # Update after successful retry
+            # 成功重试后更新
             backend.record_error(
                 task_id="task-001",
                 step_id="step-002",
                 error_type="NetworkError",
-                error_message="Request timeout",
-                resolution="Retry succeeded after increasing timeout"
+                error_message="请求超时",
+                resolution="提高超时时间后重试成功"
             )
         """
         ...
@@ -146,71 +144,71 @@ class MemoryBackend(Protocol):
         self, task_id: str, tenant_id: str, task_type: str, description: str
     ) -> None:
         """
-        Start a task.
+        启动任务。
 
-        Called when starting a new task. This will:
-        1. Create task context (for Enterprise backend)
-        2. Initialize task-related storage structures
-        3. Set TTL (for backends supporting expiration)
+        启动新任务时调用，将会：
+        1. 创建任务上下文（Enterprise 后端）
+        2. 初始化与任务相关的存储结构
+        3. 设置 TTL（支持过期的后端）
 
-        Args:
-            task_id: Unique task identifier
-            tenant_id: Tenant ID for multi-tenant isolation
-            task_type: Task type (e.g., "search", "analysis", "generation")
-            description: Task description briefly stating the goal
+        参数：
+            task_id: 任务唯一标识
+            tenant_id: 多租户隔离的租户 ID
+            task_type: 任务类型（例如 "search"、"analysis"、"generation"）
+            description: 简要描述任务目标
 
-        Example:
+        示例：
             backend.start_task(
                 task_id="task-001",
                 tenant_id="tenant-001",
                 task_type="search",
-                description="Search for John Doe and create a summary"
+                description="搜索 John Doe 并生成摘要"
             )
         """
         ...
 
     def end_task(self, task_id: str) -> None:
         """
-        End a task.
+        结束任务。
 
-        Called when task execution completes or aborts. This will:
-        1. Mark task as ended
-        2. Clean up task context (for Enterprise backend, task-level storage released)
-        3. Archive task records (if needed)
+        任务完成或中止时调用，将会：
+        1. 标记任务结束
+        2. 清理任务上下文（Enterprise 后端释放任务级存储）
+        3. 归档任务记录（如需要）
 
-        Note: After calling this method, the task context will no longer be
-        accessible (unless there is an archiving mechanism).
+        注意：调用该方法后，任务上下文将不再可访问
+        （除非存在归档机制）。
 
-        Args:
-            task_id: Unique task identifier
+        参数：
+            task_id: 任务唯一标识
 
-        Example:
-            # After task completes
+        示例：
+            # 任务完成后
             backend.end_task("task-001")
         """
         ...
 
     def get_stats(self, task_id: str) -> dict[str, Any]:
         """
-        Get statistics.
+        获取统计信息。
 
-        Returns task statistics for monitoring and debugging.
+        返回任务统计信息，用于监控与调试。
 
-        Args:
-            task_id: Unique task identifier
+        参数：
+            task_id: 任务唯一标识
 
-        Returns:
-            dict: Statistics dictionary with fields (specific fields depend on backend):
-                - step_count: Number of completed steps
-                - error_count: Number of errors
-                - variable_count: Number of variables
-                - context_size: Context size in characters
-                - created_at: Task creation time
-                - updated_at: Last update time
+        返回：
+            dict：统计信息字典（具体字段因后端而异）：
+                - step_count: 已完成步骤数
+                - error_count: 错误数量
+                - variable_count: 变量数量
+                - context_size: 上下文字符数
+                - created_at: 任务创建时间
+                - updated_at: 最近更新时间
 
-        Example:
+        示例：
             stats = backend.get_stats("task-001")
-            print(f"Completed {stats['step_count']} steps")
-            print(f"Encountered {stats['error_count']} errors")
+            print(f"已完成 {stats['step_count']} 步")
+            print(f"遇到 {stats['error_count']} 个错误")
         """
         ...

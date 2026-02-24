@@ -1,11 +1,10 @@
 """
-Task Context
+任务上下文
 
-Manages task-level context for context building. This is focused on
-generating context for LLM prompts, distinct from the memory module's
-TaskMemory which is focused on storage.
+管理用于构建上下文的任务级信息，重点是为 LLM 提示词生成上下文，
+与记忆模块中偏向存储的 TaskMemory 相区分。
 
-Reference:
+参考：
 - docs/context-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -18,27 +17,27 @@ from typing import Any
 @dataclass
 class TaskContext:
     """
-    Task Context - Task-level context for prompt building.
+    任务上下文 - 用于构建提示词的任务级上下文。
 
-    Contains task definition, step summaries, and key variables.
-    Used by EnterpriseContextManager to build the task layer of context.
+    包含任务定义、步骤摘要和关键变量。
+    由 EnterpriseContextManager 用于构建任务层上下文。
 
-    Lifecycle:
-    - Created when task starts
-    - Updated as steps complete
-    - Destroyed when task ends
+    生命周期：
+    - 任务开始时创建
+    - 步骤完成时更新
+    - 任务结束时销毁
 
-    Attributes:
-        task_id: Unique task identifier
-        tenant_id: Tenant ID for multi-tenant isolation
-        task_type: Type of task (e.g., "search", "analysis")
-        task_description: Brief description of task goal
-        step_summaries: List of step completion summaries (max 20)
-        key_variables: Key variables extracted during task (max 50)
-        current_step: Current step number
-        total_steps: Total expected steps (0 if unknown)
-        created_at: Task creation timestamp
-        updated_at: Last update timestamp
+    属性：
+        task_id: 任务唯一标识
+        tenant_id: 多租户隔离的租户 ID
+        task_type: 任务类型（如 "search"、"analysis"）
+        task_description: 任务目标的简要描述
+        step_summaries: 步骤完成摘要列表（最多 20 条）
+        key_variables: 任务过程中的关键变量（最多 50 项）
+        current_step: 当前步骤编号
+        total_steps: 预计总步骤数（未知则为 0）
+        created_at: 任务创建时间戳
+        updated_at: 最后更新时间戳
     """
 
     task_id: str
@@ -52,26 +51,26 @@ class TaskContext:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
-    # Constraints
+    # 约束
     MAX_STEP_SUMMARIES = 20
     MAX_KEY_VARIABLES = 50
     MAX_TOKENS = 16000
 
     def add_step_summary(self, step_name: str, summary: str) -> None:
         """
-        Add a step summary with sliding window limit.
+        添加步骤摘要（带滑动窗口限制）。
 
-        Args:
-            step_name: Name of the step
-            summary: Brief summary of what was accomplished
+        参数：
+            step_name: 步骤名称
+            summary: 完成内容的简要摘要
         """
-        # Truncate summary to 100 chars
+        # 将摘要截断到 100 字符
         truncated = summary[:100] if len(summary) > 100 else summary
         entry = f"[{step_name}] {truncated}"
 
         self.step_summaries.append(entry)
 
-        # Enforce sliding window limit
+        # 强制滑动窗口限制
         if len(self.step_summaries) > self.MAX_STEP_SUMMARIES:
             self.step_summaries = self.step_summaries[-self.MAX_STEP_SUMMARIES:]
 
@@ -80,13 +79,13 @@ class TaskContext:
 
     def add_variable(self, key: str, value: Any) -> None:
         """
-        Add a key variable.
+        添加关键变量。
 
-        Args:
-            key: Variable name
-            value: Variable value
+        参数：
+            key: 变量名
+            value: 变量值
         """
-        # If at limit and adding new key, remove oldest
+        # 达到上限且新增 key 时，移除最早条目
         if (
             len(self.key_variables) >= self.MAX_KEY_VARIABLES
             and key not in self.key_variables
@@ -99,43 +98,43 @@ class TaskContext:
 
     def add_variables(self, variables: dict[str, Any]) -> None:
         """
-        Add multiple variables.
+        添加多个变量。
 
-        Args:
-            variables: Dictionary of variables to add
+        参数：
+            variables: 要添加的变量字典
         """
         for key, value in variables.items():
             self.add_variable(key, value)
 
     def to_prompt(self) -> str:
         """
-        Generate task context prompt string.
+        生成任务上下文提示词字符串。
 
-        Returns:
-            Formatted string for injection into system prompt.
+        返回：
+            用于注入系统提示词的格式化字符串。
         """
         parts = []
 
-        # Task description
+        # 任务描述
         parts.append(f"# Current Task\n{self.task_description}")
 
-        # Progress indicator
+        # 进度指示
         if self.total_steps > 0:
             parts.append(f"\nProgress: Step {self.current_step}/{self.total_steps}")
         elif self.current_step > 0:
             parts.append(f"\nProgress: Step {self.current_step}")
 
-        # Step summaries
+        # 步骤摘要
         if self.step_summaries:
             parts.append("\n# Completed Steps")
             for i, summary in enumerate(self.step_summaries, 1):
                 parts.append(f"{i}. {summary}")
 
-        # Key variables
+        # 关键变量
         if self.key_variables:
             parts.append("\n# Key Variables")
             for key, value in self.key_variables.items():
-                # Truncate long values
+                # 截断过长的值
                 value_str = str(value)
                 if len(value_str) > 100:
                     value_str = value_str[:100] + "..."
@@ -145,31 +144,31 @@ class TaskContext:
 
     def estimate_tokens(self, chars_per_token: float = 4.0) -> int:
         """
-        Estimate token count for task context.
+        估算任务上下文的 token 数量。
 
-        Args:
-            chars_per_token: Average characters per token
+        参数：
+            chars_per_token: 每个 token 的平均字符数
 
-        Returns:
-            Estimated token count
+        返回：
+            估算的 token 数量
         """
         return int(len(self.to_prompt()) / chars_per_token)
 
     def is_within_budget(self) -> bool:
         """
-        Check if context is within token budget.
+        检查上下文是否在 token 预算内。
 
-        Returns:
-            True if estimated tokens <= MAX_TOKENS
+        返回：
+            若估算 token 数 <= MAX_TOKENS 则为 True
         """
         return self.estimate_tokens() <= self.MAX_TOKENS
 
     def get_stats(self) -> dict[str, Any]:
         """
-        Get statistics about the task context.
+        获取任务上下文的统计信息。
 
-        Returns:
-            Dictionary with task statistics
+        返回：
+            任务统计信息字典
         """
         return {
             "task_id": self.task_id,
@@ -186,7 +185,7 @@ class TaskContext:
         }
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
+        """转换为用于序列化的字典。"""
         return {
             "task_id": self.task_id,
             "tenant_id": self.tenant_id,
@@ -202,7 +201,7 @@ class TaskContext:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TaskContext":
-        """Create from dictionary."""
+        """从字典创建。"""
         return cls(
             task_id=data["task_id"],
             tenant_id=data["tenant_id"],
@@ -225,11 +224,11 @@ class TaskContext:
         )
 
     def __str__(self) -> str:
-        """String representation."""
+        """字符串表示。"""
         return f"TaskContext({self.task_id}, type={self.task_type}, steps={len(self.step_summaries)})"
 
     def __repr__(self) -> str:
-        """Detailed representation."""
+        """详细表示。"""
         return (
             f"TaskContext(task_id='{self.task_id}', tenant_id='{self.tenant_id}', "
             f"task_type='{self.task_type}', steps={len(self.step_summaries)}, "

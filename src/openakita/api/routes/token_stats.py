@@ -1,11 +1,11 @@
 """
-Token usage statistics API endpoints.
+Token 使用统计 API 端点。
 
-GET  /api/stats/tokens/summary   — aggregated stats by dimension
-GET  /api/stats/tokens/timeline  — time series for charts
-GET  /api/stats/tokens/sessions  — per-session breakdown
-GET  /api/stats/tokens/total     — grand total
-GET  /api/stats/tokens/context   — current context size + limit
+GET  /api/stats/tokens/summary   — 按维度汇总统计
+GET  /api/stats/tokens/timeline  — 图表用时间序列
+GET  /api/stats/tokens/sessions  — 按会话拆分
+GET  /api/stats/tokens/total     — 总计
+GET  /api/stats/tokens/context   — 当前上下文大小与上限
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _db_instance: Database | None = None
 
 
 async def _get_db() -> Database | None:
-    """Lazy-init a shared Database instance for stats queries."""
+    """延迟初始化用于统计查询的共享 Database 实例。"""
     global _db_instance
     if _db_instance is None:
         _db_instance = Database()
@@ -39,7 +39,7 @@ def _parse_range(
     end: str | None,
     period: str | None,
 ) -> tuple[datetime, datetime]:
-    """Resolve time range from explicit start/end or preset period."""
+    """根据显式起止时间或预设周期解析时间范围。"""
     now = datetime.now()
     if start and end:
         return datetime.fromisoformat(start), datetime.fromisoformat(end)
@@ -138,7 +138,7 @@ async def total(
 
 @router.get("/context")
 async def context(request: Request):
-    """Return the current session's context token usage and limit."""
+    """返回当前会话的上下文 token 使用量与上限。"""
     agent = getattr(request.app.state, "agent", None)
     actual = getattr(agent, "_local_agent", agent) if agent else None
     if actual is None:

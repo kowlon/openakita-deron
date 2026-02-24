@@ -1,7 +1,7 @@
 """
-Context Module
+上下文模块。
 
-This module provides context management for the Agent system.
+该模块为 Agent 系统提供上下文管理能力。
 """
 
 from openakita.context.protocol import ContextBackend

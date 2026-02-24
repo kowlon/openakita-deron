@@ -1,12 +1,12 @@
 """
-Enterprise Context Manager
+企业级上下文管理器
 
-Unified context manager that coordinates the three context layers:
-1. SystemContext - Permanent (identity, rules, tools)
-2. TaskContext - Task lifecycle (step summaries, variables)
-3. ConversationContext - Sliding window (message history)
+统一的上下文管理器，负责协调三层上下文：
+1. SystemContext - 永久层（身份、规则、工具）
+2. TaskContext - 任务生命周期层（步骤摘要、变量）
+3. ConversationContext - 滑动窗口层（消息历史）
 
-Reference:
+参考：
 - docs/context-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -21,53 +21,52 @@ from openakita.context.enterprise.task_context import TaskContext
 
 class EnterpriseContextManager:
     """
-    Enterprise Context Manager - Unified context coordinator.
+    企业级上下文管理器 - 统一的上下文协调器。
 
-    Manages three layers of context:
-    - SystemContext: Permanent, initialized once at startup
-    - TaskContext: Per-task lifecycle, created/destroyed with tasks
-    - ConversationContext: Per-session, sliding window
+管理三层上下文：
+    - SystemContext: 永久层，启动时初始化一次
+    - TaskContext: 任务级生命周期，随任务创建/销毁
+    - ConversationContext: 会话级滑动窗口
 
-    This manager provides the build_context() method that assembles
-    all three layers into the format needed for LLM API calls.
+该管理器提供 build_context() 方法，将三层内容组装为 LLM API 所需格式。
 
-    Example:
-        config = ContextConfig(max_conversation_rounds=20)
-        manager = EnterpriseContextManager(config)
+示例：
+    config = ContextConfig(max_conversation_rounds=20)
+    manager = EnterpriseContextManager(config)
 
-        # Initialize system context (once at startup)
-        manager.initialize(
-            identity="I am a helpful assistant",
-            rules=["Be helpful", "Be safe"],
-            tools_manifest="search, calculator"
-        )
+    # 初始化系统上下文（启动时一次）
+    manager.initialize(
+        identity="我是一个有帮助的助手",
+        rules=["保持有帮助", "确保安全"],
+        tools_manifest="search, calculator"
+    )
 
-        # Start a task
-        manager.start_task("task-001", "tenant-001", "search", "Search for info")
+    # 启动任务
+    manager.start_task("task-001", "tenant-001", "search", "搜索信息")
 
-        # Add conversation
-        manager.add_message("session-001", "user", "Hello")
+    # 添加对话
+    manager.add_message("session-001", "user", "你好")
 
-        # Build context for LLM
-        system_prompt, messages = manager.build_context("task-001", "session-001")
+    # 构建用于 LLM 的上下文
+    system_prompt, messages = manager.build_context("task-001", "session-001")
 
-        # End task
-        manager.end_task("task-001")
+    # 结束任务
+    manager.end_task("task-001")
     """
 
     def __init__(self, config: ContextConfig | None = None):
         """
-        Initialize the context manager.
+        初始化上下文管理器。
 
-        Args:
-            config: Configuration object. Uses defaults if not provided.
+        参数：
+            config: 配置对象。未提供则使用默认值。
         """
         self.config = config or ContextConfig()
         self.system_ctx: SystemContext | None = None
         self.task_contexts: dict[str, TaskContext] = {}
         self.conversation_contexts: dict[str, ConversationContext] = {}
 
-    # ========== Initialization ==========
+    # ========== 初始化 ==========
 
     def initialize(
         self,
@@ -76,14 +75,14 @@ class EnterpriseContextManager:
         tools_manifest: str | None = None,
     ) -> None:
         """
-        Initialize system context.
+        初始化系统上下文。
 
-        Should be called once at application startup.
+        应在应用启动时调用一次。
 
-        Args:
-            identity: Agent identity description
-            rules: List of behavioral rules
-            tools_manifest: Description of available tools
+        参数：
+            identity: Agent 身份描述
+            rules: 行为规则列表
+            tools_manifest: 可用工具描述
         """
         self.system_ctx = SystemContext(
             identity=identity,
@@ -92,7 +91,7 @@ class EnterpriseContextManager:
             max_tokens=self.config.max_system_tokens,
         )
 
-    # ========== Task Management ==========
+    # ========== 任务管理 ==========
 
     def start_task(
         self,
@@ -103,17 +102,17 @@ class EnterpriseContextManager:
         total_steps: int = 0,
     ) -> TaskContext:
         """
-        Start a new task context.
+        启动新的任务上下文。
 
-        Args:
-            task_id: Unique task identifier
-            tenant_id: Tenant ID for multi-tenant isolation
-            task_type: Type of task
-            description: Task description/goal
-            total_steps: Expected number of steps (0 if unknown)
+        参数：
+            task_id: 任务唯一标识
+            tenant_id: 多租户隔离的租户 ID
+            task_type: 任务类型
+            description: 任务描述/目标
+            total_steps: 预计步骤数量（未知则为 0）
 
-        Returns:
-            Created TaskContext
+        返回：
+            创建的 TaskContext
         """
         ctx = TaskContext(
             task_id=task_id,
@@ -127,17 +126,17 @@ class EnterpriseContextManager:
 
     def end_task(self, task_id: str) -> bool:
         """
-        End a task and clean up its context.
+        结束任务并清理其上下文。
 
-        Args:
-            task_id: Task identifier
+        参数：
+            task_id: 任务标识
 
-        Returns:
-            True if task was found and removed
+        返回：
+            若找到并移除任务则为 True
         """
         if task_id in self.task_contexts:
             del self.task_contexts[task_id]
-            # Clean up associated conversation contexts
+            # 清理关联的会话上下文
             to_remove = [
                 sid
                 for sid in self.conversation_contexts
@@ -150,13 +149,13 @@ class EnterpriseContextManager:
 
     def get_task(self, task_id: str) -> TaskContext | None:
         """
-        Get task context by ID.
+        根据 ID 获取任务上下文。
 
-        Args:
-            task_id: Task identifier
+        参数：
+            task_id: 任务标识
 
-        Returns:
-            TaskContext if found, None otherwise
+        返回：
+            若存在则返回 TaskContext，否则为 None
         """
         return self.task_contexts.get(task_id)
 
@@ -169,17 +168,17 @@ class EnterpriseContextManager:
         variables: dict[str, Any] | None = None,
     ) -> bool:
         """
-        Record a step completion in task context.
+        在任务上下文中记录步骤完成。
 
-        Args:
-            task_id: Task identifier
-            step_id: Step identifier
-            step_name: Step name
-            summary: Completion summary
-            variables: Key variables from this step
+        参数：
+            task_id: 任务标识
+            step_id: 步骤标识
+            step_name: 步骤名称
+            summary: 完成摘要
+            variables: 本步骤的关键变量
 
-        Returns:
-            True if task exists and step was recorded
+        返回：
+            若任务存在且记录成功则为 True
         """
         ctx = self.task_contexts.get(task_id)
         if not ctx:
@@ -190,7 +189,7 @@ class EnterpriseContextManager:
             ctx.add_variables(variables)
         return True
 
-    # ========== Conversation Management ==========
+    # ========== 会话管理 ==========
 
     def add_message(
         self,
@@ -199,12 +198,12 @@ class EnterpriseContextManager:
         content: str | list[dict[str, Any]],
     ) -> None:
         """
-        Add a message to conversation context.
+        向会话上下文添加消息。
 
-        Args:
-            session_id: Session identifier
-            role: Message role
-            content: Message content
+        参数：
+            session_id: 会话标识
+            role: 消息角色
+            content: 消息内容
         """
         if session_id not in self.conversation_contexts:
             self.conversation_contexts[session_id] = ConversationContext(
@@ -216,83 +215,83 @@ class EnterpriseContextManager:
 
     def get_conversation(self, session_id: str) -> ConversationContext | None:
         """
-        Get conversation context by session ID.
+        根据会话 ID 获取会话上下文。
 
-        Args:
-            session_id: Session identifier
+        参数：
+            session_id: 会话标识
 
-        Returns:
-            ConversationContext if found, None otherwise
+        返回：
+            若存在则返回 ConversationContext，否则为 None
         """
         return self.conversation_contexts.get(session_id)
 
     def clear_session(self, session_id: str) -> bool:
         """
-        Clear a conversation session.
+        清理会话内容。
 
-        Args:
-            session_id: Session identifier
+        参数：
+            session_id: 会话标识
 
-        Returns:
-            True if session was found and cleared
+        返回：
+            若找到并清理则为 True
         """
         if session_id in self.conversation_contexts:
             self.conversation_contexts[session_id].clear()
             return True
         return False
 
-    # ========== Context Building ==========
+    # ========== 上下文构建 ==========
 
     def build_context(
         self, task_id: str, session_id: str
     ) -> tuple[str, list[dict[str, Any]]]:
         """
-        Build complete context for LLM API call.
+        构建用于 LLM API 调用的完整上下文。
 
-        Assembles all three layers:
-        1. System context (identity, rules, tools)
-        2. Task context (description, steps, variables)
-        3. Conversation context (message history)
+        组装三层内容：
+        1. 系统上下文（身份、规则、工具）
+        2. 任务上下文（描述、步骤、变量）
+        3. 会话上下文（消息历史）
 
-        Args:
-            task_id: Task identifier
-            session_id: Session identifier
+        参数：
+            task_id: 任务标识
+            session_id: 会话标识
 
-        Returns:
-            tuple of (system_prompt, messages)
+        返回：
+            (system_prompt, messages) 元组
         """
         parts = []
 
-        # Layer 1: System context
+        # 第 1 层：系统上下文
         if self.system_ctx:
             parts.append(self.system_ctx.to_prompt())
 
-        # Layer 2: Task context
+        # 第 2 层：任务上下文
         task_ctx = self.task_contexts.get(task_id)
         if task_ctx:
             parts.append(task_ctx.to_prompt())
 
-        # Combine system parts
+        # 合并系统部分
         system_prompt = "\n\n---\n\n".join(parts) if parts else ""
 
-        # Layer 3: Conversation context
+        # 第 3 层：会话上下文
         conv_ctx = self.conversation_contexts.get(session_id)
         messages = conv_ctx.to_messages() if conv_ctx else []
 
         return system_prompt, messages
 
-    # ========== Statistics ==========
+    # ========== 统计信息 ==========
 
     def get_stats(self, task_id: str, session_id: str) -> dict[str, Any]:
         """
-        Get context statistics.
+        获取上下文统计信息。
 
-        Args:
-            task_id: Task identifier
-            session_id: Session identifier
+        参数：
+            task_id: 任务标识
+            session_id: 会话标识
 
-        Returns:
-            Dictionary with statistics from all layers
+        返回：
+            包含各层统计的字典
         """
         stats = {
             "system": None,
@@ -301,18 +300,18 @@ class EnterpriseContextManager:
             "total_estimated_tokens": 0,
         }
 
-        # System stats
+        # 系统统计
         if self.system_ctx:
             stats["system"] = self.system_ctx.get_stats()
             stats["total_estimated_tokens"] += stats["system"]["estimated_tokens"]
 
-        # Task stats
+        # 任务统计
         task_ctx = self.task_contexts.get(task_id)
         if task_ctx:
             stats["task"] = task_ctx.get_stats()
             stats["total_estimated_tokens"] += stats["task"]["estimated_tokens"]
 
-        # Conversation stats
+        # 会话统计
         conv_ctx = self.conversation_contexts.get(session_id)
         if conv_ctx:
             stats["conversation"] = conv_ctx.get_stats()
@@ -321,14 +320,14 @@ class EnterpriseContextManager:
         return stats
 
     def get_task_count(self) -> int:
-        """Get number of active tasks."""
+        """获取活跃任务数量。"""
         return len(self.task_contexts)
 
     def get_session_count(self) -> int:
-        """Get number of active sessions."""
+        """获取活跃会话数量。"""
         return len(self.conversation_contexts)
 
     def clear_all(self) -> None:
-        """Clear all task and conversation contexts (keep system context)."""
+        """清空所有任务与会话上下文（保留系统上下文）。"""
         self.task_contexts.clear()
         self.conversation_contexts.clear()

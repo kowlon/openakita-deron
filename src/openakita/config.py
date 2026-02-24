@@ -19,37 +19,24 @@ logger = logging.getLogger(__name__)
 # 支持在 Legacy（C端用户场景）和 Enterprise（企业级场景）之间切换
 # ---------------------------------------------------------------------------
 
-class MemoryBackendConfig:
+class MemoryConfig:
     """
-    Memory 后端配置。
+    企业级 Memory 配置。
 
     Attributes:
-        backend: 后端类型，可选 'legacy' 或 'enterprise'
-        rules_path: 企业级模式下的规则配置文件路径
-        skills_path: 企业级模式下的技能缓存文件路径
-        max_step_summaries: 最大步骤摘要数（企业级模式）
-        max_key_variables: 最大关键变量数（企业级模式）
-
-    Example:
-        # 使用 Legacy 后端（默认）
-        config = MemoryBackendConfig()
-
-        # 使用 Enterprise 后端
-        config = MemoryBackendConfig(
-            backend="enterprise",
-            rules_path="config/rules.yaml"
-        )
+        rules_path: 规则配置文件路径
+        skills_path: 技能缓存文件路径
+        max_step_summaries: 最大步骤摘要数
+        max_key_variables: 最大关键变量数
     """
 
     def __init__(
         self,
-        backend: Literal["legacy", "enterprise"] = "legacy",
         rules_path: str | None = None,
         skills_path: str | None = None,
         max_step_summaries: int = 20,
         max_key_variables: int = 50,
     ):
-        self.backend = backend
         self.rules_path = rules_path
         self.skills_path = skills_path
         self.max_step_summaries = max_step_summaries
@@ -58,7 +45,6 @@ class MemoryBackendConfig:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            "backend": self.backend,
             "rules_path": self.rules_path,
             "skills_path": self.skills_path,
             "max_step_summaries": self.max_step_summaries,
@@ -66,10 +52,9 @@ class MemoryBackendConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MemoryBackendConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "MemoryConfig":
         """Create from dictionary."""
         return cls(
-            backend=data.get("backend", "legacy"),
             rules_path=data.get("rules_path"),
             skills_path=data.get("skills_path"),
             max_step_summaries=data.get("max_step_summaries", 20),
@@ -77,59 +62,50 @@ class MemoryBackendConfig:
         )
 
 
-class ContextBackendConfig:
+# Backward compatibility alias
+MemoryBackendConfig = MemoryConfig
+
+
+class ContextConfig:
     """
-    Context 后端配置。
+    企业级 Context 配置。
 
     Attributes:
-        backend: 后端类型，可选 'legacy' 或 'enterprise'
         max_conversation_rounds: 最大对话轮数（滑动窗口大小）
-        max_task_summaries: 最大任务摘要数（企业级模式）
-        max_task_variables: 最大任务变量数（企业级模式）
-        enable_compression: 是否启用 LLM 压缩（仅 Legacy 模式）
-
-    Example:
-        # 使用 Legacy 后端（带 LLM 压缩）
-        config = ContextBackendConfig(backend="legacy", enable_compression=True)
-
-        # 使用 Enterprise 后端（滑动窗口，无 LLM 压缩）
-        config = ContextBackendConfig(backend="enterprise")
+        max_task_summaries: 最大任务摘要数
+        max_task_variables: 最大任务变量数
     """
 
     def __init__(
         self,
-        backend: Literal["legacy", "enterprise"] = "legacy",
         max_conversation_rounds: int = 20,
         max_task_summaries: int = 20,
         max_task_variables: int = 50,
-        enable_compression: bool = True,
     ):
-        self.backend = backend
         self.max_conversation_rounds = max_conversation_rounds
         self.max_task_summaries = max_task_summaries
         self.max_task_variables = max_task_variables
-        self.enable_compression = enable_compression
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
-            "backend": self.backend,
             "max_conversation_rounds": self.max_conversation_rounds,
             "max_task_summaries": self.max_task_summaries,
             "max_task_variables": self.max_task_variables,
-            "enable_compression": self.enable_compression,
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ContextBackendConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "ContextConfig":
         """Create from dictionary."""
         return cls(
-            backend=data.get("backend", "legacy"),
             max_conversation_rounds=data.get("max_conversation_rounds", 20),
             max_task_summaries=data.get("max_task_summaries", 20),
             max_task_variables=data.get("max_task_variables", 50),
-            enable_compression=data.get("enable_compression", True),
         )
+
+
+# Backward compatibility alias
+ContextBackendConfig = ContextConfig
 
 
 class Settings(BaseSettings):
@@ -596,110 +572,69 @@ _restart_requested: bool = False
 
 
 def create_memory_backend(
-    config: MemoryBackendConfig | None = None,
-    memory_instance: Any = None,
+    config: MemoryConfig | None = None,
+    memory_instance: Any = None,  # kept for backward compatibility, ignored
 ) -> Any:
     """
-    创建 Memory 后端实例。
-
-    根据配置返回 LegacyMemoryBackend 或 EnterpriseMemoryRouter 实例。
+    创建 Memory 后端实例（企业级）。
 
     Args:
-        config: Memory 后端配置。如果为 None，使用默认配置（legacy）
-        memory_instance: 可选的现有 Memory 实例（仅用于 legacy 模式）
+        config: Memory 配置。如果为 None，使用默认配置
+        memory_instance: 已废弃，忽略
 
     Returns:
-        MemoryBackend 实例
-
-    Example:
-        # 创建 Legacy 后端
-        backend = create_memory_backend()
-
-        # 创建 Enterprise 后端
-        config = MemoryBackendConfig(backend="enterprise", rules_path="config/rules.yaml")
-        backend = create_memory_backend(config)
+        EnterpriseMemoryRouter 实例
     """
     if config is None:
-        config = MemoryBackendConfig()
+        config = MemoryConfig()
 
-    if config.backend == "enterprise":
-        from openakita.memory.enterprise.router import EnterpriseMemoryRouter
-        from openakita.memory.enterprise.config import EnterpriseMemoryConfig
+    from openakita.memory.enterprise.router import EnterpriseMemoryRouter
+    from openakita.memory.enterprise.config import EnterpriseMemoryConfig
 
-        enterprise_config = EnterpriseMemoryConfig(
-            rules_path=config.rules_path,
-            skills_path=config.skills_path,
-            max_step_summaries=config.max_step_summaries,
-            max_key_variables=config.max_key_variables,
-        )
+    enterprise_config = EnterpriseMemoryConfig(
+        rules_path=config.rules_path,
+        skills_path=config.skills_path,
+        max_step_summaries=config.max_step_summaries,
+        max_key_variables=config.max_key_variables,
+    )
 
-        warnings = enterprise_config.validate()
-        for warning in warnings:
-            logger.warning(f"[MemoryBackend] {warning}")
+    warnings = enterprise_config.validate()
+    for warning in warnings:
+        logger.warning(f"[MemoryBackend] {warning}")
 
-        backend = EnterpriseMemoryRouter(enterprise_config)
-        logger.info(f"[MemoryBackend] Created EnterpriseMemoryRouter")
-        return backend
-
-    else:  # legacy
-        from openakita.memory.backends.legacy_adapter import LegacyMemoryBackend
-
-        backend = LegacyMemoryBackend(memory=memory_instance)
-        logger.info(f"[MemoryBackend] Created LegacyMemoryBackend")
-        return backend
+    backend = EnterpriseMemoryRouter(enterprise_config)
+    logger.info(f"[MemoryBackend] Created EnterpriseMemoryRouter")
+    return backend
 
 
 def create_context_backend(
-    config: ContextBackendConfig | None = None,
-    brain: Any = None,
-    cancel_event: Any = None,
+    config: ContextConfig | None = None,
+    brain: Any = None,  # kept for backward compatibility, ignored
+    cancel_event: Any = None,  # kept for backward compatibility, ignored
 ) -> Any:
     """
-    创建 Context 后端实例。
-
-    根据配置返回 LegacyContextBackend 或 EnterpriseContextManager 实例。
+    创建 Context 后端实例（企业级）。
 
     Args:
-        config: Context 后端配置。如果为 None，使用默认配置（legacy）
-        brain: Brain 实例（仅用于 legacy 模式的 LLM 压缩）
-        cancel_event: 取消事件（仅用于 legacy 模式）
+        config: Context 配置。如果为 None，使用默认配置
+        brain: 已废弃，忽略
+        cancel_event: 已废弃，忽略
 
     Returns:
-        ContextBackend 实例
-
-    Example:
-        # 创建 Legacy 后端（带压缩）
-        backend = create_context_backend(brain=brain_instance)
-
-        # 创建 Enterprise 后端（滑动窗口）
-        config = ContextBackendConfig(backend="enterprise")
-        backend = create_context_backend(config)
+        EnterpriseContextManager 实例
     """
     if config is None:
-        config = ContextBackendConfig()
+        config = ContextConfig()
 
-    if config.backend == "enterprise":
-        from openakita.context.enterprise.manager import EnterpriseContextManager
-        from openakita.context.enterprise.config import ContextConfig as EnterpriseContextConfig
+    from openakita.context.enterprise.manager import EnterpriseContextManager
+    from openakita.context.enterprise.config import ContextConfig as EnterpriseContextConfig
 
-        enterprise_config = EnterpriseContextConfig(
-            max_conversation_rounds=config.max_conversation_rounds,
-            max_task_summaries=config.max_task_summaries,
-            max_task_variables=config.max_task_variables,
-        )
+    enterprise_config = EnterpriseContextConfig(
+        max_conversation_rounds=config.max_conversation_rounds,
+        max_task_summaries=config.max_task_summaries,
+        max_task_variables=config.max_task_variables,
+    )
 
-        backend = EnterpriseContextManager(enterprise_config)
-        logger.info(f"[ContextBackend] Created EnterpriseContextManager")
-        return backend
-
-    else:  # legacy
-        from openakita.context.backends.legacy_adapter import LegacyContextBackend
-
-        # 只有在启用压缩时才传入 brain
-        if config.enable_compression and brain is not None:
-            backend = LegacyContextBackend(brain=brain, cancel_event=cancel_event)
-            logger.info(f"[ContextBackend] Created LegacyContextBackend (compression enabled)")
-        else:
-            backend = LegacyContextBackend(brain=None, cancel_event=None)
-            logger.info(f"[ContextBackend] Created LegacyContextBackend (compression disabled)")
-        return backend
+    backend = EnterpriseContextManager(enterprise_config)
+    logger.info(f"[ContextBackend] Created EnterpriseContextManager")
+    return backend

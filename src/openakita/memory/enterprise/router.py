@@ -1,15 +1,15 @@
 """
-Enterprise Memory Router
+企业级记忆路由器
 
-Unified memory router that coordinates three-layer storage:
-1. System Rules - Permanent business constraints
-2. Task Context - Task-level step summaries and variables
-3. Skills - Optional skill pattern cache
+统一的记忆路由器，协调三层存储：
+1. 系统规则 - 永久业务约束
+2. 任务上下文 - 任务级步骤摘要与变量
+3. 技能 - 可选的技能模式缓存
 
-This router implements the MemoryBackend protocol and provides a clean
-interface for the Agent to interact with the memory system.
+该路由器实现 MemoryBackend 协议，为 Agent 提供与记忆系统交互的
+统一接口。
 
-Reference:
+参考：
 - docs/memory-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -23,70 +23,70 @@ from openakita.memory.enterprise.task_context import TaskContextStore
 
 class EnterpriseMemoryRouter:
     """
-    Enterprise Memory Router.
+    企业级记忆路由器。
 
-    This is the main entry point for the Enterprise Memory system.
-    It coordinates three-layer storage and implements the MemoryBackend protocol.
+    这是企业级记忆系统的主要入口。
+    它协调三层存储并实现 MemoryBackend 协议。
 
-    Layer 1 - System Rules (Permanent):
-        Rules loaded from configuration file. These are business constraints
-        that apply to all tasks and cannot be modified by AI.
+    第一层 - 系统规则（永久）：
+        从配置文件加载规则。这些业务约束适用于所有任务，
+        且不能被 AI 修改。
 
-    Layer 2 - Task Context (Task Lifecycle):
-        Step summaries and key variables for the current task.
-        Created when task starts, destroyed when task ends.
+    第二层 - 任务上下文（任务生命周期）：
+        当前任务的步骤摘要与关键变量。
+        在任务开始时创建，任务结束时销毁。
 
-    Layer 3 - Skills (Optional):
-        Cached skill patterns that match task types.
-        Not implemented in this version.
+    第三层 - 技能（可选）：
+        与任务类型匹配的技能模式缓存。
+        本版本未实现。
 
-    Example:
+    示例：
         config = EnterpriseMemoryConfig(rules_path="config/rules.yaml")
         router = EnterpriseMemoryRouter(config)
 
-        # Start a task
+        # 开始任务
         router.start_task("task-001", "tenant-001", "search", "Search for info")
 
-        # Record progress
+        # 记录进展
         router.record_step_completion(
             "task-001", "step-001", "Web Search",
             "Found 5 results", {"query": "info"}
         )
 
-        # Get context for prompt injection
+        # 获取用于提示词注入的上下文
         context = await router.get_injection_context("task-001", "search", "query")
 
-        # End task (cleans up task context)
+        # 结束任务（清理任务上下文）
         router.end_task("task-001")
     """
 
     def __init__(self, config: EnterpriseMemoryConfig | None = None) -> None:
         """
-        Initialize the memory router.
+        初始化记忆路由器。
 
-        Args:
-            config: Configuration for the router. If None, uses defaults.
+        参数：
+            config: 路由器配置。如为 None，则使用默认值。
         """
         self._config = config or EnterpriseMemoryConfig()
 
-        # Layer 1: System Rules (permanent)
+        # 第一层：系统规则（永久）
         self._rule_store = SystemRuleStore()
         if self._config.rules_path:
             self._load_rules(self._config.rules_path)
 
-        # Layer 2: Task Context (task lifecycle)
+        # 第二层：任务上下文（任务生命周期）
         self._task_store = TaskContextStore()
 
-        # Layer 3: Skills (optional, not implemented yet)
+        # 第三层：技能（可选，尚未实现）
         # self._skill_store = SkillStore() if config.skills_path else None
         self._skill_store = None
 
     def _load_rules(self, path: str) -> None:
         """
-        Load system rules from configuration file.
+        从配置文件加载系统规则。
 
-        Args:
-            path: Path to YAML or JSON file
+        参数：
+            path: YAML 或 JSON 文件路径
         """
         if path.endswith(".yaml") or path.endswith(".yml"):
             self._rule_store.load_from_yaml(path)
@@ -95,40 +95,40 @@ class EnterpriseMemoryRouter:
         else:
             raise ValueError(f"Unsupported rules file format: {path}")
 
-    # ========== MemoryBackend Protocol Implementation ==========
+    # ========== MemoryBackend 协议实现 ==========
 
     async def get_injection_context(
         self, task_id: str, task_type: str, query: str
     ) -> str:
         """
-        Get memory context for injection into system prompt.
+        获取用于系统提示词注入的记忆上下文。
 
-        This assembles context from all three layers:
-        1. System Rules (always included if present)
-        2. Task Context (included if task exists)
-        3. Skills (optional, matches task type)
+        上下文来自三层汇总：
+        1. 系统规则（若存在则始终包含）
+        2. 任务上下文（若任务存在则包含）
+        3. 技能（可选，按任务类型匹配）
 
-        Args:
-            task_id: Unique task identifier
-            task_type: Task type for skill matching
-            query: User query (used for semantic matching in future)
+        参数：
+            task_id: 任务唯一标识
+            task_type: 用于技能匹配的任务类型
+            query: 用户查询（未来用于语义匹配）
 
-        Returns:
-            Formatted context string for system prompt injection
+        返回：
+            用于系统提示词注入的格式化上下文字符串
         """
         sections: list[str] = []
 
-        # Layer 1: System Rules
+        # 第一层：系统规则
         rules_prompt = self._rule_store.to_prompt()
         if rules_prompt:
             sections.append(rules_prompt)
 
-        # Layer 2: Task Context
+        # 第二层：任务上下文
         task_prompt = self._task_store.to_prompt(task_id)
         if task_prompt:
             sections.append(task_prompt)
 
-        # Layer 3: Skills (optional)
+        # 第三层：技能（可选）
         # if self._skill_store:
         #     skills_prompt = self._skill_store.to_prompt(task_type)
         #     if skills_prompt:
@@ -145,14 +145,14 @@ class EnterpriseMemoryRouter:
         variables: dict[str, Any],
     ) -> None:
         """
-        Record step completion for a task.
+        记录任务的步骤完成情况。
 
-        Args:
-            task_id: Unique task identifier
-            step_id: Unique step identifier
-            step_name: Name of the step
-            summary: Step completion summary
-            variables: Key variables extracted from this step
+        参数：
+            task_id: 任务唯一标识
+            step_id: 步骤唯一标识
+            step_name: 步骤名称
+            summary: 步骤完成摘要
+            variables: 本步骤提取的关键变量
         """
         self._task_store.record_step_completion(
             task_id, step_id, step_name, summary, variables
@@ -167,14 +167,14 @@ class EnterpriseMemoryRouter:
         resolution: str | None,
     ) -> None:
         """
-        Record an error for a task.
+        记录任务错误。
 
-        Args:
-            task_id: Unique task identifier
-            step_id: Step where error occurred
-            error_type: Type of error
-            error_message: Error message
-            resolution: Resolution if resolved, None otherwise
+        参数：
+            task_id: 任务唯一标识
+            step_id: 出错的步骤
+            error_type: 错误类型
+            error_message: 错误信息
+            resolution: 若已解决则为解决方案，否则为 None
         """
         self._task_store.record_error(
             task_id, step_id, error_type, error_message, resolution
@@ -184,94 +184,94 @@ class EnterpriseMemoryRouter:
         self, task_id: str, tenant_id: str, task_type: str, description: str
     ) -> None:
         """
-        Start a new task.
+        启动新任务。
 
-        Args:
-            task_id: Unique task identifier
-            tenant_id: Tenant ID for multi-tenant isolation
-            task_type: Task type
-            description: Task description/goal
+        参数：
+            task_id: 任务唯一标识
+            tenant_id: 多租户隔离的租户 ID
+            task_type: 任务类型
+            description: 任务描述/目标
         """
         self._task_store.start_task(task_id, tenant_id, task_type, description)
 
     def end_task(self, task_id: str) -> None:
         """
-        End a task and clean up its context.
+        结束任务并清理其上下文。
 
-        Args:
-            task_id: Unique task identifier
+        参数：
+            task_id: 任务唯一标识
         """
         self._task_store.end_task(task_id)
 
     def get_stats(self, task_id: str) -> dict[str, Any]:
         """
-        Get statistics for a task.
+        获取任务统计信息。
 
-        Args:
-            task_id: Unique task identifier
+        参数：
+            task_id: 任务唯一标识
 
-        Returns:
-            Dictionary with task statistics
+        返回：
+            任务统计信息字典
         """
         task_stats = self._task_store.get_stats(task_id)
 
-        # Add rule count
+        # 增加规则数量
         task_stats["rule_count"] = self._rule_store.rule_count
 
-        # Add context size if task exists
+        # 若任务存在则增加上下文大小
         if task_stats:
             context = self._task_store.to_prompt(task_id)
             task_stats["context_size"] = len(context)
 
         return task_stats
 
-    # ========== Additional Helper Methods ==========
+    # ========== 额外辅助方法 ==========
 
     @property
     def rule_store(self) -> SystemRuleStore:
-        """Get the underlying rule store for direct manipulation."""
+        """获取底层规则存储以便直接操作。"""
         return self._rule_store
 
     @property
     def task_store(self) -> TaskContextStore:
-        """Get the underlying task store for direct manipulation."""
+        """获取底层任务存储以便直接操作。"""
         return self._task_store
 
     def get_tasks_by_tenant(self, tenant_id: str) -> list[Any]:
         """
-        Get all active tasks for a tenant.
+        获取某租户的全部活跃任务。
 
-        Args:
-            tenant_id: Tenant identifier
+        参数：
+            tenant_id: 租户标识
 
-        Returns:
-            List of task memory objects for the tenant
+        返回：
+            该租户的任务记忆对象列表
         """
         return self._task_store.get_tasks_by_tenant(tenant_id)
 
     @property
     def active_task_count(self) -> int:
-        """Get the number of active tasks."""
+        """获取活跃任务数量。"""
         return self._task_store.task_count
 
     def clear_all_tasks(self) -> None:
-        """Clear all task contexts."""
+        """清理所有任务上下文。"""
         self._task_store.clear_all()
 
     def clear_all_rules(self) -> None:
-        """Clear all system rules."""
+        """清理所有系统规则。"""
         self._rule_store.clear_rules()
 
     def reload_rules(self, path: str | None = None) -> None:
         """
-        Reload system rules from configuration file.
+        从配置文件重新加载系统规则。
 
-        Args:
-            path: Path to rules file. If None, uses config.rules_path.
+        参数：
+            path: 规则文件路径。如为 None，则使用 config.rules_path。
         """
         rules_path = path or self._config.rules_path
         if rules_path:
             self._rule_store.clear_rules()
             self._load_rules(rules_path)
-            # Update config to remember the path for future reloads
+            # 更新配置，记录路径以便后续重载
             self._config.rules_path = rules_path

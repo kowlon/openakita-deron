@@ -1,7 +1,7 @@
 """
-Context Configuration
+上下文配置
 
-Configuration for EnterpriseContextManager.
+EnterpriseContextManager 的配置。
 """
 
 from dataclasses import dataclass
@@ -10,15 +10,15 @@ from dataclasses import dataclass
 @dataclass
 class ContextConfig:
     """
-    Configuration for EnterpriseContextManager.
+    EnterpriseContextManager 的配置。
 
-    Attributes:
-        max_conversation_rounds: Maximum conversation rounds to keep
-        max_task_summaries: Maximum step summaries per task
-        max_task_variables: Maximum key variables per task
-        max_system_tokens: Token budget for system context
-        max_task_tokens: Token budget for task context
-        max_conversation_tokens: Token budget for conversation context
+    属性：
+        max_conversation_rounds: 保留的最大对话轮数
+        max_task_summaries: 每个任务的最大步骤摘要数
+        max_task_variables: 每个任务的最大关键变量数
+        max_system_tokens: 系统上下文的 token 预算
+        max_task_tokens: 任务上下文的 token 预算
+        max_conversation_tokens: 对话上下文的 token 预算
     """
 
     max_conversation_rounds: int = 20
@@ -29,7 +29,7 @@ class ContextConfig:
     max_conversation_tokens: int = 8000
 
     def to_dict(self) -> dict:
-        """Convert to dictionary."""
+        """转换为字典。"""
         return {
             "max_conversation_rounds": self.max_conversation_rounds,
             "max_task_summaries": self.max_task_summaries,
@@ -41,7 +41,7 @@ class ContextConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ContextConfig":
-        """Create from dictionary."""
+        """从字典创建。"""
         return cls(
             max_conversation_rounds=data.get("max_conversation_rounds", 20),
             max_task_summaries=data.get("max_task_summaries", 20),

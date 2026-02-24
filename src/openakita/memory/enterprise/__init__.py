@@ -1,11 +1,11 @@
 """
-Enterprise Memory Module
+企业级记忆模块
 
-This module provides enterprise-grade memory components:
-- SystemRuleStore: System-level rule storage
-- TaskContextStore: Task-level context storage
-- SkillStore: Optional skill pattern cache
-- EnterpriseMemoryRouter: Unified memory router coordinating all layers
+本模块提供企业级记忆组件：
+- SystemRuleStore: 系统级规则存储
+- TaskContextStore: 任务级上下文存储
+- SkillStore: 可选的技能模式缓存
+- EnterpriseMemoryRouter: 协调各层的统一记忆路由器
 """
 
 from openakita.memory.enterprise.config import EnterpriseMemoryConfig

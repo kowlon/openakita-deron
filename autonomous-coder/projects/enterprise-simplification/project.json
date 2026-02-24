@@ -1,0 +1,42 @@
+{
+  "id": "enterprise-simplification",
+  "name": "Enterprise Simplification",
+  "status": "completed",
+  "created_at": "2026-02-24",
+  "updated_at": "2026-02-24",
+  "paused_at": null,
+  "description": "OpenAkita 企业级精简项目 - 移除消费者端功能，保留企业级核心，并进行全面测试",
+  "target_path": "../../",
+  "total_features": 35,
+  "completed_features": 35,
+  "task_breakdown": {
+    "simplification": 18,
+    "backend_tests": 7,
+    "frontend_tests": 7,
+    "automation_tests": 3
+  },
+  "goals": [
+    "移除消费者端(C端)特有功能",
+    "删除 Legacy 兼容层",
+    "精简 C端 IM 通道(QQ)",
+    "简化配置系统",
+    "保留所有企业级核心功能",
+    "保留所有 Skills 目录",
+    "后端 API 测试验证",
+    "前端 Chrome DevTools 测试验证",
+    "编写自动化测试"
+  ],
+  "preservation_rules": {
+    "llm_registries": "全部保留",
+    "debug_output": "全部保留",
+    "all_skills": "全部保留，不删除任何技能",
+    "skills_mechanism": "保留加载机制",
+    "memory_context": "保留 enterprise 实现",
+    "agent_loop": "保留核心逻辑"
+  },
+  "reference_docs": [
+    "autonomous-coder/projects/enterprise-simplification/plan.md",
+    "autonomous-coder/projects/enterprise-simplification/webapp-test-plan.md",
+    "docs/webapp-requirement/front_web_requirement.md"
+  ]
+}

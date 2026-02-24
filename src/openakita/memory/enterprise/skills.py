@@ -1,10 +1,10 @@
 """
-Skill Store
+技能存储
 
-Manages skill patterns cache for enterprise memory system.
-Skills are reusable operation patterns that can be matched to task types.
+为企业级记忆系统管理技能模式缓存。
+技能是可复用的操作模式，可与任务类型匹配。
 
-Reference:
+参考：
 - docs/memory-refactoring-enterprise.md
 - autonomous-coder/enterprise_refactor_plan.md
 """
@@ -16,7 +16,7 @@ from typing import Any
 
 
 class SkillCategory(Enum):
-    """Categories of skills."""
+    """技能分类。"""
 
     SEARCH = "search"
     ANALYSIS = "analysis"
@@ -29,19 +29,19 @@ class SkillCategory(Enum):
 @dataclass
 class Skill:
     """
-    A reusable skill pattern.
+    可复用的技能模式。
 
-    Attributes:
-        id: Unique skill identifier
-        name: Human-readable skill name
-        category: Skill category
-        task_types: List of task types this skill applies to
-        pattern: The skill pattern (template or instructions)
-        usage_count: Number of times this skill has been used
-        last_used_at: When this skill was last used
-        created_at: When this skill was created
-        ttl_seconds: Time-to-live in seconds (0 = no expiry)
-        metadata: Additional metadata
+    属性：
+        id: 技能唯一标识
+        name: 人类可读的技能名称
+        category: 技能分类
+        task_types: 该技能适用的任务类型列表
+        pattern: 技能模式（模板或指令）
+        usage_count: 技能被使用的次数
+        last_used_at: 最近一次使用时间
+        created_at: 创建时间
+        ttl_seconds: 存活时长（秒，0 表示不过期）
+        metadata: 额外元数据
     """
 
     id: str
@@ -52,11 +52,11 @@ class Skill:
     usage_count: int = 0
     last_used_at: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
-    ttl_seconds: int = 0  # 0 = no expiry
+    ttl_seconds: int = 0  # 0 表示不过期
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def is_expired(self) -> bool:
-        """Check if this skill has expired."""
+        """检查技能是否过期。"""
         if self.ttl_seconds <= 0:
             return False
         if self.last_used_at is None:
@@ -66,16 +66,16 @@ class Skill:
         return datetime.now() > expiry_time
 
     def record_usage(self) -> None:
-        """Record a usage of this skill."""
+        """记录一次技能使用。"""
         self.usage_count += 1
         self.last_used_at = datetime.now()
 
     def matches_task_type(self, task_type: str) -> bool:
-        """Check if this skill matches a task type."""
+        """检查技能是否匹配任务类型。"""
         return task_type.lower() in [t.lower() for t in self.task_types]
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
+        """转换为用于序列化的字典。"""
         return {
             "id": self.id,
             "name": self.name,
@@ -91,7 +91,7 @@ class Skill:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Skill":
-        """Create from dictionary."""
+        """从字典创建。"""
         return cls(
             id=data["id"],
             name=data["name"],
@@ -108,14 +108,14 @@ class Skill:
 
 class SkillStore:
     """
-    Store for skill patterns.
+    技能模式存储。
 
-    Manages skill caching with TTL support and task type matching.
+    管理技能缓存，支持 TTL 与任务类型匹配。
 
-    Example:
+    示例：
         store = SkillStore()
 
-        # Add a skill
+        # 添加技能
         skill = Skill(
             id="skill-001",
             name="Web Search Pattern",
@@ -125,35 +125,35 @@ class SkillStore:
         )
         store.add_skill(skill)
 
-        # Get skills for a task
+        # 获取任务匹配的技能
         skills = store.get_skills_for_task("search")
 
-        # Cleanup expired skills
+        # 清理过期技能
         removed = store.cleanup_expired()
     """
 
     def __init__(self) -> None:
-        """Initialize the skill store."""
+        """初始化技能存储。"""
         self._skills: dict[str, Skill] = {}
 
     def add_skill(self, skill: Skill) -> None:
         """
-        Add a skill to the store.
+        向存储中添加技能。
 
-        Args:
-            skill: The skill to add
+        参数：
+            skill: 要添加的技能
         """
         self._skills[skill.id] = skill
 
     def get_skill(self, skill_id: str) -> Skill | None:
         """
-        Get a skill by ID.
+        通过 ID 获取技能。
 
-        Args:
-            skill_id: The skill ID
+        参数：
+            skill_id: 技能 ID
 
-        Returns:
-            The skill if found and not expired, None otherwise
+        返回：
+            若找到且未过期则返回技能，否则为 None
         """
         skill = self._skills.get(skill_id)
         if skill is None:
@@ -165,13 +165,13 @@ class SkillStore:
 
     def get_skills_for_task(self, task_type: str) -> list[Skill]:
         """
-        Get all skills that match a task type.
+        获取匹配任务类型的全部技能。
 
-        Args:
-            task_type: The task type to match
+        参数：
+            task_type: 要匹配的任务类型
 
-        Returns:
-            List of matching skills (excluding expired ones)
+        返回：
+            匹配的技能列表（不含过期技能）
         """
         matching_skills = []
         expired_ids = []
@@ -182,24 +182,24 @@ class SkillStore:
             elif skill.matches_task_type(task_type):
                 matching_skills.append(skill)
 
-        # Remove expired skills
+        # 移除过期技能
         for skill_id in expired_ids:
             del self._skills[skill_id]
 
-        # Sort by usage count (most used first)
+        # 按使用次数排序（使用最多的在前）
         matching_skills.sort(key=lambda s: s.usage_count, reverse=True)
 
         return matching_skills
 
     def get_skills_by_category(self, category: SkillCategory) -> list[Skill]:
         """
-        Get all skills in a category.
+        获取某分类下的全部技能。
 
-        Args:
-            category: The skill category
+        参数：
+            category: 技能分类
 
-        Returns:
-            List of skills in the category (excluding expired ones)
+        返回：
+            该分类下的技能列表（不含过期技能）
         """
         matching_skills = []
         expired_ids = []
@@ -217,13 +217,13 @@ class SkillStore:
 
     def record_skill_usage(self, skill_id: str) -> bool:
         """
-        Record usage of a skill.
+        记录技能使用。
 
-        Args:
-            skill_id: The skill ID
+        参数：
+            skill_id: 技能 ID
 
-        Returns:
-            True if skill was found, False otherwise
+        返回：
+            若找到技能则为 True，否则为 False
         """
         skill = self.get_skill(skill_id)
         if skill is None:
@@ -233,10 +233,10 @@ class SkillStore:
 
     def cleanup_expired(self) -> list[str]:
         """
-        Remove all expired skills.
+        移除所有过期技能。
 
-        Returns:
-            List of removed skill IDs
+        返回：
+            被移除的技能 ID 列表
         """
         expired_ids = [
             skill_id for skill_id, skill in self._skills.items()
@@ -250,31 +250,31 @@ class SkillStore:
 
     def get_all_skills(self) -> list[Skill]:
         """
-        Get all non-expired skills.
+        获取所有未过期技能。
 
-        Returns:
-            List of all skills
+        返回：
+            技能列表
         """
         self.cleanup_expired()
         return list(self._skills.values())
 
     def clear(self) -> None:
-        """Clear all skills."""
+        """清空所有技能。"""
         self._skills.clear()
 
     def count(self) -> int:
-        """Get the number of skills (including expired)."""
+        """获取技能数量（包含过期）。"""
         return len(self._skills)
 
     def to_prompt(self, task_type: str | None = None) -> str:
         """
-        Generate a prompt string from skills.
+        根据技能生成提示词字符串。
 
-        Args:
-            task_type: Optional task type to filter skills
+        参数：
+            task_type: 可选任务类型，用于筛选技能
 
-        Returns:
-            Formatted skill list for prompt injection
+        返回：
+            用于提示词注入的格式化技能列表
         """
         if task_type:
             skills = self.get_skills_for_task(task_type)
@@ -286,7 +286,7 @@ class SkillStore:
 
         lines = ["## Relevant Skills", ""]
 
-        for skill in skills[:10]:  # Limit to 10 skills
+        for skill in skills[:10]:  # 限制为 10 个技能
             lines.append(f"**{skill.name}** ({skill.category.value})")
             if skill.pattern:
                 lines.append(f"  {skill.pattern[:200]}")
@@ -296,13 +296,13 @@ class SkillStore:
 
     def load_from_json(self, path: str) -> int:
         """
-        Load skills from a JSON file.
+        从 JSON 文件加载技能。
 
-        Args:
-            path: Path to JSON file
+        参数：
+            path: JSON 文件路径
 
-        Returns:
-            Number of skills loaded
+        返回：
+            加载的技能数量
         """
         import json
         from pathlib import Path
@@ -329,13 +329,13 @@ class SkillStore:
 
     def save_to_json(self, path: str) -> int:
         """
-        Save skills to a JSON file.
+        将技能保存到 JSON 文件。
 
-        Args:
-            path: Path to JSON file
+        参数：
+            path: JSON 文件路径
 
-        Returns:
-            Number of skills saved
+        返回：
+            保存的技能数量
         """
         import json
         from pathlib import Path

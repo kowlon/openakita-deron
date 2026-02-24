@@ -1,14 +1,12 @@
 """
 记忆整合器 - 批量整理对话历史
 
-实现用户的想法:
-1. 保存一整天的对话上下文
-2. 空闲时段 (如凌晨) 自动整理
-3. 归纳精华存入 MEMORY.md
+简化版（企业级）：
+1. 保存对话上下文
+2. 会话管理
+3. 历史清理
 
-参考:
-- Claude-Mem Worker Service
-- LangMem Background Manager
+注意：AI 自动提取功能已移除（消费者端功能）
 """
 
 import json
@@ -16,32 +14,29 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .extractor import MemoryExtractor
-from .types import ConversationTurn, Memory, SessionSummary
+from .types import ConversationTurn, SessionSummary
 
 logger = logging.getLogger(__name__)
 
 
 class MemoryConsolidator:
-    """记忆整合器 - 批量处理对话历史"""
+    """记忆整合器 - 企业级简化版"""
 
     def __init__(
         self,
         data_dir: Path,
         brain=None,
-        extractor: MemoryExtractor | None = None,
+        extractor=None,  # 已废弃，保留参数兼容性
     ):
         """
         Args:
             data_dir: 数据目录 (存放对话历史)
             brain: LLM 大脑实例
-            extractor: 记忆提取器
+            extractor: 已废弃，忽略
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-
         self.brain = brain
-        self.extractor = extractor or MemoryExtractor(brain)
 
         # 对话历史存储目录
         self.history_dir = self.data_dir / "conversation_history"
@@ -119,154 +114,6 @@ class MemoryConsolidator:
                 unprocessed.append(file.stem)
 
         return unprocessed
-
-    async def consolidate_session(
-        self,
-        session_id: str,
-    ) -> tuple[SessionSummary, list[Memory]]:
-        """
-        整理单个会话
-
-        1. 加载对话历史
-        2. 生成会话摘要
-        3. 提取记忆
-        """
-        turns = self.load_session_history(session_id)
-
-        if not turns:
-            return None, []
-
-        # 生成会话摘要
-        summary = await self._generate_summary(session_id, turns)
-
-        # 提取记忆
-        memories = []
-
-        # 基于规则提取
-        for turn in turns:
-            extracted = self.extractor.extract_from_turn(turn)
-            memories.extend(extracted)
-
-        # 使用 LLM 高级提取
-        if self.brain:
-            llm_memories = await self.extractor.extract_with_llm(
-                turns, context=f"会话摘要: {summary.task_description}"
-            )
-            memories.extend(llm_memories)
-
-        # 去重
-        memories = self.extractor.deduplicate(memories, [])
-
-        # 更新摘要中的记忆 ID
-        summary.memories_created = [m.id for m in memories]
-
-        # 保存摘要
-        self._save_summary(summary)
-
-        return summary, memories
-
-    async def consolidate_all_unprocessed(self) -> tuple[list[SessionSummary], list[Memory]]:
-        """
-        整理所有未处理的会话
-
-        适合在空闲时段 (如凌晨) 批量执行
-        """
-        unprocessed = self.get_unprocessed_sessions()
-
-        all_summaries = []
-        all_memories = []
-
-        for session_id in unprocessed:
-            try:
-                summary, memories = await self.consolidate_session(session_id)
-                if summary:
-                    all_summaries.append(summary)
-                    all_memories.extend(memories)
-                    logger.info(f"Consolidated session {session_id}: {len(memories)} memories")
-            except Exception as e:
-                logger.error(f"Failed to consolidate session {session_id}: {e}")
-
-        return all_summaries, all_memories
-
-    async def _generate_summary(
-        self,
-        session_id: str,
-        turns: list[ConversationTurn],
-    ) -> SessionSummary:
-        """使用 LLM 生成会话摘要"""
-
-        start_time = turns[0].timestamp if turns else datetime.now()
-        end_time = turns[-1].timestamp if turns else datetime.now()
-
-        # 简单摘要 (不用 LLM)
-        if not self.brain or len(turns) < 3:
-            # 从用户消息提取任务描述
-            user_messages = [t.content for t in turns if t.role == "user"]
-            task_desc = user_messages[0][:200] if user_messages else "Unknown task"
-
-            return SessionSummary(
-                session_id=session_id,
-                start_time=start_time,
-                end_time=end_time,
-                task_description=task_desc,
-                outcome="completed",
-            )
-
-        # 使用 LLM 生成详细摘要
-        conv_text = "\n".join(
-            [
-                f"[{turn.role}]: {turn.content[:300]}"
-                for turn in turns[-30:]  # 最近30轮
-            ]
-        )
-
-        prompt = f"""总结以下对话会话:
-
-{conv_text}
-
-请提供:
-1. task_description: 用户的主要任务是什么 (一句话)
-2. outcome: 任务结果 (success/partial/failed)
-3. key_actions: 关键操作 (最多5个)
-4. learnings: 值得记住的经验 (最多3个)
-5. errors: 遇到的错误 (如果有)
-
-用 JSON 格式输出。
-"""
-
-        try:
-            response = await self.brain.think(
-                prompt, system="你是一个会话分析专家，擅长提取关键信息。只输出 JSON，不要其他内容。"
-            )
-
-            # 解析 JSON
-            import re
-
-            json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                return SessionSummary(
-                    session_id=session_id,
-                    start_time=start_time,
-                    end_time=end_time,
-                    task_description=data.get("task_description", ""),
-                    outcome=data.get("outcome", "completed"),
-                    key_actions=data.get("key_actions", []),
-                    learnings=data.get("learnings", []),
-                    errors_encountered=data.get("errors", []),
-                )
-        except Exception as e:
-            logger.error(f"LLM summary generation failed: {e}")
-
-        # 回退到简单摘要
-        user_messages = [t.content for t in turns if t.role == "user"]
-        return SessionSummary(
-            session_id=session_id,
-            start_time=start_time,
-            end_time=end_time,
-            task_description=user_messages[0][:200] if user_messages else "Unknown",
-            outcome="completed",
-        )
 
     def _save_summary(self, summary: SessionSummary) -> None:
         """保存会话摘要"""
