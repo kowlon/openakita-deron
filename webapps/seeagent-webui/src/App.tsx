@@ -119,6 +119,7 @@ function App() {
     messageSendTime,
     llmOutput,
     artifacts,
+    askUserQuestion,
   } = useChat(currentSessionId)
 
   // Track timing when messageSendTime or firstTokenTime changes
@@ -152,6 +153,7 @@ function App() {
 
   // Save completed conversation turn when streaming ends
   // In Edit mode, don't auto-save - wait for user confirmation
+  // Also don't save when askUserQuestion is set - waiting for user input
   useEffect(() => {
     // Detect when streaming transitions from true to false
     const wasStreaming = prevIsStreamingRef.current
@@ -159,7 +161,8 @@ function App() {
 
     // When streaming ends and we had a conversation
     // In Edit mode, don't auto-save - the user needs to confirm first
-    if (wasStreaming && !isStreaming && currentSessionId && executionMode === 'auto') {
+    // Also don't save when askUserQuestion is set - waiting for user input
+    if (wasStreaming && !isStreaming && currentSessionId && executionMode === 'auto' && !askUserQuestion) {
       const currentUserMessage = currentSession?.userMessage || ''
       const timing = currentTurnTimingRef.current
       const output = currentLlmOutputRef.current
@@ -205,7 +208,7 @@ function App() {
       currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
       currentLlmOutputRef.current = null
     }
-  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, executionMode])
+  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, executionMode, askUserQuestion])
 
   // Handle Edit mode turn confirmation - save turn to history when user confirms
   const handleConfirmTurn = useCallback(() => {
@@ -328,13 +331,16 @@ function App() {
         setCurrentSessionId(sessionId)
       } else {
         // Save current turn before starting a new one
-        if (chatSteps.length > 0) {
-          const currentSteps = chatSteps
-          const isCompleted = currentSteps.every(s => s.status === 'completed')
-          const summary = [...currentSteps].reverse().find(s => s.type === 'llm')?.output || null
-          const currentUserMessage = currentSession?.userMessage || ''
+        // This includes turns with steps OR turns with askUserQuestion (waiting for user input)
+        const hasContentToSave = chatSteps.length > 0 || askUserQuestion !== null
+        const currentUserMessage = currentSession?.userMessage || ''
 
-          if (isCompleted && currentUserMessage) {
+        if (hasContentToSave && currentUserMessage) {
+          const currentSteps = chatSteps
+          const allStepsCompleted = currentSteps.length === 0 || currentSteps.every(s => s.status === 'completed')
+          const summary = llmOutput || [...currentSteps].reverse().find(s => s.type === 'llm')?.output || null
+
+          if (allStepsCompleted) {
             // Get timing info from ref
             const timing = currentTurnTimingRef.current
             const lastStep = currentSteps[currentSteps.length - 1]
@@ -343,55 +349,102 @@ function App() {
               id: `turn-${Date.now()}`,
               userMessage: currentUserMessage,
               steps: currentSteps,
-              summary,
+              summary: askUserQuestion ? (summary || askUserQuestion.question || '等待用户回复') : summary,
               timestamp: Date.now(),
               startTime: timing.startTime || undefined,
               firstTokenTime: timing.firstTokenTime,
-              endTime: lastStep?.endTime || undefined,
+              endTime: lastStep?.endTime || Date.now(),
             }
 
+            // Check if this turn already exists
+            const turnExists = currentSession?.conversationHistory?.some(t => t.userMessage === currentUserMessage)
+
+            if (!turnExists) {
+              // Add turn to history AND update userMessage in one update
+              const title = generateSessionTitle(message)
+              setSessions((prev) =>
+                prev.map((s) => {
+                  if (s.id === sessionId) {
+                    return {
+                      ...s,
+                      conversationHistory: [...s.conversationHistory, newTurn],
+                      stepCount: s.conversationHistory.length + 1,
+                      userMessage: message,
+                      title: s.title === 'New Chat' || s.conversationHistory.length === 0 ? title : s.title,
+                      timestamp: Date.now(),
+                    }
+                  }
+                  return s
+                })
+              )
+            } else {
+              // Just update the userMessage
+              const title = generateSessionTitle(message)
+              setSessions((prev) =>
+                prev.map((s) => {
+                  if (s.id === sessionId) {
+                    return {
+                      ...s,
+                      userMessage: message,
+                      title: s.title === 'New Chat' ? title : s.title,
+                      timestamp: Date.now(),
+                    }
+                  }
+                  return s
+                })
+              )
+            }
+
+            // Clear refs after saving
+            prevChatStepsRef.current = []
+            currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
+            currentLlmOutputRef.current = null
+          } else {
+            // Just update the userMessage without saving turn
+            const title = generateSessionTitle(message)
             setSessions((prev) =>
               prev.map((s) => {
                 if (s.id === sessionId) {
-                  // Check if this turn already exists
-                  const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
-                  if (turnExists) return s
-
                   return {
                     ...s,
-                    conversationHistory: [...s.conversationHistory, newTurn],
-                    stepCount: s.conversationHistory.length + 1,
+                    userMessage: message,
+                    title: s.title === 'New Chat' || s.conversationHistory.length === 0 ? title : s.title,
+                    timestamp: Date.now(),
                   }
                 }
                 return s
               })
             )
           }
-        }
-
-        // Update current session with user message and generate title
-        setSessions((prev) =>
-          prev.map((s) => {
-            if (s.id === sessionId) {
-              // Generate title from user message (first 30 chars or until first punctuation)
-              const title = generateSessionTitle(message)
-              return {
-                ...s,
-                userMessage: message,
-                title: s.title === 'New Chat' || s.conversationHistory.length === 0 ? title : s.title,
-                timestamp: Date.now(),
+        } else {
+          // Just update the userMessage
+          const title = generateSessionTitle(message)
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id === sessionId) {
+                return {
+                  ...s,
+                  userMessage: message,
+                  title: s.title === 'New Chat' || s.conversationHistory.length === 0 ? title : s.title,
+                  timestamp: Date.now(),
+                }
               }
-            }
-            return s
-          })
-        )
+              return s
+            })
+          )
+        }
       }
       isSendingRef.current = true
       // Reset edit mode state when sending new message
       setEditableResults({})
-      sendMessage(message, undefined, executionMode === 'edit')
+      // Use requestAnimationFrame to ensure the state update is rendered
+      // before sending the new message. This prevents the UI from flashing
+      // because the historical turn will be rendered first.
+      requestAnimationFrame(() => {
+        sendMessage(message, undefined, executionMode === 'edit')
+      })
     },
-    [currentSessionId, sendMessage, chatSteps, currentSession?.userMessage, executionMode]
+    [currentSessionId, sendMessage, chatSteps, currentSession, executionMode, askUserQuestion, llmOutput]
   )
 
   const handleNewSession = useCallback(() => {
@@ -495,6 +548,7 @@ function App() {
           llmOutput={llmOutput}
           onConfirmTurn={handleConfirmTurn}
           artifacts={artifacts}
+          askUserQuestion={askUserQuestion}
         />
       }
       detailPanel={selectedStep ? (

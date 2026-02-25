@@ -10,7 +10,7 @@ WEB_SEARCH_TOOLS = [
     {
         "name": "web_search",
         "category": "Web Search",
-        "description": "Search the web using DuckDuckGo. Use when you need to find current information, verify facts, look up documentation, or answer questions requiring up-to-date knowledge. Returns titles, URLs, and snippets.",
+        "description": "使用 DuckDuckGo 搜索网页。当你需要：(1) 查找最新信息，(2) 验证事实，(3) 查阅文档，(4) 回答需要最新知识的问题。返回标题、URL 和摘要。",
         "detail": """使用 DuckDuckGo 搜索网页。
 
 **适用场景**：
@@ -54,7 +54,7 @@ WEB_SEARCH_TOOLS = [
     {
         "name": "news_search",
         "category": "Web Search",
-        "description": "Search news using DuckDuckGo. Use when you need to find recent news articles, current events, or breaking news. Returns titles, sources, dates, URLs, and excerpts.",
+        "description": "使用 DuckDuckGo 搜索新闻。当你需要：(1) 查找最新新闻文章，(2) 了解时事动态，(3) 获取突发新闻。返回标题、来源、日期、URL 和摘要。",
         "detail": """使用 DuckDuckGo 搜索新闻。
 
 **适用场景**：

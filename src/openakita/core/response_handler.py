@@ -254,10 +254,18 @@ NEXT: 建议的下一步"""
         Returns:
             复盘分析结果
         """
+        task_id = task_monitor.metrics.task_id if task_monitor and task_monitor.metrics else "unknown"
+
         try:
             from .task_monitor import RETROSPECT_PROMPT
 
+            logger.info(f"[Retrospect] Starting analysis for task: {task_id}")
+
             context = task_monitor.get_retrospect_context()
+            if not context:
+                logger.warning(f"[Retrospect] Empty context for task: {task_id}")
+                return ""
+
             prompt = RETROSPECT_PROMPT.format(context=context)
 
             response = await self._brain.think(
@@ -266,6 +274,12 @@ NEXT: 建议的下一步"""
             )
 
             result = strip_thinking_tags(response.content).strip() if response.content else ""
+
+            if not result:
+                logger.warning(f"[Retrospect] Empty result from LLM for task: {task_id}")
+                return ""
+
+            logger.info(f"[Retrospect] Analysis completed for task: {task_id}, result length: {len(result)}")
 
             task_monitor.metrics.retrospect_result = result
 
@@ -282,13 +296,14 @@ NEXT: 建议的下一步"""
                         importance_score=0.7,
                     )
                     self._memory_manager.add_memory(memory)
+                    logger.info(f"[Retrospect] Saved issue to memory for task: {task_id}")
                 except Exception as e:
-                    logger.warning(f"Failed to save retrospect to memory: {e}")
+                    logger.warning(f"[Retrospect] Failed to save to memory: {e}")
 
             return result
 
         except Exception as e:
-            logger.warning(f"Task retrospect failed: {e}")
+            logger.error(f"[Retrospect] Task retrospect failed for {task_id}: {e}", exc_info=True)
             return ""
 
     async def do_task_retrospect_background(
@@ -297,33 +312,57 @@ NEXT: 建议的下一步"""
         """
         后台执行任务复盘分析（不阻塞主响应）。
         """
+        task_id = task_monitor.metrics.task_id if task_monitor and task_monitor.metrics else "unknown"
+        effective_session_id = session_id or task_id or "unknown"
+
+        logger.info(
+            f"[Retrospect] Background task started: task_id={task_id}, "
+            f"session_id={effective_session_id}, "
+            f"duration={task_monitor.metrics.total_duration_seconds:.1f}s, "
+            f"iterations={task_monitor.metrics.total_iterations}"
+        )
+
         try:
             retrospect_result = await self.do_task_retrospect(task_monitor)
 
             if not retrospect_result:
+                logger.warning(f"[Retrospect] No result generated, skipping save: task_id={task_id}")
                 return
 
             from .task_monitor import RetrospectRecord, get_retrospect_storage
 
             record = RetrospectRecord(
                 task_id=task_monitor.metrics.task_id,
-                session_id=session_id,
-                description=task_monitor.metrics.description,
+                session_id=effective_session_id,
+                description=task_monitor.metrics.description or "",
                 duration_seconds=task_monitor.metrics.total_duration_seconds,
                 iterations=task_monitor.metrics.total_iterations,
                 model_switched=task_monitor.metrics.model_switched,
-                initial_model=task_monitor.metrics.initial_model,
-                final_model=task_monitor.metrics.final_model,
+                initial_model=task_monitor.metrics.initial_model or "",
+                final_model=task_monitor.metrics.final_model or "",
                 retrospect_result=retrospect_result,
             )
 
             storage = get_retrospect_storage()
-            storage.save(record)
+            save_success = storage.save(record)
 
-            logger.info(f"[Session:{session_id}] Retrospect saved: {task_monitor.metrics.task_id}")
+            if save_success:
+                logger.info(
+                    f"[Retrospect] Saved successfully: task_id={task_id}, "
+                    f"session_id={effective_session_id}"
+                )
+            else:
+                logger.error(
+                    f"[Retrospect] Failed to save record: task_id={task_id}, "
+                    f"session_id={effective_session_id}"
+                )
 
         except Exception as e:
-            logger.error(f"[Session:{session_id}] Background retrospect failed: {e}")
+            logger.error(
+                f"[Retrospect] Background retrospect failed: task_id={task_id}, "
+                f"session_id={effective_session_id}, error={e}",
+                exc_info=True
+            )
 
     @staticmethod
     def should_compile_prompt(message: str) -> bool:

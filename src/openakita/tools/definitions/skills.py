@@ -17,7 +17,7 @@ SKILLS_TOOLS = [
     {
         "name": "list_skills",
         "category": "Skills",
-        "description": "List all installed skills following Agent Skills specification. When you need to: (1) Check available skills, (2) Find skill for a task, (3) Verify skill installation.",
+        "description": "列出所有已安装的技能。主要用于：(1) 回答用户关于“有哪些技能”的询问，(2) 验证新安装的技能是否生效。注意：系统提示中已包含可用技能列表，Agent 在执行任务时通常不需要调用此工具，除非需要向用户展示。",
         "detail": """列出已安装的技能（遵循 Agent Skills 规范）。
 
 **返回信息**：
@@ -26,15 +26,15 @@ SKILLS_TOOLS = [
 - 是否可自动调用
 
 **适用场景**：
-- 查看可用技能
-- 为任务查找合适的技能
-- 验证技能安装状态""",
+- 回答用户询问（如“你会什么技能？”）
+- 验证技能安装状态
+- 调试技能加载问题""",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_skill_info",
         "category": "Skills",
-        "description": "Get skill detailed instructions and usage guide (Level 2 disclosure). When you need to: (1) Understand how to use a skill, (2) Check skill capabilities, (3) Learn skill parameters. NOTE: This is for SKILL instructions (pdf, docx, code-review, etc.). For system TOOL parameter schemas (run_shell, browser_navigate, etc.), use get_tool_info instead.",
+        "description": "获取技能的详细说明和使用指南（Level 2 披露）。当你需要：(1) 了解如何使用技能，(2) 检查技能能力，(3) 学习技能参数。注意：这是用于 SKILL 说明（pdf、docx、code-review 等）。对于系统 TOOL 参数模式（run_shell、browser_navigate 等），请改用 get_tool_info。",
         "detail": """获取技能的详细信息和指令（Level 2 披露）。
 
 **返回信息**：
@@ -56,7 +56,7 @@ SKILLS_TOOLS = [
     {
         "name": "run_skill_script",
         "category": "Skills",
-        "description": "Execute a skill's script file with arguments. When you need to: (1) Run skill functionality, (2) Execute specific operations, (3) Process data with skill.",
+        "description": "执行技能的脚本文件并传递参数。当你需要：(1) 运行技能功能，(2) 执行特定操作，(3) 使用技能处理数据。",
         "detail": """运行技能的脚本。
 
 **适用场景**：
@@ -80,7 +80,7 @@ SKILLS_TOOLS = [
     {
         "name": "get_skill_reference",
         "category": "Skills",
-        "description": "Get skill reference documentation for additional guidance. When you need to: (1) Get detailed technical docs, (2) Find examples, (3) Understand advanced usage.",
+        "description": "获取技能参考文档以获得额外指导。当你需要：(1) 获取详细技术文档，(2) 查找示例，(3) 了解高级用法。",
         "detail": """获取技能的参考文档。
 
 **适用场景**：
@@ -105,7 +105,7 @@ SKILLS_TOOLS = [
     {
         "name": "install_skill",
         "category": "Skills",
-        "description": "Install skill from URL or Git repository to local skills/ directory. When you need to: (1) Add new skill from GitHub, (2) Install SKILL.md from URL. Supports Git repos and single SKILL.md files.",
+        "description": "从 URL 或 Git 仓库安装技能到本地 skills/ 目录。当你需要：(1) 从 GitHub 添加新技能，(2) 从 URL 安装 SKILL.md。支持 Git 仓库和单个 SKILL.md 文件。",
         "detail": """从 URL 或 Git 仓库安装技能到本地 skills/ 目录。
 
 **支持的安装源**：
@@ -164,7 +164,7 @@ SKILLS_TOOLS = [
     {
         "name": "reload_skill",
         "category": "Skills",
-        "description": "Reload an existing skill to apply changes. Use after modifying a skill's SKILL.md or scripts.",
+        "description": "重新加载现有技能以应用更改。在修改技能的 SKILL.md 或脚本后使用。",
         "detail": """重新加载已存在的技能以应用修改。
 
 **适用场景**：

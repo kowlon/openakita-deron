@@ -166,7 +166,7 @@ def validate_description(description: str) -> tuple[bool, str]:
         return False, f"Description too long: {len(description)} > 500"
 
     # 检查是否包含使用场景
-    if "When you need to" not in description and "When" not in description:
+    if "When you need to" not in description and "When" not in description and "当需要" not in description:
         logger.warning("Description may lack usage scenarios")
 
     return True, ""
@@ -259,10 +259,10 @@ def build_description(
 
     # 添加触发条件
     if triggers:
-        trigger_str = " When you need to: " + ", ".join(
+        trigger_str = " 当你需要： " + ", ".join(
             f"({i + 1}) {t}" for i, t in enumerate(triggers[:3])
         )
-        parts.append(trigger_str.rstrip(".") + ".")
+        parts.append(trigger_str.rstrip(".") + "。")
 
     # 添加前置条件
     if prerequisites:

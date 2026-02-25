@@ -247,111 +247,73 @@ class PromptAssembler:
         )
 
     def _generate_tools_text(self, tools: list[dict]) -> str:
-        """从工具列表动态生成工具列表文本"""
-        categories = {
-            "File System": ["run_shell", "write_file", "read_file", "list_directory"],
-            "Skills Management": [
-                "list_skills", "get_skill_info", "run_skill_script",
-                "get_skill_reference", "install_skill", "load_skill", "reload_skill",
-            ],
-            "Memory Management": ["add_memory", "search_memory", "get_memory_stats"],
-            "Browser Automation": [
-                "browser_task", "browser_open", "browser_navigate",
-                "browser_get_content", "browser_screenshot", "browser_close",
-            ],
-            "Scheduled Tasks": [
-                "schedule_task", "list_scheduled_tasks",
-                "cancel_scheduled_task", "trigger_scheduled_task",
-            ],
-        }
+        """
+        生成精简版工具列表 (Token Diet) - 动态归类版
 
+        策略：
+        1. High-Freq (Shell/File): 优先展示完整描述
+        2. Low-Freq (All Others): 按 category 动态分组，仅列出名称
+        """
+        # 1. 核心高频工具 (Always visible with description)
+        core_names = {"run_shell", "write_file", "read_file", "list_directory", "ask_user"}
         tool_map = {t["name"]: t for t in tools}
-        lines = ["## Available Tools"]
+        
+        lines = ["## Tools"]
 
-        for category, tool_names in categories.items():
-            existing_tools = [(name, tool_map[name]) for name in tool_names if name in tool_map]
-            if existing_tools:
-                lines.append(f"\n### {category}")
-                for name, tool_def in existing_tools:
-                    desc = tool_def.get("description", "")
-                    lines.append(f"- **{name}**: {desc}")
-
-        # 未分类的工具
-        categorized = set()
-        for names in categories.values():
-            categorized.update(names)
-        uncategorized = [(t["name"], t) for t in tools if t["name"] not in categorized]
-        if uncategorized:
-            lines.append("\n### Other Tools")
-            for name, tool_def in uncategorized:
-                desc = tool_def.get("description", "")
+        # A. Core Tools (详细)
+        lines.append("### Core (Files & Shell)")
+        for name in ["run_shell", "read_file", "write_file", "list_directory", "ask_user"]:
+            if name in tool_map:
+                desc = tool_map[name].get("description", "")
                 lines.append(f"- **{name}**: {desc}")
+
+        # B. Capabilities (动态分组，紧凑)
+        lines.append("\n### Capabilities (Use `get_tool_info` for details)")
+        
+        # 收集非核心工具并按 category 分组
+        categories = {}
+        for tool in tools:
+            name = tool["name"]
+            if name in core_names or name.startswith("_"):
+                continue
+                
+            # 获取分类，默认为 "Other"
+            cat = tool.get("category", "Other")
+            # 规范化分类名称（例如 "Skills Management" -> "Skills"）
+            if "skill" in cat.lower(): cat = "Skills"
+            elif "browser" in cat.lower(): cat = "Browser"
+            elif "memory" in cat.lower(): cat = "Memory"
+            elif "file" in cat.lower(): cat = "FileSystem" # 虽然核心文件工具已列出，防止有漏网之鱼
+            elif "mcp" in cat.lower(): cat = "MCP"
+            
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(name)
+            
+        # 按分类名称排序输出
+        for cat in sorted(categories.keys()):
+            names = sorted(categories[cat])
+            if names:
+                lines.append(f"- **{cat}**: {', '.join(names)}")
 
         return "\n".join(lines)
 
     @staticmethod
     def _build_system_info() -> str:
-        """构建系统环境信息"""
-        return f"""## 运行环境
-
-- **操作系统**: {platform.system()} {platform.release()}
-- **当前工作目录**: {os.getcwd()}
-- **临时目录**:
-  - Windows: 使用当前目录下的 `data/temp/` 或 `%TEMP%`
-  - Linux/macOS: 使用当前目录下的 `data/temp/` 或 `/tmp`
-- **建议**: 创建临时文件时优先使用 `data/temp/` 目录
-
-## ⚠️ 重要：运行时状态不持久化
-
-**服务重启后以下状态会丢失：**
-
-| 状态 | 重启后 | 正确做法 |
-|------|--------|----------|
-| 浏览器 | **已关闭** | 必须先调用 `browser_open` 确认状态 |
-| 变量/内存数据 | **已清空** | 通过工具重新获取 |
-| 临时文件 | **可能清除** | 重新检查文件是否存在 |
-| 网络连接 | **已断开** | 需要重新建立连接 |"""
+        """构建精简版环境信息"""
+        return f"""## Runtime Context
+- OS: {platform.system()} {platform.release()}
+- CWD: {os.getcwd()}
+- Note: Runtime state (browser, memory) resets on restart."""
 
     @staticmethod
     def _build_tools_guide() -> str:
-        """构建工具使用指南"""
-        return """
-## 工具体系说明
-
-你有三类工具可以使用，**它们都是工具，都可以调用**：
-
-### 1. 系统工具（渐进式披露）
-
-| 步骤 | 操作 | 说明 |
-|-----|-----|-----|
-| 1 | 查看上方 "Available System Tools" 清单 | 了解有哪些工具可用 |
-| 2 | `get_tool_info(tool_name)` | 获取工具的完整参数定义 |
-| 3 | 直接调用工具 | 如 `read_file(path="...")` |
-
-### 2. Skills 技能（渐进式披露）
-
-| 步骤 | 操作 | 说明 |
-|-----|-----|-----|
-| 1 | 查看上方 "Available Skills" 清单 | 了解有哪些技能可用 |
-| 2 | `get_skill_info(skill_name)` | 获取技能的详细使用说明 |
-| 3 | `run_skill_script(skill_name, script_name)` | 执行技能提供的脚本 |
-
-### 3. MCP 外部服务（全量暴露）
-
-| 步骤 | 操作 | 说明 |
-|-----|-----|-----|
-| 1 | 查看上方 "MCP Servers" 清单 | 包含完整的工具定义和参数 |
-| 2 | `call_mcp_tool(server, tool_name, arguments)` | 直接调用 |
-
-### 工具选择原则
-
-1. **系统工具**：文件操作、命令执行、浏览器、记忆等
-2. **Skills**：复杂任务、特定领域能力
-3. **MCP**：外部服务集成
-4. **找不到工具？使用 `skill-creator` 技能创建一个！**
-
-**记住：这三类都是工具，都可以调用，不要说"我没有这个能力"！**
-"""
+        """构建极简工具指南"""
+        return """## Tool Usage
+1. **Core Tools**: Ready to use.
+2. **Unknown Tools**: Call `get_tool_info(tool_name)` first.
+3. **Skills**: Found in `skills/`. Use `run_skill_script` for external skills.
+4. **Missing Capability?**: Use `skill-creator` to make one."""
 
     @staticmethod
     def _build_core_principles() -> str:

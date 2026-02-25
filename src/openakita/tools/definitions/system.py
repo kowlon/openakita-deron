@@ -14,7 +14,7 @@ SYSTEM_TOOLS = [
     {
         "name": "ask_user",
         "category": "System",
-        "description": "Ask the user one or more questions and PAUSE execution until they reply. Use when: (1) critical information is missing, (2) task is ambiguous and needs clarification, (3) user confirmation is required before proceeding. Do NOT put questions in plain text — only this tool triggers a real pause. When questions have choices, ALWAYS provide options. Supports both single-select and multi-select via allow_multiple. For multiple related questions, use the questions array to ask them all at once.",
+        "description": "向用户提问并暂停执行，直到他们回复。当你需要：(1) 缺少关键信息，(2) 任务模棱两可需要澄清，(3) 继续前需要用户确认。不要将问题放在纯文本中 —— 只有此工具才会触发真正的暂停。当问题有选项时，务必提供 options。支持单选和多选（通过 allow_multiple）。对于多个相关问题，使用 questions 数组一次性提问。",
         "detail": """向用户提问并暂停执行，等待用户回复。支持单个问题和多个问题。
 
 **何时使用**：
@@ -120,7 +120,7 @@ SYSTEM_TOOLS = [
     {
         "name": "enable_thinking",
         "category": "System",
-        "description": "Control deep thinking mode. Default enabled. For very simple tasks (simple reminders, greetings, quick queries), can temporarily disable to speed up response. Auto-restores to enabled after completion.",
+        "description": "控制深度思考模式。默认启用。对于非常简单的任务（简单提醒、问候、快速查询），可以临时禁用以加快响应。完成后自动恢复为启用。",
         "detail": """控制深度思考模式。
 
 **默认状态**：启用
@@ -145,7 +145,7 @@ SYSTEM_TOOLS = [
     {
         "name": "get_session_logs",
         "category": "System",
-        "description": "Get current session system logs. IMPORTANT: When commands fail, encounter errors, or need to understand previous operation results, call this tool. Logs contain: command details, error info, system status.",
+        "description": "获取当前会话系统日志。重要提示：当命令失败、遇到错误或需要了解先前的操作结果时，请调用此工具。日志包含：命令详情、错误信息、系统状态。",
         "detail": """获取当前会话的系统日志。
 
 **重要**: 当命令执行失败、遇到错误、或需要了解之前的操作结果时，应该调用此工具查看日志。
@@ -178,7 +178,7 @@ SYSTEM_TOOLS = [
     {
         "name": "get_tool_info",
         "category": "System",
-        "description": "Get system tool detailed parameter definition (Level 2 disclosure). When you need to: (1) Understand unfamiliar tool usage, (2) Check tool parameters, (3) Learn tool examples. Call before using unfamiliar tools. NOTE: This is for system TOOLS (run_shell, browser_navigate, etc.). For external SKILL instructions (pdf, docx, etc.), use get_skill_info instead.",
+        "description": "获取系统工具的详细参数定义（Level 2 披露）。当你需要：(1) 了解不熟悉的工具用法，(2) 检查工具参数，(3) 学习工具示例。在调用不熟悉的工具前使用。注意：这是用于系统 TOOLS（run_shell、browser_navigate 等）。对于外部 SKILL 说明（pdf、docx 等），请改用 get_skill_info。",
         "detail": """获取系统工具的详细参数定义（Level 2 披露）。
 
 **适用场景**：
@@ -250,7 +250,7 @@ SYSTEM_TOOLS = [
     {
         "name": "set_task_timeout",
         "category": "System",
-        "description": "Adjust current task timeout policy. Use when the task is expected to take long, or when the system is too aggressive switching models. Prefer increasing timeout for long-running tasks with steady progress; decrease to catch hangs sooner.",
+        "description": "调整当前任务超时策略。当预期任务耗时较长，或系统切换模型过于激进时使用。建议对进展稳定的长时间运行任务增加超时时间；减少超时时间以更快捕获卡死。",
         "detail": """动态调整当前任务的超时策略（主要用于避免“卡死检测”误触发）。\n\n- 本项目的超时重点是：**检测无进展卡死**，而不是限制长任务。\n- 你可以在长任务开始前，或发现任务被频繁触发超时警告时，调高超时秒数。\n\n注意：该设置只影响当前会话正在执行的任务，不影响全局配置。""",
         "input_schema": {
             "type": "object",

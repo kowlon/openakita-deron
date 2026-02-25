@@ -305,9 +305,12 @@ class TaskScheduler:
 
     async def _execute_task(self, task: ScheduledTask) -> TaskExecution:
         """执行任务"""
-        execution = TaskExecution.create(task.id)
+        import time
 
-        logger.info(f"Executing task: {task.id} ({task.name})")
+        execution = TaskExecution.create(task.id)
+        start_time = time.time()
+
+        logger.info(f"[Scheduler] Executing task: {task.id} ({task.name})")
         task.mark_running()
 
         try:
@@ -321,12 +324,17 @@ class TaskScheduler:
                 # 没有执行器，模拟执行
                 execution.finish(True, result="No executor configured")
 
+            duration_seconds = time.time() - start_time
+
             # 根据执行结果更新任务状态
             if execution.status == "success":
                 trigger = self._triggers.get(task.id)
                 next_run = trigger.get_next_run_time(datetime.now()) if trigger else None
                 task.mark_completed(next_run)
-                logger.info(f"Task {task.id} completed successfully")
+                logger.info(
+                    f"[Scheduler] Task {task.id} completed successfully: "
+                    f"duration={duration_seconds:.2f}s, next_run={next_run}"
+                )
             else:
                 # 失败：标记失败并尽量推进下一次运行时间（避免 next_run 停留在过去）
                 error_msg = execution.error or "Unknown error"
@@ -335,18 +343,31 @@ class TaskScheduler:
                 next_run = trigger.get_next_run_time(datetime.now()) if trigger else None
                 if next_run:
                     task.next_run = next_run
-                logger.warning(f"Task {task.id} reported failure: {error_msg}")
+                logger.warning(
+                    f"[Scheduler] Task {task.id} failed: duration={duration_seconds:.2f}s, "
+                    f"error={error_msg}, next_run={next_run}"
+                )
 
         except Exception as e:
             error_msg = str(e)
+            duration_seconds = time.time() - start_time
             execution.finish(False, error=error_msg)
             task.mark_failed(error_msg)
-            logger.error(f"Task {task.id} failed: {error_msg}", exc_info=True)
+            logger.error(
+                f"[Scheduler] Task {task.id} exception: duration={duration_seconds:.2f}s, "
+                f"error={error_msg}",
+                exc_info=True
+            )
 
         # 保存执行记录
         self._executions.append(execution)
         self._save_tasks()
         self._save_executions()
+
+        logger.info(
+            f"[Scheduler] Execution record saved: task_id={task.id}, "
+            f"status={execution.status}, total_executions={len(self._executions)}"
+        )
 
         return execution
 
@@ -485,9 +506,14 @@ class TaskScheduler:
         """加载执行记录（可选）"""
         executions_file = self.storage_path / "executions.json"
 
+        # 尝试恢复
         if not executions_file.exists():
             self._try_recover_json(executions_file)
+
+        # 如果文件不存在，创建空文件
         if not executions_file.exists():
+            logger.info("No executions file found, creating empty file")
+            self._atomic_write_json(executions_file, [])
             return
 
         try:
@@ -500,6 +526,10 @@ class TaskScheduler:
             # 只保留最近 1000 条
             self._executions = loaded[-1000:]
             logger.info(f"Loaded {len(self._executions)} executions from storage")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse executions file (corrupted?): {e}")
+            # 备份损坏的文件并创建新的
+            self._atomic_write_json(executions_file, [])
         except Exception as e:
             logger.warning(f"Failed to load executions: {e}")
 
@@ -519,12 +549,13 @@ class TaskScheduler:
         executions_file = self.storage_path / "executions.json"
 
         try:
-            # 只保留最近 1000 条记录
-            recent = self._executions[-1000:]
+            # 只保留最近 1000 条记录（即使为空也保存）
+            recent = self._executions[-1000:] if self._executions else []
             data = [e.to_dict() for e in recent]
             # 同步裁剪内存，避免长期运行无限增长
             self._executions = recent
             self._atomic_write_json(executions_file, data)
+            logger.debug(f"[Scheduler] Saved {len(data)} execution records")
 
         except Exception as e:
             logger.error(f"Failed to save executions: {e}")

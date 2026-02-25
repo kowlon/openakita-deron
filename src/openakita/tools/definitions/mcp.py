@@ -11,7 +11,7 @@ MCP_TOOLS = [
     {
         "name": "call_mcp_tool",
         "category": "MCP",
-        "description": "Call MCP server tool for extended capabilities. Check 'MCP Servers' section in system prompt for available servers and tools. When you need to: (1) Use external service, (2) Access specialized functionality.",
+        "description": "调用 MCP 服务器工具以获得扩展功能。请检查系统提示中的“MCP Servers”部分以获取可用的服务器和工具。当你需要：(1) 使用外部服务，(2) 访问专用功能。",
         "detail": """调用 MCP 服务器的工具。
 
 **使用前**：
@@ -38,7 +38,7 @@ MCP_TOOLS = [
     {
         "name": "list_mcp_servers",
         "category": "MCP",
-        "description": "List all configured MCP servers and their connection status. When you need to: (1) Check available MCP servers, (2) Verify server connections.",
+        "description": "列出所有配置的 MCP 服务器及其连接状态。当你需要：(1) 检查可用的 MCP 服务器，(2) 验证服务器连接。",
         "detail": """列出所有配置的 MCP 服务器及其连接状态。
 
 **返回信息**：
@@ -55,7 +55,7 @@ MCP_TOOLS = [
     {
         "name": "get_mcp_instructions",
         "category": "MCP",
-        "description": "Get MCP server detailed usage instructions (INSTRUCTIONS.md). When you need to: (1) Understand server full capabilities, (2) Learn server-specific usage patterns.",
+        "description": "获取 MCP 服务器的详细使用说明（INSTRUCTIONS.md）。当你需要：(1) 了解服务器的完整功能，(2) 学习服务器特定的使用模式。",
         "detail": """获取 MCP 服务器的详细使用说明（INSTRUCTIONS.md）。
 
 **适用场景**：

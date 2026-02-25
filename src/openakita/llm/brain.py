@@ -976,10 +976,15 @@ class Brain:
             # 序列化 content blocks
             content_blocks = self._serialize_response_content(response)
 
+            request_data, request_file = self._load_llm_request_debug(debug_dir, request_id)
+
             debug_data = {
                 "timestamp": datetime.now().isoformat(),
                 "caller": caller,
                 "request_id": request_id,
+                "request_file": request_file or "",
+                "llm_request": (request_data or {}).get("llm_request", {}),
+                "request_stats": (request_data or {}).get("stats", {}),
                 "llm_response": {
                     "model": getattr(response, "model", ""),
                     "stop_reason": str(getattr(response, "stop_reason", "")),
@@ -1016,6 +1021,29 @@ class Brain:
 
         except Exception as e:
             logger.warning(f"[LLM DEBUG] Failed to save response debug file: {e}")
+
+    def _load_llm_request_debug(
+        self, debug_dir: Path, request_id: str
+    ) -> tuple[dict | None, str | None]:
+        if not request_id:
+            return None, None
+        try:
+            candidates = sorted(
+                debug_dir.glob(f"llm_request_*_{request_id}.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        except Exception:
+            return None, None
+
+        for p in candidates:
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                return data, str(p)
+            except Exception:
+                continue
+
+        return None, str(candidates[0]) if candidates else None
 
     def _serialize_response_content(self, response) -> list[dict]:
         """

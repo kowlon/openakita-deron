@@ -11,7 +11,7 @@ MEMORY_TOOLS = [
     {
         "name": "add_memory",
         "category": "Memory",
-        "description": "Record important information to long-term memory for learning user preferences, successful patterns, and error lessons. When you need to: (1) Remember user preferences, (2) Save successful patterns, (3) Record lessons from errors. NOTE: For structured user profile fields (name, work_field, os, etc.), use update_user_profile instead. Use add_memory for free-form, unstructured information that doesn't fit profile fields.",
+        "description": "将重要信息记录到长期记忆中，以学习用户偏好、成功模式和错误教训。当你需要：(1) 记住用户偏好，(2) 保存成功模式，(3) 记录错误教训。注意：对于结构化的用户个人资料字段（姓名、工作领域、操作系统等），请改用 update_user_profile。使用 add_memory 记录不适合个人资料字段的自由格式、非结构化信息。",
         "detail": """记录重要信息到长期记忆。
 
 **适用场景**：
@@ -44,7 +44,7 @@ MEMORY_TOOLS = [
     {
         "name": "search_memory",
         "category": "Memory",
-        "description": "Search relevant memories by keyword and optional type filter. When you need to: (1) Recall past information, (2) Find user preferences, (3) Check learned patterns.",
+        "description": "通过关键词和可选的类型过滤器搜索相关记忆。当你需要：(1) 回忆过去的信息，(2) 查找用户偏好，(3) 检查已学习的模式。",
         "detail": """搜索相关记忆。
 
 **适用场景**：
@@ -71,7 +71,7 @@ MEMORY_TOOLS = [
     {
         "name": "get_memory_stats",
         "category": "Memory",
-        "description": "Get memory system statistics including total count and breakdown by type. When you need to: (1) Check memory usage, (2) Understand memory distribution.",
+        "description": "获取记忆系统统计信息，包括总数和按类型的细分。当你需要：(1) 检查记忆使用情况，(2) 了解记忆分布。",
         "detail": """获取记忆系统统计信息。
 
 **返回信息**：

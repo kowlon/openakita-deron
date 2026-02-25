@@ -12,7 +12,7 @@ FILESYSTEM_TOOLS = [
     {
         "name": "run_shell",
         "category": "File System",
-        "description": "Execute shell commands for system operations, directory creation, and script execution. When you need to: (1) Run system commands, (2) Execute scripts, (3) Install packages, (4) Manage processes. Note: If commands fail consecutively, try different approaches.",
+        "description": "执行 Shell 命令以进行系统操作、目录创建和脚本执行。当你需要：(1) 运行系统命令，(2) 执行脚本，(3) 安装软件包，(4) 管理进程。注意：如果命令连续失败，请尝试不同的方法。",
         "detail": """执行 Shell 命令，用于运行系统命令、创建目录、执行脚本等。
 
 **适用场景**:
@@ -68,7 +68,7 @@ FILESYSTEM_TOOLS = [
     {
         "name": "read_file",
         "category": "File System",
-        "description": "Read file content with optional pagination (offset/limit). Default reads first 300 lines. When you need to: (1) Check file content, (2) Analyze code or data, (3) Get configuration values. For large files, use offset and limit to read specific sections.",
+        "description": "读取文件内容，支持可选的分页（offset/limit）。默认读取前 300 行。当你需要：(1) 检查文件内容，(2) 分析代码或数据，(3) 获取配置值。对于大文件，使用 offset 和 limit 读取特定部分。",
         "detail": """读取文件内容（支持分页）。
 
 **适用场景**:
@@ -107,7 +107,7 @@ FILESYSTEM_TOOLS = [
     {
         "name": "list_directory",
         "category": "File System",
-        "description": "List directory contents including files and subdirectories. When you need to: (1) Explore directory structure, (2) Find specific files, (3) Check what exists in a folder. Default returns up to 200 items.",
+        "description": "列出目录内容，包括文件和子目录。当你需要：(1) 探索目录结构，(2) 查找特定文件，(3) 检查文件夹中存在什么。默认最多返回 200 个项目。",
         "detail": """列出目录内容，包括文件和子目录。
 
 **适用场景**:

@@ -91,17 +91,32 @@ class RetrospectManager:
         from .response_handler import strip_thinking_tags
         from .task_monitor import RETROSPECT_PROMPT
 
+        task_id = task_monitor.metrics.task_id if task_monitor and task_monitor.metrics else "unknown"
+
         try:
+            logger.info(f"[Retrospect] Starting analysis for task: {task_id}")
+
             context = task_monitor.get_retrospect_context()
+            if not context:
+                logger.warning(f"[Retrospect] Empty context for task: {task_id}")
+                return ""
+
             prompt = RETROSPECT_PROMPT.format(context=context)
 
             # 使用 Brain 进行复盘分析（独立上下文）
+            logger.debug(f"[Retrospect] Calling LLM for task: {task_id}")
             response = await self.brain.think(
                 prompt=prompt,
                 system="你是一个任务执行分析专家。请简洁地分析任务执行情况，找出耗时原因和改进建议。",
             )
 
             result = strip_thinking_tags(response.content).strip() if response.content else ""
+
+            if not result:
+                logger.warning(f"[Retrospect] Empty result from LLM for task: {task_id}")
+                return ""
+
+            logger.info(f"[Retrospect] Analysis completed for task: {task_id}, result length: {len(result)}")
 
             # 保存复盘结果到监控器
             task_monitor.metrics.retrospect_result = result
@@ -119,13 +134,14 @@ class RetrospectManager:
                         importance_score=0.7,
                     )
                     self.memory_manager.add_memory(memory)
+                    logger.info(f"[Retrospect] Saved issue to memory for task: {task_id}")
                 except Exception as e:
-                    logger.warning(f"Failed to save retrospect to memory: {e}")
+                    logger.warning(f"[Retrospect] Failed to save to memory: {e}")
 
             return result
 
         except Exception as e:
-            logger.warning(f"Task retrospect failed: {e}")
+            logger.error(f"[Retrospect] Task retrospect failed for {task_id}: {e}", exc_info=True)
             return ""
 
     async def do_task_retrospect_background(
@@ -141,11 +157,27 @@ class RetrospectManager:
             task_monitor: 任务监控器
             session_id: 会话 ID
         """
+        # 获取任务 ID 用于日志
+        task_id = task_monitor.metrics.task_id if task_monitor and task_monitor.metrics else "unknown"
+
+        # 确保有有效的 session_id（使用 task_id 作为回退）
+        effective_session_id = session_id or task_id or "unknown"
+
+        logger.info(
+            f"[Retrospect] Background task started: task_id={task_id}, "
+            f"session_id={effective_session_id}, "
+            f"duration={task_monitor.metrics.total_duration_seconds:.1f}s, "
+            f"iterations={task_monitor.metrics.total_iterations}"
+        )
+
         try:
             # 执行复盘分析
             retrospect_result = await self.do_task_retrospect(task_monitor)
 
             if not retrospect_result:
+                logger.warning(
+                    f"[Retrospect] No result generated, skipping save: task_id={task_id}"
+                )
                 return
 
             # 保存到复盘存储
@@ -153,20 +185,33 @@ class RetrospectManager:
 
             record = RetrospectRecord(
                 task_id=task_monitor.metrics.task_id,
-                session_id=session_id,
-                description=task_monitor.metrics.description,
+                session_id=effective_session_id,
+                description=task_monitor.metrics.description or "",
                 duration_seconds=task_monitor.metrics.total_duration_seconds,
                 iterations=task_monitor.metrics.total_iterations,
                 model_switched=task_monitor.metrics.model_switched,
-                initial_model=task_monitor.metrics.initial_model,
-                final_model=task_monitor.metrics.final_model,
+                initial_model=task_monitor.metrics.initial_model or "",
+                final_model=task_monitor.metrics.final_model or "",
                 retrospect_result=retrospect_result,
             )
 
             storage = get_retrospect_storage()
-            storage.save(record)
+            save_success = storage.save(record)
 
-            logger.info(f"[Session:{session_id}] Retrospect saved: {task_monitor.metrics.task_id}")
+            if save_success:
+                logger.info(
+                    f"[Retrospect] Saved successfully: task_id={task_id}, "
+                    f"session_id={effective_session_id}, file={storage.storage_dir}"
+                )
+            else:
+                logger.error(
+                    f"[Retrospect] Failed to save record: task_id={task_id}, "
+                    f"session_id={effective_session_id}"
+                )
 
         except Exception as e:
-            logger.error(f"[Session:{session_id}] Background retrospect failed: {e}")
+            logger.error(
+                f"[Retrospect] Background retrospect failed: task_id={task_id}, "
+                f"session_id={effective_session_id}, error={e}",
+                exc_info=True
+            )

@@ -118,7 +118,9 @@ async def _stream_chat(
             await actual_agent.initialize()
 
         # --- Session management ---
-        conversation_id = chat_request.conversation_id or ""
+        # 如果没有 conversation_id，自动生成一个
+        import uuid
+        conversation_id = chat_request.conversation_id or f"chat_{uuid.uuid4().hex[:12]}"
         session = None
         session_messages_history: list[dict] = []
 

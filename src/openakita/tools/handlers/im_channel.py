@@ -336,12 +336,21 @@ class IMChannelHandler:
         """
         Desktop mode: instead of sending via IM adapter, return file URLs
         so the desktop frontend can display them inline.
+
+        Optionally archives files to output directory if configured.
         """
         import json
+        import shutil
         import urllib.parse
+
+        from ...config import settings
 
         artifacts = params.get("artifacts") or []
         receipts = []
+
+        # 获取归档配置
+        auto_archive = getattr(settings, 'auto_archive_to_output', False)
+        output_dir = Path(getattr(settings, 'output_directory', 'data/output'))
 
         for idx, art in enumerate(artifacts):
             art_type = (art or {}).get("type", "")
@@ -371,29 +380,56 @@ class IMChannelHandler:
             file_url = f"/api/files?path={urllib.parse.quote(abs_path, safe='')}"
             size = p.stat().st_size
 
+            # 可选：归档到 output 目录
+            archived_path = None
+            if auto_archive:
+                try:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    archive_target = output_dir / p.name
+
+                    # 避免重名
+                    if archive_target.exists():
+                        stem = p.stem
+                        suffix = p.suffix
+                        counter = 1
+                        while archive_target.exists():
+                            archive_target = output_dir / f"{stem}_{counter}{suffix}"
+                            counter += 1
+
+                    shutil.copy2(p, archive_target)
+                    archived_path = str(archive_target)
+                    logger.info(f"[DeliverArtifacts] Archived to: {archived_path}")
+                except Exception as e:
+                    logger.warning(f"[DeliverArtifacts] Archive failed: {e}")
+
             receipts.append({
                 "index": idx,
                 "status": "delivered",
                 "type": art_type,
                 "path": str(p.resolve()),
                 "file_url": file_url,
+                "archived_path": archived_path,
                 "caption": caption,
                 "name": name or p.name,
                 "size": size,
                 "channel": "desktop",
             })
 
-        return json.dumps(
-            {
-                "ok": all(r.get("status") == "delivered" for r in receipts),
-                "channel": "desktop",
-                "receipts": receipts,
-                "hint": "Desktop mode: files are served via /api/files/ endpoint. "
-                        "Frontend should display images inline using the file_url.",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+        # 构建返回结果
+        result = {
+            "ok": all(r.get("status") == "delivered" for r in receipts),
+            "channel": "desktop",
+            "receipts": receipts,
+            "hint": "Desktop mode: files are served via /api/files/ endpoint. "
+                    "Frontend should display images inline using the file_url.",
+        }
+
+        if auto_archive:
+            archived_count = sum(1 for r in receipts if r.get("archived_path"))
+            result["archived"] = archived_count
+            result["archive_dir"] = str(output_dir)
+
+        return json.dumps(result, ensure_ascii=False, indent=2)
 
     async def _deliver_artifacts(self, params: dict) -> str:
         """

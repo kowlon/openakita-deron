@@ -5,6 +5,17 @@ import { StepTimeline } from '@/components/Step/StepTimeline'
 import { ElapsedTimer } from '@/components/Timer/ElapsedTimer'
 import { ArtifactList } from '@/components/Artifact/ArtifactList'
 
+type AskUserQuestion = {
+  question?: string;
+  questions?: Array<{
+    id: string;
+    prompt: string;
+    options?: Array<{ id: string; label: string }>;
+    allow_multiple?: boolean;
+  }>;
+  options?: Array<{ id: string; label: string }>;
+} | null;
+
 type MainContentProps = {
   session: Session | null
   conversationHistory: ConversationTurn[]
@@ -22,6 +33,7 @@ type MainContentProps = {
   llmOutput: string | null
   onConfirmTurn?: () => void  // Called when user confirms in Edit mode
   artifacts?: Artifact[]  // Current turn artifacts
+  askUserQuestion?: AskUserQuestion
 }
 
 /**
@@ -117,6 +129,7 @@ export function MainContent({
   llmOutput,
   onConfirmTurn,
   artifacts = [],
+  askUserQuestion,
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -142,11 +155,13 @@ export function MainContent({
   // Check if all steps are completed
   const isCompleted = useMemo(() => {
     // For simple Q&A (no steps), completed when we have llmOutput and not streaming
+    // Also completed when we have askUserQuestion (waiting for user input)
     if (steps.length === 0) {
-      return !isStreaming && llmOutput !== null
+      return !isStreaming && (llmOutput !== null || askUserQuestion !== null)
     }
-    return steps.every((step) => step.status === 'completed')
-  }, [steps, isStreaming, llmOutput])
+    // For tasks with steps, completed when all steps are done OR when askUserQuestion is set
+    return !isStreaming && (steps.every((step) => step.status === 'completed') || askUserQuestion !== null)
+  }, [steps, isStreaming, llmOutput, askUserQuestion])
 
   // Check if task is in progress (has steps but not all completed, or waiting for response)
   const isRunning = useMemo(() => {
@@ -316,8 +331,9 @@ export function MainContent({
             </div>
           )}
 
-          {/* Current Turn - AI Response Area (only if user message not already in history) */}
-          {(isWaiting || isRunning || isCompleted) && session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (
+          {/* Current Turn - AI Response Area */}
+          {/* Show if: user message exists AND not in history AND (has content OR waiting for response) */}
+          {session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (isWaiting || isRunning || isCompleted || steps.length > 0 || askUserQuestion || llmOutput) && (
             <div className="flex justify-start items-start gap-3 mr-12">
               {/* AI Avatar */}
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 shrink-0 flex items-center justify-center shadow-md">
@@ -368,6 +384,73 @@ export function MainContent({
                 {/* Artifacts - show generated files */}
                 {artifacts.length > 0 && (
                   <ArtifactList artifacts={artifacts} />
+                )}
+
+                {/* Ask User Question - shown when agent needs clarification */}
+                {askUserQuestion && (
+                  <div className="mt-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-symbols-outlined text-amber-400 text-xl">help</span>
+                      <span className="text-sm font-medium text-amber-400">需要确认</span>
+                    </div>
+
+                    {/* Simple question format */}
+                    {askUserQuestion.question && (
+                      <p className="text-sm text-slate-300 mb-3">{askUserQuestion.question}</p>
+                    )}
+
+                    {/* Multiple questions format */}
+                    {askUserQuestion.questions && askUserQuestion.questions.length > 0 && (
+                      <div className="space-y-4">
+                        {askUserQuestion.questions.map((q, qIdx) => (
+                          <div key={q.id || qIdx}>
+                            <p className="text-sm text-slate-300 mb-2">{q.prompt}</p>
+                            {q.options && q.options.length > 0 && (
+                              <div className="space-y-2">
+                                {q.options.map((option) => (
+                                  <button
+                                    key={option.id}
+                                    onClick={() => {
+                                      // Send the selected option as a message
+                                      onSendMessage(option.label)
+                                    }}
+                                    className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Simple options format (without questions array) */}
+                    {!askUserQuestion.questions && askUserQuestion.options && askUserQuestion.options.length > 0 && (
+                      <div className="space-y-2">
+                        {askUserQuestion.options.map((option) => (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              // Send the selected option as a message
+                              onSendMessage(option.label)
+                            }}
+                            className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No options - show text input hint */}
+                    {!askUserQuestion.questions && !askUserQuestion.options && (
+                      <div className="text-xs text-slate-500">
+                        请在下方输入框中回答
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Edit Mode Paused - shown when step is paused waiting for confirmation */}

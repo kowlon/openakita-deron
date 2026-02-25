@@ -207,6 +207,16 @@ class Settings(BaseSettings):
     )
     database_path: str = Field(default="data/agent.db", description="数据库路径")
 
+    # === 文件输出配置 ===
+    auto_archive_to_output: bool = Field(
+        default=False,
+        description="是否自动将 deliver_artifacts 的文件归档到 output 目录"
+    )
+    output_directory: str = Field(
+        default="data/output",
+        description="输出文件目录"
+    )
+
     # === 日志配置 ===
     log_level: str = Field(default="INFO", description="日志级别")
     log_dir: str = Field(default="logs", description="日志目录")

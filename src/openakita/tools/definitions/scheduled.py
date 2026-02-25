@@ -13,7 +13,7 @@ SCHEDULED_TOOLS = [
     {
         "name": "schedule_task",
         "category": "Scheduled",
-        "description": "Create scheduled task or reminder. IMPORTANT: Must actually call this tool to create task - just saying 'OK I will remind you' does NOT create the task! Task types: (1) reminder - sends message at scheduled time (default, 90%% of cases), (2) task - AI executes operations. NOTIFICATION CHANNEL: By default, reminders/results are automatically sent back to the CURRENT IM channel where the user is chatting (e.g. if user sends message via WeChat, reminder will be pushed to WeChat). NO Webhook URL or extra config needed! Only set target_channel if user explicitly asks to push to a DIFFERENT channel.",
+        "description": "创建定时任务或提醒。重要提示：必须实际调用此工具来创建任务 - 仅仅说“好的我会提醒你”并不会创建任务！任务类型：(1) reminder - 在预定时间发送消息（默认，90%的情况），(2) task - AI 执行操作。通知通道：默认情况下，提醒/结果会自动发送回用户当前聊天的 IM 通道（例如，如果用户通过微信发送消息，提醒将被推送到微信）。不需要 Webhook URL 或额外配置！仅当用户明确要求推送到不同的通道时才设置 target_channel。",
         "detail": """创建定时任务或提醒。
 
 ⚠️ **重要: 必须调用此工具才能创建任务！只是说"好的我会提醒你"不会创建任务！**
@@ -95,7 +95,7 @@ SCHEDULED_TOOLS = [
     {
         "name": "list_scheduled_tasks",
         "category": "Scheduled",
-        "description": "List all scheduled tasks with their ID, name, type, status, and next execution time. When you need to: (1) Check existing tasks, (2) Find task ID for cancel/update, (3) Verify task creation.",
+        "description": "列出所有定时任务及其 ID、名称、类型、状态和下次执行时间。当你需要：(1) 检查现有任务，(2) 查找任务 ID 以取消/更新，(3) 验证任务创建。",
         "detail": """列出所有定时任务。
 
 **返回信息**：
@@ -123,7 +123,7 @@ SCHEDULED_TOOLS = [
     {
         "name": "cancel_scheduled_task",
         "category": "Scheduled",
-        "description": "PERMANENTLY DELETE scheduled task. When user says 'cancel/delete task' → use this. When user says 'turn off notification' → use update_scheduled_task with notify=false. When user says 'pause task' → use update_scheduled_task with enabled=false.",
+        "description": "永久删除定时任务。当用户说“取消/删除任务”时 → 使用此工具。当用户说“关闭通知”时 → 使用 update_scheduled_task 并设置 notify=false。当用户说“暂停任务”时 → 使用 update_scheduled_task 并设置 enabled=false。",
         "detail": """【永久删除】定时任务。
 
 ⚠️ **操作区分**：
@@ -141,7 +141,7 @@ SCHEDULED_TOOLS = [
     {
         "name": "update_scheduled_task",
         "category": "Scheduled",
-        "description": "Modify scheduled task settings WITHOUT deleting. Can modify: notify_on_start, notify_on_complete, enabled, target_channel. Common uses: (1) 'Turn off notification' → notify=false, (2) 'Pause task' → enabled=false, (3) 'Resume task' → enabled=true, (4) 'Push to WeChat' → target_channel='wework'. NO Webhook URL needed!",
+        "description": "修改定时任务设置而不删除。可修改：notify_on_start, notify_on_complete, enabled, target_channel。常见用途：(1) “关闭通知” → notify=false, (2) “暂停任务” → enabled=false, (3) “恢复任务” → enabled=true, (4) “推送到企业微信” → target_channel='wework'。不需要 Webhook URL！",
         "detail": """修改定时任务设置【不删除任务】。
 
 **可修改项**：
@@ -177,7 +177,7 @@ SCHEDULED_TOOLS = [
     {
         "name": "trigger_scheduled_task",
         "category": "Scheduled",
-        "description": "Immediately trigger scheduled task without waiting for scheduled time. When you need to: (1) Test task execution, (2) Run task ahead of schedule.",
+        "description": "立即触发定时任务，无需等待预定时间。当你需要：(1) 测试任务执行，(2) 提前运行任务。",
         "detail": """立即触发定时任务（不等待计划时间）。
 
 **适用场景**：

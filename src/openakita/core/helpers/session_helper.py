@@ -360,9 +360,30 @@ async def finalize_session(
 
     # 2. TaskMonitor complete + retrospect
     metrics = task_monitor.complete(success=True, response=response_text)
+
+    # 记录任务完成日志
+    logger.info(
+        f"[Session:{session_id}] Task completed: task_id={metrics.task_id}, "
+        f"duration={metrics.total_duration_seconds:.1f}s, iterations={metrics.total_iterations}, "
+        f"retrospect_needed={metrics.retrospect_needed}"
+    )
+
     if metrics.retrospect_needed:
-        asyncio.create_task(agent._do_task_retrospect_background(task_monitor, session_id))
-        logger.info(f"[Session:{session_id}] Task retrospect scheduled (background)")
+        # 确保有有效的 session_id（使用 task_id 作为回退）
+        effective_session_id = session_id or metrics.task_id or "unknown"
+        try:
+            asyncio.create_task(
+                agent._do_task_retrospect_background(task_monitor, effective_session_id)
+            )
+            logger.info(
+                f"[Session:{effective_session_id}] Retrospect scheduled (background): "
+                f"duration={metrics.total_duration_seconds:.1f}s > threshold"
+            )
+        except Exception as e:
+            logger.error(
+                f"[Session:{effective_session_id}] Failed to schedule retrospect: {e}",
+                exc_info=True
+            )
 
     # 3. Memory: 记录 assistant 响应
     agent.memory_manager.record_turn("assistant", response_text)

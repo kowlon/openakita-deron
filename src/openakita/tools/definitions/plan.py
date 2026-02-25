@@ -12,7 +12,7 @@ PLAN_TOOLS = [
     {
         "name": "create_plan",
         "category": "Plan",
-        "description": "⚠️ MUST CALL FIRST for multi-step tasks! If user request needs 2+ tool calls (like 'open + search + screenshot'), call create_plan BEFORE any other tool. Examples: '打开百度搜索天气截图' → create_plan first!",
+        "description": "⚠️ 多步骤任务必须首先调用！如果用户请求需要 2 个以上工具调用（如“打开+搜索+截图”），请在任何其他工具之前调用 create_plan。示例：“打开百度搜索天气截图” → 首先 create_plan！",
         "detail": """创建任务执行计划。
 
 **何时使用**：
@@ -65,7 +65,7 @@ PLAN_TOOLS = [
     {
         "name": "update_plan_step",
         "category": "Plan",
-        "description": "Update the status of a plan step. MUST call after completing each step to track progress.",
+        "description": "更新计划步骤的状态。必须在完成每个步骤后调用以跟踪进度。",
         "detail": """更新计划中某个步骤的状态。
 
 **每完成一步必须调用此工具！**
@@ -97,7 +97,7 @@ PLAN_TOOLS = [
     {
         "name": "get_plan_status",
         "category": "Plan",
-        "description": "Get the current plan execution status. Shows all steps and their completion status.",
+        "description": "获取当前计划执行状态。显示所有步骤及其完成状态。",
         "detail": """获取当前计划的执行状态。
 
 返回信息包括：
@@ -110,7 +110,7 @@ PLAN_TOOLS = [
     {
         "name": "complete_plan",
         "category": "Plan",
-        "description": "Mark the plan as completed and generate a summary report. Call when ALL steps are done.",
+        "description": "标记计划为已完成并生成总结报告。当所有步骤都完成时调用。",
         "detail": """标记计划完成，生成最终报告。
 
 **在所有步骤完成后调用**

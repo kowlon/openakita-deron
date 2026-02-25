@@ -1673,6 +1673,8 @@ class ReasoningEngine:
         on_iteration_start: Callable[[int, str], None] | None = None,
         on_iteration_end: Callable[[str], None] | None = None,
         on_retry_reset: Callable[[], None] | None = None,
+        on_tool_start: Callable[[str, dict], None] | None = None,
+        on_tool_complete: Callable[[str, dict, str, bool, int], None] | None = None,
     ):
         """
         流式推理循环，为 HTTP API (SSE) 设计。

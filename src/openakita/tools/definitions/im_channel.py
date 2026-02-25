@@ -12,7 +12,7 @@ IM_CHANNEL_TOOLS = [
     {
         "name": "deliver_artifacts",
         "category": "IM Channel",
-        "description": "Deliver artifacts (files/images/voice) to an IM chat via gateway, returning a receipt. Supports cross-channel delivery via target_channel (e.g. send files from Desktop to Telegram). Use this as the only delivery proof for attachments.",
+        "description": "通过网关将工件（文件/图像/语音）交付到 IM 聊天，并返回回执。支持通过 target_channel 进行跨渠道交付（例如，将文件从桌面发送到 Telegram）。使用此工具作为附件交付的唯一凭证。",
         "detail": """通过网关交付附件（文件/图片/语音），并返回结构化回执（receipt）。
 
 ⚠️ **重要**：
@@ -77,7 +77,7 @@ IM_CHANNEL_TOOLS = [
     {
         "name": "get_voice_file",
         "category": "IM Channel",
-        "description": "Get local file path of voice message sent by user. When user sends voice message, system auto-downloads it. When you need to: (1) Process user's voice message, (2) Transcribe voice to text.",
+        "description": "获取用户发送的语音消息的本地文件路径。当用户发送语音消息时，系统会自动下载它。当你需要：(1) 处理用户的语音消息，(2) 将语音转录为文本。",
         "detail": """获取用户发送的语音消息的本地文件路径。
 
 **工作流程**：
@@ -94,7 +94,7 @@ IM_CHANNEL_TOOLS = [
     {
         "name": "get_image_file",
         "category": "IM Channel",
-        "description": "Get local file path of image sent by user. ONLY use when you need the file path for programmatic operations (forward, save, crop, convert format). Do NOT use this to view or analyze image content — images are already included in your message as multimodal content and you can see them directly.",
+        "description": "获取用户发送的图像的本地文件路径。仅当你需要文件路径进行程序化操作（转发、保存、裁剪、转换格式）时使用。不要使用此工具来查看或分析图像内容——图像已作为多模态内容包含在你的消息中，你可以直接看到它们。",
         "detail": """获取用户发送的图片的本地文件路径。
 
 ⚠️ **重要**：用户发送的图片已作为多模态内容包含在你的消息中，你可以直接看到并理解图片。
@@ -109,7 +109,7 @@ IM_CHANNEL_TOOLS = [
     {
         "name": "get_chat_history",
         "category": "IM Channel",
-        "description": "Get current chat history including user messages, your replies, and system task notifications. When user says 'check previous messages' or 'what did I just send', use this tool.",
+        "description": "获取当前的聊天记录，包括用户消息、你的回复和系统任务通知。当用户说“检查以前的消息”或“我刚才发了什么”时，使用此工具。",
         "detail": """获取当前聊天的历史消息记录。
 
 **返回内容**：

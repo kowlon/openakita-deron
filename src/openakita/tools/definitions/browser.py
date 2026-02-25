@@ -19,7 +19,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_task",
         "category": "Browser",
-        "description": "【推荐优先使用】Intelligent browser task - describe what you want to accomplish and browser-use Agent will automatically plan and execute all steps. Best for: (1) Multi-step operations like search + filter + sort, (2) Complex web interactions including clicking, typing, form filling, (3) Tasks where you're unsure of exact steps, (4) Any task requiring element interaction (clicks, inputs, tab management). For simple URL opening only, use browser_navigate.",
+        "description": "【推荐优先使用】智能浏览器任务 - 描述你想完成的任务，browser-use Agent 会自动规划和执行所有步骤。适用于：(1) 多步骤操作（如搜索+筛选+排序），(2) 复杂的网页交互（包括点击、输入、填表），(3) 不确定具体步骤的任务，(4) 任何需要元素交互的任务（点击、输入、标签页管理）。如果仅打开 URL，请使用 browser_navigate。",
         "detail": build_detail(
             summary="智能浏览器任务 - 描述你想完成的任务，browser-use Agent 会自动规划和执行所有步骤。",
             scenarios=[
@@ -50,17 +50,17 @@ BROWSER_TOOLS = [
             ],
         ),
         "triggers": [
-            "When user asks to do something complex on a website",
-            "When task involves multiple steps (search, filter, sort, etc.)",
-            "When exact steps are unclear",
-            "When task description is high-level like '帮我在淘宝上找...'",
-            "When clicking buttons, filling forms, or interacting with page elements",
-            "When managing multiple tabs or switching between pages",
+            "当用户要求在网站上执行复杂操作时",
+            "当任务涉及多个步骤（搜索、筛选、排序等）时",
+            "当确切步骤不清楚时",
+            "当任务描述是高级别的，如'帮我在淘宝上找...'时",
+            "当点击按钮、填写表单或与页面元素交互时",
+            "当管理多个标签页或在页面之间切换时",
         ],
         "prerequisites": [],
         "warnings": [
-            "Task description should be clear and specific",
-            "Complex tasks may need higher max_steps",
+            "任务描述应清晰具体",
+            "复杂任务可能需要更高的 max_steps",
         ],
         "examples": [
             {
@@ -68,17 +68,17 @@ BROWSER_TOOLS = [
                 "params": {
                     "task": "打开淘宝搜索机械键盘，筛选价格200-500元，按销量排序，截图发给我"
                 },
-                "expected": "Agent automatically: opens Taobao → searches → filters price → sorts by sales → screenshots",
+                "expected": "Agent 自动：打开淘宝 → 搜索 → 筛选价格 → 按销量排序 → 截图",
             },
             {
                 "scenario": "GitHub 查找项目",
                 "params": {"task": "在 GitHub 找 star 数最多的 Python 项目"},
-                "expected": "Agent automatically: opens GitHub → navigates to search → sorts by stars → filters Python",
+                "expected": "Agent 自动：打开 GitHub → 导航到搜索 → 按 star 排序 → 筛选 Python",
             },
             {
                 "scenario": "新闻搜索",
                 "params": {"task": "打开百度搜索今天的科技新闻，截图给我"},
-                "expected": "Agent automatically: opens Baidu → searches → takes screenshot",
+                "expected": "Agent 自动：打开百度 → 搜索 → 截图",
             },
         ],
         "related_tools": [
@@ -108,7 +108,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_open",
         "category": "Browser",
-        "description": "Launch browser OR check browser status. Always returns current state (is_open, url, title, tab_count). If browser is already running, returns status without restarting. If not running, starts it. Call this before any browser operation to ensure browser is ready. Browser state resets on service restart.",
+        "description": "启动浏览器或检查浏览器状态。始终返回当前状态（是否打开、URL、标题、tab 数）。如果浏览器已在运行，则返回状态而不重启。如果未运行，则启动它。在任何浏览器操作之前调用此函数以确保浏览器已准备就绪。服务重启时浏览器状态会重置。",
         "detail": build_detail(
             summary="启动浏览器或检查浏览器状态。始终返回当前状态（是否打开、URL、标题、tab 数）。",
             scenarios=[
@@ -127,29 +127,29 @@ BROWSER_TOOLS = [
             ],
         ),
         "triggers": [
-            "Before any browser operation",
-            "When starting web automation tasks",
-            "When checking if browser is running",
+            "在任何浏览器操作之前",
+            "当开始 Web 自动化任务时",
+            "当检查浏览器是否正在运行时",
         ],
         "prerequisites": [],
         "warnings": [
-            "Browser state resets on service restart - never assume it's open from history",
+            "服务重启时浏览器状态会重置 - 永远不要假设它根据历史记录是打开的",
         ],
         "examples": [
             {
                 "scenario": "检查浏览器状态并启动",
                 "params": {},
-                "expected": "Returns {is_open: true/false, url: '...', title: '...', tab_count: N}. Starts browser if not running.",
+                "expected": "返回 {is_open: true/false, url: '...', title: '...', tab_count: N}。如果未运行则启动浏览器。",
             },
             {
                 "scenario": "启动可见浏览器",
                 "params": {"visible": True},
-                "expected": "Browser window opens and is visible to user, returns status",
+                "expected": "浏览器窗口打开且对用户可见，返回状态",
             },
             {
                 "scenario": "后台模式启动",
                 "params": {"visible": False},
-                "expected": "Browser runs in background without visible window, returns status",
+                "expected": "浏览器在后台运行，无可见窗口，返回状态",
             },
         ],
         "related_tools": [
@@ -173,7 +173,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_navigate",
         "category": "Browser",
-        "description": "Navigate browser to specified URL to open a webpage. For simple URL opening only. For multi-step tasks (search + click + type), use browser_task instead. Auto-starts browser if not running.",
+        "description": "将浏览器导航到指定 URL 以打开网页。仅用于简单的 URL 打开。对于多步骤任务（搜索+点击+输入），请改用 browser_task。如果浏览器未运行，则自动启动。",
         "detail": build_detail(
             summary="导航到指定 URL。",
             scenarios=[
@@ -196,8 +196,8 @@ BROWSER_TOOLS = [
             ],
         ),
         "triggers": [
-            "When user asks to open a webpage",
-            "When starting web automation task with a known URL",
+            "当用户要求打开网页时",
+            "当使用已知 URL 开始 Web 自动化任务时",
         ],
         "prerequisites": [],
         "warnings": [],
@@ -205,12 +205,12 @@ BROWSER_TOOLS = [
             {
                 "scenario": "打开搜索引擎",
                 "params": {"url": "https://www.google.com"},
-                "expected": "Browser navigates to Google homepage",
+                "expected": "浏览器导航到 Google 首页",
             },
             {
                 "scenario": "打开本地文件",
                 "params": {"url": "file:///C:/Users/test.html"},
-                "expected": "Browser opens local HTML file",
+                "expected": "浏览器打开本地 HTML 文件",
             },
         ],
         "related_tools": [
@@ -230,7 +230,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_get_content",
         "category": "Browser",
-        "description": "Extract page content and element text from current webpage. When you need to: (1) Read page information, (2) Get element values, (3) Scrape data, (4) Verify page content.",
+        "description": "从当前网页提取页面内容和元素文本。当你需要：(1) 读取页面信息，(2) 获取元素值，(3) 抓取数据，(4) 验证页面内容。",
         "detail": build_detail(
             summary="获取页面内容（文本或 HTML）。",
             scenarios=[
@@ -250,29 +250,29 @@ BROWSER_TOOLS = [
             ],
         ),
         "triggers": [
-            "When reading page information",
-            "When extracting data from webpage",
-            "When verifying page content after navigation",
+            "当读取页面信息时",
+            "当从网页提取数据时",
+            "当导航后验证页面内容时",
         ],
         "prerequisites": [
-            "Page must be loaded (browser_navigate called or browser_task completed)",
+            "页面必须已加载（已调用 browser_navigate 或 browser_task 已完成）",
         ],
         "warnings": [],
         "examples": [
             {
                 "scenario": "获取整个页面内容",
                 "params": {},
-                "expected": "Returns full page text content",
+                "expected": "返回完整页面文本内容",
             },
             {
                 "scenario": "获取特定元素内容",
                 "params": {"selector": ".article-body"},
-                "expected": "Returns text content of article body",
+                "expected": "返回文章主体的文本内容",
             },
             {
                 "scenario": "获取页面 HTML 源码",
                 "params": {"format": "html"},
-                "expected": "Returns full page HTML content",
+                "expected": "返回完整页面 HTML 内容",
             },
         ],
         "related_tools": [
@@ -305,7 +305,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_screenshot",
         "category": "Browser",
-        "description": "Capture browser page screenshot (webpage content only, not desktop). When you need to: (1) Show page state to user, (2) Document web results, (3) Debug page issues. For desktop/application screenshots, use desktop_screenshot instead.",
+        "description": "截取浏览器页面截图（仅网页内容，不包括桌面）。当你需要：(1) 向用户展示页面状态，(2) 记录 Web 结果，(3) 调试页面问题。如需截取桌面/应用程序截图，请改用 desktop_screenshot。",
         "detail": build_detail(
             summary="截取当前页面截图。",
             scenarios=[
@@ -373,7 +373,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_close",
         "category": "Browser",
-        "description": "Close the browser and release resources. Call when browser automation is complete and no longer needed. This frees memory and system resources.",
+        "description": "关闭浏览器并释放资源。当浏览器自动化完成且不再需要时调用。这将释放内存和系统资源。",
         "detail": build_detail(
             summary="关闭浏览器，释放资源。",
             scenarios=[
@@ -387,19 +387,19 @@ BROWSER_TOOLS = [
             ],
         ),
         "triggers": [
-            "When browser automation tasks are completed",
-            "When user explicitly asks to close browser",
-            "When freeing system resources",
+            "当浏览器自动化任务完成时",
+            "当用户明确要求关闭浏览器时",
+            "当释放系统资源时",
         ],
         "prerequisites": [],
         "warnings": [
-            "All open tabs and pages will be closed",
+            "所有打开的标签页和页面都将被关闭",
         ],
         "examples": [
             {
                 "scenario": "任务完成后关闭浏览器",
                 "params": {},
-                "expected": "Browser closes and resources are freed",
+                "expected": "浏览器关闭，资源释放",
             },
         ],
         "related_tools": [

@@ -23,6 +23,16 @@ export function useChat(conversationId: string | null) {
   const [messageSendTime, setMessageSendTime] = useState<number | null>(null)
   const [llmOutput, setLlmOutput] = useState<string | null>(null)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [askUserQuestion, setAskUserQuestion] = useState<{
+    question?: string;
+    questions?: Array<{
+      id: string;
+      prompt: string;
+      options?: Array<{ id: string; label: string }>;
+      allow_multiple?: boolean;
+    }>;
+    options?: Array<{ id: string; label: string }>;
+  } | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const editModeRef = useRef(false)
 
@@ -44,6 +54,7 @@ export function useChat(conversationId: string | null) {
       setError(null)
       setFirstTokenTime(null) // Reset first token time
       setLlmOutput(null) // Reset LLM output
+      setAskUserQuestion(null) // Reset ask user question
 
       const request: ChatRequest = {
         message,
@@ -65,6 +76,7 @@ export function useChat(conversationId: string | null) {
               setFirstTokenTime,
               setLlmOutput,
               setArtifacts,
+              setAskUserQuestion,
               editMode,
               (stepId, result) => {
                 setIsPaused(true)
@@ -130,6 +142,7 @@ export function useChat(conversationId: string | null) {
               setFirstTokenTime,
               setLlmOutput,
               setArtifacts,
+              setAskUserQuestion,
               editModeRef.current,
               (stepId, result) => {
                 setIsPaused(true)
@@ -172,6 +185,7 @@ export function useChat(conversationId: string | null) {
     setMessageSendTime(null)
     setLlmOutput(null)
     setArtifacts([])
+    setAskUserQuestion(null)
   }, [])
 
   return {
@@ -185,6 +199,7 @@ export function useChat(conversationId: string | null) {
     messageSendTime,
     llmOutput,
     artifacts,
+    askUserQuestion,
     sendMessage,
     confirmStep,
     resumeStep,
@@ -199,6 +214,16 @@ function handleSSEEvent(
   setFirstTokenTime: React.Dispatch<React.SetStateAction<number | null>>,
   setLlmOutput: React.Dispatch<React.SetStateAction<string | null>>,
   setArtifacts: React.Dispatch<React.SetStateAction<Artifact[]>>,
+  setAskUserQuestion: React.Dispatch<React.SetStateAction<{
+    question?: string;
+    questions?: Array<{
+      id: string;
+      prompt: string;
+      options?: Array<{ id: string; label: string }>;
+      allow_multiple?: boolean;
+    }>;
+    options?: Array<{ id: string; label: string }>;
+  } | null>>,
   _editMode: boolean = false,
   onPause?: (stepId: string, result: string) => void
 ) {
@@ -388,9 +413,25 @@ function handleSSEEvent(
     case 'plan_created':
     case 'plan_step_updated':
     case 'agent_switch':
-    case 'ask_user':
       // These are internal events, don't create visible steps
       break
+
+    case 'ask_user': {
+      // Handle ask_user event - store the question for UI to display
+      const question = eventRecord.question as string || ''
+      const options = eventRecord.options as Array<{ id: string; label: string }> | undefined
+      const questions = eventRecord.questions as Array<{
+        id: string;
+        prompt: string;
+        options?: Array<{ id: string; label: string }>;
+        allow_multiple?: boolean;
+      }> | undefined
+
+      if (question || questions) {
+        setAskUserQuestion({ question, options, questions })
+      }
+      break
+    }
 
     case 'artifact_created': {
       // Handle artifact creation event
