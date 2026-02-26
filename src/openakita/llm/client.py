@@ -12,6 +12,7 @@ LLM 统一客户端
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -436,6 +437,8 @@ class LLMClient:
         last_error: Exception | None = None
         for i, provider in enumerate(eligible):
             yielded = False
+            first_token_recorded = False
+            stream_start_time = time.time()
             try:
                 logger.info(
                     f"[LLM-Stream] endpoint={provider.name} model={provider.model} "
@@ -443,6 +446,18 @@ class LLMClient:
                 )
                 async for event in provider.chat_stream(request):
                     yielded = True
+                    # 记录首 token 时间
+                    if not first_token_recorded:
+                        first_token_recorded = True
+                        ttfb_ms = (time.time() - stream_start_time) * 1000
+                        logger.info(f"[PERF] ⚡ LLM Stream First Token: TTFB={ttfb_ms:.0f}ms")
+                        # 通知全局性能追踪器
+                        try:
+                            from ..infra.performance import get_performance_tracker
+                            tracker = get_performance_tracker()
+                            tracker.record_first_token()
+                        except Exception:
+                            pass
                     yield event
                 # 流完成：provider 内部已调用 mark_healthy()
                 self._last_success_endpoint = provider.name

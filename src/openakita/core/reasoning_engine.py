@@ -3228,6 +3228,53 @@ class ReasoningEngine:
             assistant_content=assistant_content,
         )
 
+    # ==================== 消息分型辅助方法 ====================
+
+    def _is_simple_greeting_or_chat(self, user_message: str, assistant_response: str) -> bool:
+        """
+        判断是否是简单问候/闲聊，不需要强制重试。
+
+        Args:
+            user_message: 用户消息
+            assistant_response: 助手响应
+
+        Returns:
+            True 如果是简单问候/闲聊，应直接返回
+        """
+        if not user_message:
+            return False
+
+        msg_lower = user_message.strip().lower()
+
+        # 1. 简单问候模式
+        greeting_patterns = [
+            "你好", "您好", "hi", "hello", "hey",
+            "早上好", "下午好", "晚上好", "晚安",
+            "哈喽", "嗨", "在吗", "在不在",
+        ]
+        for pattern in greeting_patterns:
+            if msg_lower == pattern or msg_lower.startswith(pattern + " ") or msg_lower.startswith(pattern + "！"):
+                return True
+
+        # 2. 短消息闲聊（< 10 字符且无明显任务关键词）
+        task_keywords = ["帮我", "请", "能不能", "可以", "需要", "想要", "帮我", "执行", "运行", "创建", "删除", "修改", "搜索", "查找", "提醒", "定时", "下载", "上传", "写", "生成"]
+        if len(msg_lower) < 10:
+            has_task_intent = any(kw in msg_lower for kw in task_keywords)
+            if not has_task_intent:
+                return True
+
+        # 3. 如果助手响应已经是一个友好的问候回复，也认为是闲聊
+        response_lower = (assistant_response or "").strip().lower()
+        greeting_response_patterns = [
+            "你好", "您好", "很高兴", "有什么可以帮", "有什么能帮",
+            "有什么需要", "随时告诉我", "请问有什么",
+        ]
+        response_is_greeting = any(p in response_lower for p in greeting_response_patterns)
+        if response_is_greeting and len(msg_lower) < 15:
+            return True
+
+        return False
+
     # ==================== 最终答案处理 ====================
 
     async def _handle_final_answer(
@@ -3329,6 +3376,13 @@ class ReasoningEngine:
         no_tool_call_count += 1
 
         if no_tool_call_count <= max_no_tool_retries:
+            # 检查是否是简单问候/闲聊，如果是则直接返回，不需要强制重试
+            user_message = ResponseHandler.get_last_user_request(original_messages)
+            if self._is_simple_greeting_or_chat(user_message, decision.text_content):
+                logger.info(f"[ReAct] Simple greeting/chat detected, skipping force retry")
+                cleaned_text = clean_llm_response(decision.text_content)
+                return cleaned_text
+
             if decision.text_content:
                 working_messages.append({
                     "role": "assistant",

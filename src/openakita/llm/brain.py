@@ -403,6 +403,8 @@ class Brain:
         用于已处在事件循环中的场景（如取消收尾），避免 asyncio.to_thread + asyncio.run
         创建新事件循环导致 httpx 连接池竞争。
         """
+        import time
+
         if use_thinking is None:
             use_thinking = self.is_thinking_enabled()
 
@@ -419,6 +421,17 @@ class Brain:
         )
 
         req_id = self._dump_llm_request(system, llm_messages, llm_tools, caller="messages_create_async")
+
+        # === 性能追踪：开始 LLM 调用 ===
+        try:
+            from ..infra.performance import get_performance_tracker
+            perf = get_performance_tracker()
+            model = self._llm_client._endpoints[0].model if self._llm_client._endpoints else "unknown"
+            perf.start_llm_call("primary", model)
+        except Exception:
+            pass
+
+        llm_start_time = time.time()
 
         try:
             response = await self._llm_client.chat(
@@ -439,6 +452,18 @@ class Brain:
         except Exception as e:
             logger.error(f"[Brain] messages_create_async FAILED: {type(e).__name__}: {e}")
             raise
+
+        # === 性能追踪：结束 LLM 调用 ===
+        llm_end_time = time.time()
+        llm_duration_ms = (llm_end_time - llm_start_time) * 1000
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+        logger.info(f"[PERF] 🤖 LLM call: total={llm_duration_ms:.0f}ms, tokens={input_tokens}→{output_tokens}")
+
+        try:
+            perf.end_llm_call(input_tokens, output_tokens)
+        except Exception:
+            pass
 
         self._dump_llm_response(response, caller="messages_create_async", request_id=req_id)
 

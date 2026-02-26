@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from .budget import BudgetConfig, apply_budget, estimate_tokens
 from .compiler import check_compiled_outdated, compile_all, get_compiled_content
 from .retriever import retrieve_memory
+from ..infra.performance import get_performance_tracker
 
 if TYPE_CHECKING:
     from ..memory import MemoryManager
@@ -68,6 +69,9 @@ def build_system_prompt(
     if budget_config is None:
         budget_config = BudgetConfig()
 
+    # 获取性能追踪器
+    perf = get_performance_tracker()
+
     # 目标：在单个 system_prompt 字符串内显式分段，模拟 system/developer/user/tool 结构
     system_parts: list[str] = []
     developer_parts: list[str] = []
@@ -75,61 +79,67 @@ def build_system_prompt(
     user_parts: list[str] = []
 
     # 1. 检查并加载编译产物
-    if check_compiled_outdated(identity_dir):
-        logger.info("Compiled files outdated, recompiling...")
-        compile_all(identity_dir)
-
-    compiled = get_compiled_content(identity_dir)
+    with perf.stage("compile_check"):
+        if check_compiled_outdated(identity_dir):
+            logger.info("Compiled files outdated, recompiling...")
+            compile_all(identity_dir)
+        compiled = get_compiled_content(identity_dir)
 
     # 2. 构建 Identity 层
-    identity_section = _build_identity_section(
-        compiled=compiled,
-        identity_dir=identity_dir,
-        tools_enabled=tools_enabled,
-        budget_tokens=budget_config.identity_budget,
-    )
-    if identity_section:
-        system_parts.append(identity_section)
+    with perf.stage("identity"):
+        identity_section = _build_identity_section(
+            compiled=compiled,
+            identity_dir=identity_dir,
+            tools_enabled=tools_enabled,
+            budget_tokens=budget_config.identity_budget,
+        )
+        if identity_section:
+            system_parts.append(identity_section)
 
     # 3. 构建 Runtime 层
-    runtime_section = _build_runtime_section()
-    system_parts.append(runtime_section)
+    with perf.stage("runtime"):
+        runtime_section = _build_runtime_section()
+        system_parts.append(runtime_section)
 
     # 3.5 构建会话类型规则（建议 8）
-    session_rules = _build_session_type_rules(session_type)
-    if session_rules:
-        developer_parts.append(session_rules)
+    with perf.stage("session_rules"):
+        session_rules = _build_session_type_rules(session_type)
+        if session_rules:
+            developer_parts.append(session_rules)
 
     # 4. 构建 Catalogs 层
-    catalogs_section = _build_catalogs_section(
-        tool_catalog=tool_catalog,
-        skill_catalog=skill_catalog,
-        mcp_catalog=mcp_catalog,
-        budget_tokens=budget_config.catalogs_budget,
-        include_tools_guide=include_tools_guide,
-    )
-    if catalogs_section:
-        tool_parts.append(catalogs_section)
+    with perf.stage("catalogs"):
+        catalogs_section = _build_catalogs_section(
+            tool_catalog=tool_catalog,
+            skill_catalog=skill_catalog,
+            mcp_catalog=mcp_catalog,
+            budget_tokens=budget_config.catalogs_budget,
+            include_tools_guide=include_tools_guide,
+        )
+        if catalogs_section:
+            tool_parts.append(catalogs_section)
 
     # 5. 构建 Memory 层（支持预计算的异步结果，避免阻塞事件循环）
-    if precomputed_memory is not None:
-        memory_section = precomputed_memory
-    else:
-        memory_section = _build_memory_section(
-            memory_manager=memory_manager,
-            task_description=task_description,
-            budget_tokens=budget_config.memory_budget,
-        )
-    if memory_section:
-        developer_parts.append(memory_section)
+    with perf.stage("memory"):
+        if precomputed_memory is not None:
+            memory_section = precomputed_memory
+        else:
+            memory_section = _build_memory_section(
+                memory_manager=memory_manager,
+                task_description=task_description,
+                budget_tokens=budget_config.memory_budget,
+            )
+        if memory_section:
+            developer_parts.append(memory_section)
 
     # 6. 构建 User 层
-    user_section = _build_user_section(
-        compiled=compiled,
-        budget_tokens=budget_config.user_budget,
-    )
-    if user_section:
-        user_parts.append(user_section)
+    with perf.stage("user"):
+        user_section = _build_user_section(
+            compiled=compiled,
+            budget_tokens=budget_config.user_budget,
+        )
+        if user_section:
+            user_parts.append(user_section)
 
     # 组装最终提示词
     sections: list[str] = []
