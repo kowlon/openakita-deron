@@ -49,111 +49,101 @@ class IContext(Protocol):
         ...
 
 
-class ISystemContext(IContext, ABC):
+class ISystemContext(IContext, Protocol):
     """
-    系统上下文抽象基类
+    系统上下文协议
 
     永久层上下文，包含身份、规则、能力清单。
     启动时初始化一次，运行时只读（除能力清单可刷新）。
     """
 
     @property
-    @abstractmethod
     def identity(self) -> str:
         """Agent 身份描述"""
         ...
 
     @property
-    @abstractmethod
     def rules(self) -> list[str]:
         """行为规则列表"""
         ...
 
     @property
-    @abstractmethod
     def capabilities_manifest(self) -> str:
         """能力清单"""
         ...
 
-    @abstractmethod
+    @property
+    def policies(self) -> list[str]:
+        """策略列表"""
+        ...
+
     def refresh_capabilities(self, manifest: str) -> None:
         """刷新能力清单"""
         ...
 
 
-class ITaskContext(IContext, ABC):
+class ITaskContext(IContext, Protocol):
     """
-    任务上下文抽象基类
+    任务上下文协议
 
     任务生命周期层上下文，包含目标、进度、变量。
     支持检查点和回滚。
     """
 
     @property
-    @abstractmethod
     def task_id(self) -> str:
         """任务 ID"""
         ...
 
     @property
-    @abstractmethod
     def tenant_id(self) -> str:
         """租户 ID"""
         ...
 
     @property
-    @abstractmethod
     def task_description(self) -> str:
         """任务描述"""
         ...
 
-    @abstractmethod
     def add_step_summary(self, step_name: str, summary: str) -> None:
         """添加步骤摘要"""
         ...
 
-    @abstractmethod
     def add_variables(self, variables: dict[str, Any]) -> None:
         """添加任务变量"""
         ...
 
-    @abstractmethod
     def save_checkpoint(self, state: dict) -> str:
         """保存检查点，返回检查点 ID"""
         ...
 
-    @abstractmethod
     def rollback(self, checkpoint_id: str) -> dict | None:
         """回滚到检查点，返回检查点状态"""
         ...
 
 
-class IConversationContext(IContext, ABC):
+class IConversationContext(IContext, Protocol):
     """
-    会话上下文抽象基类
+    会话上下文协议
 
     滑动窗口层上下文，包含消息历史。
     支持 Token 预算和压缩策略。
     """
 
     @property
-    @abstractmethod
     def max_rounds(self) -> int:
         """最大轮数"""
         ...
 
     @property
-    @abstractmethod
     def max_tokens(self) -> int:
         """最大 Token 预算"""
         ...
 
-    @abstractmethod
     def add_message(self, role: str, content: str | list[dict]) -> None:
         """添加消息，自动执行限制策略"""
         ...
 
-    @abstractmethod
     def get_messages(self) -> list[dict]:
         """获取消息列表"""
         ...
