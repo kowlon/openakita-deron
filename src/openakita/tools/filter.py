@@ -79,6 +79,11 @@ ALWAYS_INCLUDE = {
     "get_tool_info", "get_skill_info"
 }
 
+# Plan 工具（多步骤任务必须）
+PLAN_TOOLS = {
+    "create_plan", "update_plan_step", "get_plan_status", "complete_plan"
+}
+
 # 低频工具（通常不需要）
 RARELY_NEEDED = {
     "schedule_task", "list_scheduled_tasks", "cancel_scheduled_task",
@@ -90,6 +95,38 @@ SEARCH_KEYWORDS = {
     "查一下", "搜一下", "查查", "查是谁", "是谁",
     "新闻", "资讯", "news", "了解", "信息",
 }
+
+# 多步骤任务关键词 - 用于检测是否需要 Plan
+# 与 handlers/plan.py 的 should_require_plan() 保持一致
+PLAN_ACTION_WORDS = [
+    "打开", "搜索", "截图", "发", "发送", "写", "创建",
+    "执行", "运行", "读取", "查看", "保存", "下载", "上传",
+    "复制", "粘贴", "删除", "编辑", "修改", "更新",
+    "安装", "配置", "设置", "启动", "关闭",
+]
+PLAN_CONNECTOR_WORDS = ["然后", "接着", "之后", "并且", "再", "最后"]
+
+
+def needs_plan(message: str) -> bool:
+    """
+    检测消息是否需要 Plan 模式。
+
+    使用与 handlers/plan.py 的 should_require_plan() 相同的逻辑：
+    1. 包含 5+ 个动作词
+    2. 包含 3+ 个动作词 + 连接词
+    3. 包含 3+ 个动作词 + 逗号分隔
+    """
+    msg = message.lower()
+
+    action_count = sum(1 for word in PLAN_ACTION_WORDS if word in msg)
+    has_connector = any(word in msg for word in PLAN_CONNECTOR_WORDS)
+    comma_separated = "，" in msg or "," in msg
+
+    if action_count >= 5:
+        return True
+    if action_count >= 3 and has_connector:
+        return True
+    return bool(action_count >= 3 and comma_separated)
 
 
 def detect_task_types(message: str) -> list[str]:
@@ -171,6 +208,12 @@ def get_tools_for_message(
         # 同时添加浏览器工具（可能需要）
         needed_tools |= {"browser_navigate", "browser_screenshot"}
 
+    # ★ 关键修复：如果检测到多步骤任务，强制添加 Plan 工具
+    # 与 handlers/plan.py 的 should_require_plan() 使用相同逻辑
+    if needs_plan(message):
+        needed_tools |= PLAN_TOOLS
+        logger.info("[ToolFilter] Multi-step task detected, adding Plan tools")
+
     # IM 模式额外添加 IM 工具
     if session_type == "im":
         needed_tools |= TOOL_PRESETS.get("im", set())
@@ -189,7 +232,7 @@ def get_tools_for_message(
 
     logger.info(
         f"[ToolFilter] Detected types: {detected_types}, "
-        f"needs_search={needs_search(message)}, "
+        f"needs_search={needs_search(message)}, needs_plan={needs_plan(message)}, "
         f"Tools: {original_count} → {filtered_count} (-{reduction_pct:.0f}%)"
     )
 

@@ -1391,6 +1391,11 @@ search_github → install_skill → 使用
         Returns:
             Agent 响应
         """
+        # === 性能追踪：开始请求 ===
+        from ..infra.performance import get_performance_tracker
+        perf = get_performance_tracker()
+        perf.start_request(message)
+
         if not self._initialized:
             await self.initialize()
 
@@ -1477,6 +1482,10 @@ search_github → install_skill → 使用
                 session_id=session_id,
                 task_monitor=task_monitor,
             )
+
+            # === 性能追踪：结束请求 ===
+            perf.end_request()
+            perf.log_summary()
 
             return response_text
         finally:
@@ -2359,6 +2368,11 @@ NEXT: 建议的下一步（如有）"""
         original_task_message = {"role": "user", "content": task.description}
         messages = [original_task_message.copy()]
 
+        # === 工具按需加载：根据任务内容过滤工具 ===
+        from ..tools.filter import get_tools_for_message
+        filtered_tools = get_tools_for_message(self._tools, task.description, "desktop")
+        logger.info(f"[ToolFilter] Task tools: {len(self._tools)} → {len(filtered_tools)}")
+
         max_tool_iterations = settings.max_iterations  # Ralph Wiggum 模式：永不放弃
         iteration = 0
         final_response = ""
@@ -2497,7 +2511,7 @@ NEXT: 建议的下一步（如有）"""
                         _cancel_event,
                         max_tokens=self.brain.max_tokens,
                         system=_build_effective_system_prompt_task(),
-                        tools=self._tools,
+                        tools=filtered_tools,
                         messages=messages,
                         conversation_id=conversation_id,
                     )
@@ -2895,11 +2909,11 @@ NEXT: 建议的下一步（如有）"""
 
     def _on_iteration(self, iteration: int, task: TaskState) -> None:
         """Ralph 循环迭代回调"""
-        logger.debug(f"Ralph iteration {iteration} for task {task.id}")
+        logger.debug(f"Ralph iteration {iteration} for task {task.task_id}")
 
     def _on_error(self, error: str, task: TaskState) -> None:
         """Ralph 循环错误回调"""
-        logger.warning(f"Ralph error for task {task.id}: {error}")
+        logger.warning(f"Ralph error for task {task.task_id}: {error}")
 
     @property
     def is_initialized(self) -> bool:
