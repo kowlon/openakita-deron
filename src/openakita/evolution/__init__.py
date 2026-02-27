@@ -29,6 +29,11 @@ from .proposal_generator import (
     ProposalConfig,
     ProposalGenerator,
 )
+from .skill_evolver import (
+    EvolverConfig,
+    SkillEvolver,
+    EvolutionResult,
+)
 
 __all__ = [
     "NeedAnalyzer",
@@ -56,4 +61,8 @@ __all__ = [
     # 提案生成
     "ProposalConfig",
     "ProposalGenerator",
+    # 技能进化
+    "EvolverConfig",
+    "SkillEvolver",
+    "EvolutionResult",
 ]
