@@ -16,6 +16,11 @@ from .models import (
     PatternObservation,
     EvolutionProposal,
 )
+from .experience_store import (
+    StoreConfig,
+    ExperienceStore,
+    MockExperienceStore,
+)
 
 __all__ = [
     "NeedAnalyzer",
@@ -25,7 +30,7 @@ __all__ = [
     "LogAnalyzer",
     "LogEntry",
     "ErrorPattern",
-    # 新增模型
+    # 模型
     "ExecutionStatus",
     "StepType",
     "OutcomeLabel",
@@ -33,4 +38,8 @@ __all__ = [
     "ExecutionTrace",
     "PatternObservation",
     "EvolutionProposal",
+    # 存储
+    "StoreConfig",
+    "ExperienceStore",
+    "MockExperienceStore",
 ]
