@@ -314,7 +314,8 @@
       "description": "最终清理与发布",
       "priority": "low",
       "dependencies": ["TASK-305"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-27 12:30",
       "files": ["CHANGELOG.md", "README.md"]
     }
   ],

@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-27
+
+### Added
+
+#### Enterprise Architecture - Three Core Layers
+
+**Phase 1: Intelligent Context Management Layer**
+- Three-layer context model: SystemContext → TaskContext → ConversationContext
+- `BudgetController` - Dynamic token budget allocation with warning thresholds
+- `ContextCompressor` - Multiple compression strategies (sliding_window, priority, hybrid)
+- `ContextOrchestrator` - Unified coordination across all context layers
+- `EnterpriseContextManager` - Integration with Agent initialization flow
+- Priority-based context scheduling: CRITICAL > HIGH > MEDIUM > LOW
+
+**Phase 2: Unified Capability Layer**
+- `CapabilityRegistry` - Central registry for all capabilities
+- `CapabilityExecutor` - Unified execution interface for Tools, Skills, MCP
+- `CapabilityAdapter` - Base adapter pattern for extensibility
+- `ToolAdapter`, `SkillAdapter`, `MCPAdapter` - Specific adapters for each capability type
+- Capability metadata with usage statistics and status tracking
+- Automatic capability manifest generation for system prompts
+
+**Phase 3: Self-Evolution Layer**
+- `ExecutionTrace` - Comprehensive execution tracking model
+- `ExperienceStore` - Persistent storage for execution experiences
+- `PatternExtractor` - Automatic pattern discovery from execution traces
+- `ProposalGenerator` - Evolution proposal generation based on patterns
+- `SkillEvolver` - Automatic skill improvement and generation
+- `EvolutionOrchestrator` - Complete evolution cycle coordination
+- Integration with Agent execution flow for automatic learning
+
+### Changed
+- Agent now initializes with `evolution_orchestrator` for automatic learning
+- Task completion triggers execution trace recording
+- Context building now uses three-layer model with budget awareness
+- Capability execution unified through single executor interface
+
+### Documentation
+- Added comprehensive architecture documentation (`docs/architecture/enterprise_agent.md`)
+- Added performance benchmark documentation (`docs/refactor/performance_benchmark.md`)
+- Added phase completion reports for all three phases
+- Complete API reference for all new modules
+
+### Testing
+- Added 25+ performance benchmark tests
+- Added end-to-end tests for all three layers
+- Total test coverage: 550+ tests passing
+
 ## [1.2.1] - 2026-02-05
 
 ### Added

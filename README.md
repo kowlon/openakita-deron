@@ -141,6 +141,35 @@ Workspace → Python → Install → LLM Endpoints
 
 ---
 
+## Enterprise Architecture (v1.3.0)
+
+OpenAkita now features a three-layer enterprise architecture:
+
+### 🧠 Context Layer (Phase 1)
+Intelligent context management with token budget control:
+- **Three-Layer Model**: SystemContext (permanent) → TaskContext (per-task) → ConversationContext (session)
+- **Budget Controller**: Dynamic token allocation with 75%/90% warning thresholds
+- **Smart Compression**: sliding_window, priority, and hybrid strategies
+- **Priority Scheduling**: CRITICAL > HIGH > MEDIUM > LOW — lower priority content trimmed first
+
+### ⚡ Capability Layer (Phase 2)
+Unified access to all capabilities:
+- **CapabilityRegistry**: Central registry for Tools, Skills, and MCP
+- **CapabilityExecutor**: Single interface for all capability types
+- **Adapter Pattern**: Easy extensibility for new capability sources
+- **Auto Manifest**: Automatic system prompt generation from registered capabilities
+
+### 🔄 Evolution Layer (Phase 3)
+Automatic learning and improvement:
+- **Experience Store**: Persistent storage for execution traces
+- **Pattern Extraction**: Discovers success/failure patterns automatically
+- **Proposal Generator**: Suggests improvements based on patterns
+- **Skill Evolver**: Auto-generates and improves skills from experience
+
+> See [Enterprise Architecture Documentation](docs/architecture/enterprise_agent.md) for complete details.
+
+---
+
 ## How Does It Keep Getting Smarter?
 
 Other AIs forget you the moment you close the chat. OpenAkita **self-evolves** — while you sleep, it's learning:
@@ -232,16 +261,28 @@ Identity ─── SOUL.md · AGENT.md · USER.md · MEMORY.md · 8 Persona Pres
 Core     ─── Brain(LLM) · Memory(Vector) · Ralph(Never-Give-Up Loop)
     │        Prompt Compiler · PersonaManager · ProactiveEngine
     │
+┌─────────────────────────────────────────────────────────────────┐
+│                    Enterprise Architecture                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Context Layer ─── SystemContext → TaskContext → Conversation   │
+│  (Phase 1)        BudgetController · ContextCompressor          │
+│                                                                  │
+│  Capability Layer ─── ToolAdapter · SkillAdapter · MCPAdapter   │
+│  (Phase 2)           CapabilityRegistry · CapabilityExecutor    │
+│                                                                  │
+│  Evolution Layer ─── ExperienceStore → PatternExtractor         │
+│  (Phase 3)           ProposalGenerator → SkillEvolver           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+    │
 Tools    ─── Shell · File · Web · Browser · Desktop · MCP · Skills
     │        Scheduler · Plan · Sticker · Persona
-    │
-Evolution ── SelfCheck · Generator · Installer · LogAnalyzer
-    │        DailyConsolidator
     │
 Channels ─── CLI · Telegram · Feishu · WeCom · DingTalk · QQ Official · OneBot
 ```
 
-> See [Architecture Doc](docs/architecture.md) for full details.
+> See [Architecture Doc](docs/architecture/enterprise_agent.md) for full details.
 
 ---
 
