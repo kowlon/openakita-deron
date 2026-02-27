@@ -21,6 +21,10 @@ from .experience_store import (
     ExperienceStore,
     MockExperienceStore,
 )
+from .pattern_extractor import (
+    PatternConfig,
+    PatternExtractor,
+)
 
 __all__ = [
     "NeedAnalyzer",
@@ -42,4 +46,7 @@ __all__ = [
     "StoreConfig",
     "ExperienceStore",
     "MockExperienceStore",
+    # 模式提取
+    "PatternConfig",
+    "PatternExtractor",
 ]
