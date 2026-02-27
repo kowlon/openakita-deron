@@ -368,6 +368,39 @@ async def finalize_session(
         f"retrospect_needed={metrics.retrospect_needed}"
     )
 
+    # === 进化系统：记录执行追踪 ===
+    try:
+        from .evolution_helper import record_task_execution
+        from .evolution_helper import build_execution_steps_from_trace
+
+        # 从 react_trace 构建执行步骤
+        react_trace = getattr(agent.reasoning_engine, "_last_react_trace", [])
+        tools_executed = []
+        if agent.agent_state and agent.agent_state.current_task:
+            tools_executed = list(agent.agent_state.current_task.tools_executed)
+
+        steps = build_execution_steps_from_trace(react_trace, tools_executed)
+
+        # 判断任务结果
+        outcome = "success"
+        if metrics.error:
+            outcome = "failure"
+        elif metrics.total_iterations > 10:
+            outcome = "partial"  # 需要很多迭代的任务可能是部分成功
+
+        record_task_execution(
+            agent=agent,
+            task_id=metrics.task_id or session_id,
+            session_id=session_id,
+            task_description=agent._current_task_definition or agent._current_task_query or "",
+            outcome=outcome,
+            tools_executed=tools_executed,
+            steps=steps,
+            duration_seconds=metrics.total_duration_seconds,
+        )
+    except Exception as e:
+        logger.debug(f"[EvolutionSystem] Failed to record trace: {e}")
+
     if metrics.retrospect_needed:
         # 确保有有效的 session_id（使用 task_id 作为回退）
         effective_session_id = session_id or metrics.task_id or "unknown"
