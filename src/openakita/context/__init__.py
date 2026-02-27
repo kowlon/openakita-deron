@@ -22,6 +22,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from openakita.context.budget_controller import (
+    BudgetAllocation,
+    BudgetCheckResult,
+    BudgetController,
+    BudgetState,
+)
 from openakita.context.config import ContextConfig as EnterpriseContextConfig
 from openakita.context.config import TokenBudget, ContextConfig
 from openakita.context.exceptions import (
@@ -76,6 +82,11 @@ __all__ = [
     # Config
     "TokenBudget",
     "ContextConfig",
+    # Budget Controller
+    "BudgetController",
+    "BudgetAllocation",
+    "BudgetCheckResult",
+    "BudgetState",
     # Interfaces
     "IContext",
     "ISystemContext",
