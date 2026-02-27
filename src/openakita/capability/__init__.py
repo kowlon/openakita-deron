@@ -25,6 +25,11 @@ from .types import (
     CapabilityStatus,
     CapabilityType,
 )
+from .registry import (
+    CapabilityRegistry,
+    get_global_registry,
+    reset_global_registry,
+)
 
 
 __all__ = [
@@ -33,6 +38,9 @@ __all__ = [
     "CapabilityStatus",
     "CapabilityMeta",
     "CapabilityCategory",
-    # Registry (will be added later)
+    # Registry
+    "CapabilityRegistry",
+    "get_global_registry",
+    "reset_global_registry",
     # Adapters (will be added later)
 ]
