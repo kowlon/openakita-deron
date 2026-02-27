@@ -392,6 +392,129 @@ class CapabilityRegistry:
 
         return "\n".join(lines)
 
+    def generate_compact_manifest(self) -> str:
+        """
+        生成紧凑格式的能力清单，适合注入 SystemPrompt。
+
+        Returns:
+            紧凑格式的清单字符串
+        """
+        lines = []
+
+        # 按类型分组
+        for cap_type in CapabilityType:
+            capabilities = [c for c in self.list_by_type(cap_type) if c.is_available()]
+            if not capabilities:
+                continue
+
+            lines.append(f"## {cap_type.value.upper()}S")
+
+            for cap in sorted(capabilities, key=lambda x: x.name):
+                # 紧凑格式：名称 - 描述
+                desc = cap.description[:80] + "..." if len(cap.description) > 80 else cap.description
+                if desc:
+                    lines.append(f"- {cap.name}: {desc}")
+                else:
+                    lines.append(f"- {cap.name}")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def generate_system_prompt_section(
+        self,
+        include_parameters: bool = False,
+        include_examples: bool = False,
+        only_available: bool = True,
+    ) -> str:
+        """
+        生成适合注入到 SystemPrompt 的能力清单。
+
+        这个方法生成的清单格式简洁，适合 LLM 理解和使用。
+
+        Args:
+            include_parameters: 是否包含参数说明
+            include_examples: 是否包含使用示例
+            only_available: 是否只包含可用能力
+
+        Returns:
+            适合 SystemPrompt 的能力清单
+        """
+        lines = ["# 可用能力", ""]
+
+        for cap_type in CapabilityType:
+            capabilities = self.list_by_type(cap_type)
+
+            if only_available:
+                capabilities = [c for c in capabilities if c.is_available()]
+
+            if not capabilities:
+                continue
+
+            type_name = {
+                CapabilityType.TOOL: "工具",
+                CapabilityType.SKILL: "技能",
+                CapabilityType.MCP: "MCP 工具",
+                CapabilityType.BUILTIN: "内置能力",
+            }.get(cap_type, cap_type.value)
+
+            lines.append(f"## {type_name}")
+            lines.append("")
+
+            for cap in sorted(capabilities, key=lambda x: x.name):
+                # 能力名称
+                lines.append(f"### {cap.name}")
+
+                # 描述
+                if cap.description:
+                    lines.append(f"{cap.description}")
+
+                # 标签
+                if cap.tags:
+                    lines.append(f"标签: {', '.join(cap.tags)}")
+
+                # 参数
+                if include_parameters and cap.parameters:
+                    lines.append("")
+                    lines.append("参数:")
+                    for param, schema in cap.parameters.items():
+                        param_type = schema.get("type", "any")
+                        required = schema.get("required", False)
+                        req_mark = "*" if required else ""
+                        param_desc = schema.get("description", "")
+                        lines.append(f"  - {param}{req_mark} ({param_type}): {param_desc}")
+
+                # 示例
+                if include_examples and cap.examples:
+                    lines.append("")
+                    lines.append("示例:")
+                    for i, example in enumerate(cap.examples[:2], 1):
+                        if "input" in example:
+                            lines.append(f"  {i}. 输入: {example['input']}")
+
+                lines.append("")
+
+        return "\n".join(lines)
+
+    def generate_tool_list_for_prompt(self) -> str:
+        """
+        生成适合 LLM 工具调用格式的清单。
+
+        返回一个简洁的格式，列出所有可用工具及其简要描述。
+
+        Returns:
+            工具列表字符串
+        """
+        tools = self.list_available()
+        if not tools:
+            return "当前没有可用的工具。"
+
+        lines = ["可用工具列表:", ""]
+        for tool in sorted(tools, key=lambda x: x.name):
+            lines.append(f"- {tool.name}: {tool.description or '无描述'}")
+
+        return "\n".join(lines)
+
     def generate_summary(self) -> dict[str, Any]:
         """
         生成能力摘要统计。
