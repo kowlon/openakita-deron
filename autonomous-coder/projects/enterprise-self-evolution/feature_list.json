@@ -269,7 +269,8 @@
       "description": "上下文管理端到端测试",
       "priority": "medium",
       "dependencies": ["TASK-208"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-27 23:00",
       "files": ["tests/e2e/test_e2e_context.py"]
     },
     {
