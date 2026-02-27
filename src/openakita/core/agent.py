@@ -59,6 +59,7 @@ from .interrupt_manager import InterruptManager, STOP_COMMANDS, SKIP_COMMANDS
 from .retrospect import RetrospectManager
 from .prompt_assembler import PROMPT_COMPILER_SYSTEM
 from .helpers.tool_helper import init_handlers
+from .helpers.capability_helper import setup_capability_system
 from .helpers.session_helper import (
     cleanup_session_state,
     finalize_session,
@@ -244,6 +245,11 @@ class Agent:
 
         self.context_manager = self._context_backend
         logger.info("Agent using enterprise ContextBackend")
+
+        # 能力系统（Phase 2 新增）
+        # 初始化为 None，在 initialize() 中设置
+        self.capability_registry = None
+        self.capability_executor = None
 
         # 响应处理器（委托自 _verify_task_completion 等）
         self.response_handler = ResponseHandler(
@@ -625,6 +631,17 @@ class Agent:
 
         # 加载 MCP 配置
         await self.mcp_manager.load_servers()
+
+        # === 能力系统初始化 ===
+        # 统一能力系统：整合 Tools / Skills / MCP 到统一执行入口
+        try:
+            setup_capability_system(self)
+            logger.info(
+                f"[CapabilitySystem] Initialized with "
+                f"{len(self.capability_executor.list_adapters())} adapters"
+            )
+        except Exception as e:
+            logger.warning(f"[CapabilitySystem] Initialization failed: {e}")
 
         # 启动记忆会话
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
