@@ -21,7 +21,12 @@ from .exceptions import (
     SessionContextNotFoundError,
     TaskContextNotFoundError,
 )
-from .interfaces import IContextOrchestrator, IConversationContext, ITaskContext
+from .interfaces import (
+    ContextPriority,
+    IContextOrchestrator,
+    IConversationContext,
+    ITaskContext,
+)
 from .system_context import SystemContext
 from .task_context import TaskContext
 from .compressor import CompressionStrategy, create_compressor
@@ -63,6 +68,7 @@ class ContextOrchestrator(IContextOrchestrator):
     # 运行时状态
     _tasks: dict[str, TaskContext] = field(default_factory=dict)
     _conversations: dict[str, ConversationContext] = field(default_factory=dict)
+    _priority_queue: dict[str, ContextPriority] = field(default_factory=dict)
 
     def __post_init__(self):
         """初始化后处理"""
@@ -214,6 +220,133 @@ class ContextOrchestrator(IContextOrchestrator):
             logger.info(f"[Orchestrator] Cleared session: {session_id}")
 
     # ==================== 扩展方法 ====================
+
+    # ==================== 优先级调度 ====================
+
+    def set_task_priority(
+        self,
+        task_id: str,
+        priority: ContextPriority,
+    ) -> None:
+        """
+        设置任务优先级。
+
+        Args:
+            task_id: 任务 ID
+            priority: 优先级
+        """
+        self._priority_queue[task_id] = priority
+        logger.debug(f"[Orchestrator] Set task {task_id} priority to {priority.name}")
+
+    def get_task_priority(self, task_id: str) -> ContextPriority:
+        """
+        获取任务优先级。
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            任务优先级，默认为 MEDIUM
+        """
+        return self._priority_queue.get(task_id, ContextPriority.MEDIUM)
+
+    def get_tasks_by_priority(self) -> list[tuple[str, ContextPriority]]:
+        """
+        按优先级排序获取任务列表。
+
+        Returns:
+            按优先级降序排列的 (task_id, priority) 列表
+        """
+        tasks_with_priority = [
+            (task_id, self._priority_queue.get(task_id, ContextPriority.MEDIUM))
+            for task_id in self._tasks
+        ]
+        return sorted(tasks_with_priority, key=lambda x: x[1].value, reverse=True)
+
+    def trim_by_priority(
+        self,
+        target_tokens: int,
+    ) -> int:
+        """
+        按优先级裁剪任务上下文。
+
+        当 Token 预算超限时，按优先级从低到高裁剪任务。
+
+        Args:
+            target_tokens: 目标 Token 数
+
+        Returns:
+            实际裁剪的 Token 数
+        """
+        # 按优先级升序排列（低优先级先裁剪）
+        tasks_sorted = sorted(
+            self._priority_queue.items(),
+            key=lambda x: x[1].value,
+        )
+
+        total_tokens = sum(
+            t.estimate_tokens() for t in self._tasks.values()
+        )
+        trimmed_tokens = 0
+
+        for task_id, priority in tasks_sorted:
+            if total_tokens - trimmed_tokens <= target_tokens:
+                break
+
+            # 低优先级任务可以被裁剪
+            if priority in (ContextPriority.LOW, ContextPriority.MEDIUM):
+                task = self._tasks.get(task_id)
+                if task:
+                    task_tokens = task.estimate_tokens()
+                    # 清空任务上下文
+                    task.clear()
+                    trimmed_tokens += task_tokens
+                    logger.info(
+                        f"[Orchestrator] Trimmed task {task_id} "
+                        f"(priority={priority.name}, tokens={task_tokens})"
+                    )
+
+        return trimmed_tokens
+
+    def build_context_with_priority(
+        self,
+        task_id: str,
+        session_id: str,
+    ) -> tuple[str, list[dict]]:
+        """
+        带优先级感知的上下文构建。
+
+        在构建上下文时考虑优先级，必要时裁剪低优先级内容。
+
+        Args:
+            task_id: 任务 ID
+            session_id: 会话 ID
+
+        Returns:
+            (system_prompt, messages) 元组
+        """
+        # 首先尝试正常构建
+        system_prompt, messages = self.build_context(task_id, session_id)
+
+        # 检查是否需要按优先级裁剪
+        total_tokens = (
+            self._estimate_tokens(system_prompt) +
+            sum(self._estimate_message_tokens(m) for m in messages)
+        )
+
+        available = self.budget_controller.available_for_context
+
+        if total_tokens > available:
+            # 需要裁剪，计算目标
+            target_tokens = int(available * 0.70)
+
+            # 按优先级裁剪其他任务
+            self.trim_by_priority(target_tokens)
+
+            # 重新构建
+            system_prompt, messages = self.build_context(task_id, session_id)
+
+        return system_prompt, messages
 
     def get_task(self, task_id: str) -> TaskContext:
         """
