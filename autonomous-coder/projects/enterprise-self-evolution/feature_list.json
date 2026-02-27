@@ -278,7 +278,8 @@
       "description": "能力发现与调用端到端测试",
       "priority": "medium",
       "dependencies": ["TASK-301"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-27 23:30",
       "files": ["tests/e2e/test_e2e_capability.py"]
     },
     {
@@ -286,7 +287,8 @@
       "description": "自我进化端到端测试",
       "priority": "medium",
       "dependencies": ["TASK-302"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-27 23:45",
       "files": ["tests/e2e/test_e2e_evolution.py"]
     },
     {
@@ -294,7 +296,8 @@
       "description": "性能基准测试",
       "priority": "medium",
       "dependencies": ["TASK-303"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-27 23:55",
       "files": ["tests/benchmark/test_performance.py", "docs/refactor/performance_benchmark.md"]
     },
     {
@@ -302,7 +305,8 @@
       "description": "完整架构文档",
       "priority": "low",
       "dependencies": ["TASK-304"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 00:10",
       "files": ["docs/architecture/enterprise_agent.md"]
     },
     {
