@@ -15,6 +15,7 @@
         CapabilityMeta,
         CapabilityRegistry,
         CapabilityAdapter,
+        CapabilityExecutor,
     )
 """
 from __future__ import annotations
@@ -30,6 +31,11 @@ from .registry import (
     get_global_registry,
     reset_global_registry,
 )
+from .executor import (
+    CapabilityExecutor,
+    MockCapabilityExecutor,
+    ExecutorStats,
+)
 
 
 __all__ = [
@@ -42,5 +48,8 @@ __all__ = [
     "CapabilityRegistry",
     "get_global_registry",
     "reset_global_registry",
-    # Adapters (will be added later)
+    # Executor
+    "CapabilityExecutor",
+    "MockCapabilityExecutor",
+    "ExecutorStats",
 ]
