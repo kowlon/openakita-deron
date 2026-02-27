@@ -25,6 +25,10 @@ from .pattern_extractor import (
     PatternConfig,
     PatternExtractor,
 )
+from .proposal_generator import (
+    ProposalConfig,
+    ProposalGenerator,
+)
 
 __all__ = [
     "NeedAnalyzer",
@@ -49,4 +53,7 @@ __all__ = [
     # 模式提取
     "PatternConfig",
     "PatternExtractor",
+    # 提案生成
+    "ProposalConfig",
+    "ProposalGenerator",
 ]
