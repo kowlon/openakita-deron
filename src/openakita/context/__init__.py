@@ -30,6 +30,7 @@ from openakita.context.budget_controller import (
 )
 from openakita.context.config import ContextConfig as EnterpriseContextConfig
 from openakita.context.config import TokenBudget, ContextConfig
+from openakita.context.orchestrator import ContextOrchestrator, create_orchestrator
 from openakita.context.exceptions import (
     CheckpointNotFoundError,
     CompressionError,
@@ -77,6 +78,7 @@ def create_context_backend(
 __all__ = [
     # Factory
     "create_context_backend",
+    "create_orchestrator",
     # Protocol
     "ContextBackend",
     # Config
@@ -87,6 +89,8 @@ __all__ = [
     "BudgetAllocation",
     "BudgetCheckResult",
     "BudgetState",
+    # Orchestrator
+    "ContextOrchestrator",
     # Interfaces
     "IContext",
     "ISystemContext",
