@@ -1,0 +1,48 @@
+{
+  "name": "plan-mode-ui-fix",
+  "description": "Plan 模式 UI 修复 - 确保 Plan 卡片优先显示、步骤一致性、ask_user 上下文保持",
+  "version": "1.0.0",
+  "status": "running",
+  "created_at": "2026-02-28",
+  "phases": [
+    {
+      "name": "phase-1-diagnosis",
+      "description": "诊断和修复核心渲染问题",
+      "tasks": 1
+    },
+    {
+      "name": "phase-2-plan-display",
+      "description": "Plan 卡片显示和步骤过滤",
+      "tasks": 3
+    },
+    {
+      "name": "phase-3-context-preservation",
+      "description": "ask_user 上下文保持",
+      "tasks": 1
+    },
+    {
+      "name": "phase-4-optimization",
+      "description": "UI 优化和测试",
+      "tasks": 2
+    }
+  ],
+  "total_tasks": 7,
+  "estimated_days": 3,
+  "dependencies": [
+    "webapps/seeagent-webui 前端应用",
+    "src/openakita 后端 API",
+    "Plan 模式后端已实现"
+  ],
+  "testing_requirements": {
+    "backend": "后端 SSE 事件正确发送",
+    "frontend": "前端正确接收和处理 SSE 事件，UI 正确渲染",
+    "integration": "端到端测试验证完整 Plan 模式流程"
+  },
+  "principles": {
+    "high_cohesion": "每个组件职责单一 - PlanCard 显示 Plan，StepCard 显示步骤",
+    "low_coupling": "通过 SSE 事件通信，状态管理独立",
+    "small_iterations": "每个任务 < 2小时，可独立测试验证",
+    "test_driven": "先验证问题，再实现修复，最后测试验证"
+  },
+  "updated_at": "2026-02-28 15:11:56"
+}

@@ -1,0 +1,94 @@
+{
+  "project": "plan-mode-ui-fix",
+  "version": "1.0.0",
+  "created_at": "2026-02-28",
+  "features": [
+    {
+      "id": "TASK-001",
+      "description": "诊断前端渲染问题",
+      "priority": "critical",
+      "dependencies": [],
+      "passes": true,
+      "files": [
+        "webapps/seeagent-webui/src/api/client.ts",
+        "webapps/seeagent-webui/src/hooks/useChat.ts",
+        "webapps/seeagent-webui/src/components/Layout/MainContent.tsx"
+      ]
+    },
+    {
+      "id": "TASK-101",
+      "description": "验证并修复 plan_created 事件处理",
+      "priority": "high",
+      "dependencies": ["TASK-001"],
+      "passes": true,
+      "completed_at": "2026-02-28 15:20",
+      "files": [
+        "webapps/seeagent-webui/src/hooks/useChat.ts"
+      ]
+    },
+    {
+      "id": "TASK-102",
+      "description": "验证并修复步骤过滤逻辑",
+      "priority": "high",
+      "dependencies": ["TASK-001"],
+      "passes": false,
+      "files": [
+        "webapps/seeagent-webui/src/hooks/useChat.ts",
+        "webapps/seeagent-webui/src/types/step.ts"
+      ]
+    },
+    {
+      "id": "TASK-103",
+      "description": "验证并修复 Plan 步骤与执行步骤关联",
+      "priority": "high",
+      "dependencies": ["TASK-001", "TASK-101"],
+      "passes": false,
+      "files": [
+        "webapps/seeagent-webui/src/hooks/useChat.ts"
+      ]
+    },
+    {
+      "id": "TASK-201",
+      "description": "验证并修复 ask_user 上下文保持",
+      "priority": "critical",
+      "dependencies": ["TASK-001", "TASK-101"],
+      "passes": false,
+      "files": [
+        "webapps/seeagent-webui/src/hooks/useChat.ts",
+        "webapps/seeagent-webui/src/App.tsx",
+        "webapps/seeagent-webui/src/components/Layout/MainContent.tsx"
+      ]
+    },
+    {
+      "id": "TASK-301",
+      "description": "优化 PlanCard 显示和交互",
+      "priority": "medium",
+      "dependencies": ["TASK-101", "TASK-102", "TASK-103"],
+      "passes": false,
+      "files": [
+        "webapps/seeagent-webui/src/components/Plan/PlanCard.tsx",
+        "webapps/seeagent-webui/src/components/Layout/MainContent.tsx"
+      ]
+    },
+    {
+      "id": "TASK-302",
+      "description": "添加端到端测试",
+      "priority": "medium",
+      "dependencies": ["TASK-101", "TASK-102", "TASK-103", "TASK-201"],
+      "passes": false,
+      "files": [
+        "webapps/seeagent-webui/e2e/plan-mode.spec.ts",
+        "webapps/seeagent-webui/playwright.config.ts"
+      ]
+    }
+  ],
+  "implementation_order": [
+    "TASK-001",
+    "TASK-101",
+    "TASK-102",
+    "TASK-103",
+    "TASK-201",
+    "TASK-301",
+    "TASK-302"
+  ]
+}

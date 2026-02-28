@@ -64,16 +64,19 @@ export async function apiPostStream(
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-          if (data.trim() === '[DONE]') {
+          const data = line.slice(6).trim()
+          console.log('[apiPostStream] Raw SSE data:', data)
+          if (data === '[DONE]') {
+            console.log('[apiPostStream] Received [DONE], completing stream')
             onComplete?.()
             return
           }
           try {
             const event = JSON.parse(data)
+            console.log('[apiPostStream] Parsed event:', event)
             onEvent(event)
-          } catch {
-            // Skip invalid JSON
+          } catch (e) {
+            console.error('[apiPostStream] Parse error:', e, 'data:', data)
           }
         }
       }

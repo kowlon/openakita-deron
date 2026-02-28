@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { apiPostStream, apiPost } from '@/api/client'
-import type { ChatRequest, SSEEvent, Step, StepStatus, StepCategory } from '@/types'
+import type { ChatRequest, SSEEvent, Step, StepStatus, StepCategory, Plan, PlanStatus, PlanStepStatus } from '@/types'
 import type { Artifact } from '@/types/artifact'
 import { CORE_STEP_PATTERNS, INTERNAL_STEP_PATTERNS } from '@/types/step'
 
@@ -23,6 +23,7 @@ export function useChat(conversationId: string | null) {
   const [messageSendTime, setMessageSendTime] = useState<number | null>(null)
   const [llmOutput, setLlmOutput] = useState<string | null>(null)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [activePlan, setActivePlan] = useState<Plan | null>(null)
   const [askUserQuestion, setAskUserQuestion] = useState<{
     question?: string;
     questions?: Array<{
@@ -37,7 +38,7 @@ export function useChat(conversationId: string | null) {
   const editModeRef = useRef(false)
 
   const sendMessage = useCallback(
-    async (message: string, endpoint?: string, editMode: boolean = false) => {
+    async (message: string, endpoint?: string, editMode: boolean = false, isAskUserAnswer: boolean = false) => {
       if (isStreaming) return
 
       // Record message send time immediately
@@ -45,8 +46,13 @@ export function useChat(conversationId: string | null) {
       setMessageSendTime(sendTime)
       editModeRef.current = editMode
 
-      // Clear previous steps when starting a new message
-      setSteps([])
+      // When answering ask_user, keep the context (don't reset plan/steps)
+      // Otherwise, clear previous state when starting a new message
+      if (!isAskUserAnswer) {
+        setSteps([])
+        setActivePlan(null) // Reset active plan
+      }
+
       setIsStreaming(true)
       setIsPaused(false)
       setPausedStepId(null)
@@ -77,6 +83,8 @@ export function useChat(conversationId: string | null) {
               setLlmOutput,
               setArtifacts,
               setAskUserQuestion,
+              setActivePlan,
+              activePlan,
               editMode,
               (stepId, result) => {
                 setIsPaused(true)
@@ -99,7 +107,7 @@ export function useChat(conversationId: string | null) {
         setIsStreaming(false)
       }
     },
-    [conversationId, isStreaming]
+    [conversationId, isStreaming, activePlan]
   )
 
   const confirmStep = useCallback(
@@ -143,8 +151,10 @@ export function useChat(conversationId: string | null) {
               setLlmOutput,
               setArtifacts,
               setAskUserQuestion,
+              setActivePlan,
+              activePlan,
               editModeRef.current,
-              (stepId, result) => {
+              (stepId: string, result: string) => {
                 setIsPaused(true)
                 setPausedStepId(stepId)
                 setPausedStepResult(result)
@@ -186,6 +196,7 @@ export function useChat(conversationId: string | null) {
     setLlmOutput(null)
     setArtifacts([])
     setAskUserQuestion(null)
+    setActivePlan(null)
   }, [])
 
   return {
@@ -199,6 +210,7 @@ export function useChat(conversationId: string | null) {
     messageSendTime,
     llmOutput,
     artifacts,
+    activePlan,
     askUserQuestion,
     sendMessage,
     confirmStep,
@@ -224,9 +236,12 @@ function handleSSEEvent(
     }>;
     options?: Array<{ id: string; label: string }>;
   } | null>>,
+  setActivePlan: React.Dispatch<React.SetStateAction<Plan | null>>,
+  activePlan: Plan | null,
   _editMode: boolean = false,
   onPause?: (stepId: string, result: string) => void
 ) {
+  console.log('[handleSSEEvent] Received event:', event.type, event)
   const eventRecord = event as Record<string, unknown>
 
   switch (event.type) {
@@ -269,19 +284,38 @@ function handleSSEEvent(
     case 'tool_call_start': {
       const toolName = eventRecord.tool as string
       const args = eventRecord.args as Record<string, unknown> | undefined
-      // Smart title detection based on tool and args
-      const stepTitle = formatToolTitleSmart(toolName, args)
+      console.log('[tool_call_start] Tool:', toolName, 'Args:', args)
+
+      // Find current in_progress Plan step if Plan is active
+      let planStepDescription: string | undefined
+      let planStepId: string | undefined
+      if (activePlan) {
+        console.log('[tool_call_start] Active plan:', activePlan)
+        const currentPlanStep = activePlan.steps.find(s => s.status === 'in_progress')
+        console.log('[tool_call_start] Current plan step:', currentPlanStep)
+        if (currentPlanStep) {
+          planStepDescription = currentPlanStep.description
+          planStepId = currentPlanStep.id
+          console.log('[tool_call_start] Using plan step:', planStepDescription, 'ID:', planStepId)
+        }
+      }
+
+      // Use Plan step description if available, otherwise use smart title detection
+      const stepTitle = planStepDescription || getToolDisplayName(toolName, args) || formatToolTitleSmart(toolName, args)
       const stepCategory = categorizeStep(stepTitle, toolName, args)
+      console.log('[tool_call_start] Title:', stepTitle, 'Category:', stepCategory)
 
       setSteps((prev) => {
         // Skip internal steps - don't add them at all
         if (stepCategory === 'internal') {
+          console.log('[tool_call_start] Skipping internal step:', toolName)
           return prev
         }
 
         // Check if the last visible step has the same title - merge them
         const lastCoreStep = [...prev].reverse().find(s => s.category === 'core')
         if (lastCoreStep && lastCoreStep.title === stepTitle && lastCoreStep.status === 'running') {
+          console.log('[tool_call_start] Merging with existing step:', lastCoreStep.id)
           // Update existing step with additional input info
           return prev.map((step) =>
             step.id === lastCoreStep.id
@@ -300,7 +334,9 @@ function handleSSEEvent(
           startTime: Date.now(),
           input: args,
           category: stepCategory,
+          outputData: planStepId ? { planStepId, originalToolName: toolName } : undefined,
         }
+        console.log('[tool_call_start] Adding new step:', newStep)
         return [...prev, newStep]
       })
       break
@@ -342,10 +378,11 @@ function handleSSEEvent(
     }
 
     case 'text_delta': {
+      const content = eventRecord.content as string || ''
+      console.log('[text_delta] Content:', content.substring(0, 50) + (content.length > 50 ? '...' : ''))
+
       // Record first token time (only once) - fallback for backwards compatibility
       setFirstTokenTime((prev) => prev || Date.now())
-
-      const content = eventRecord.content as string || ''
 
       // Always update llmOutput (for conversation history)
       setLlmOutput((prev) => (prev || '') + content)
@@ -410,8 +447,65 @@ function handleSSEEvent(
     }
 
     // Handle other event types (plan_created, plan_step_updated, etc.)
-    case 'plan_created':
-    case 'plan_step_updated':
+    case 'plan_created': {
+      console.log('[plan_created] Raw event:', eventRecord)
+      const raw = eventRecord.plan as Record<string, unknown> | undefined
+      console.log('[plan_created] Raw plan data:', raw)
+      if (raw) {
+        const plan: Plan = {
+          id: (raw.id as string) || '',
+          task_summary: (raw.taskSummary as string) || (raw.task_summary as string) || '',
+          steps: ((raw.steps as Array<Record<string, unknown>>) || []).map((s) => ({
+            id: String(s.id || ''),
+            description: String(s.description || ''),
+            status: (s.status as PlanStepStatus) || 'pending',
+          })),
+          status: (raw.status as PlanStatus) || 'in_progress',
+          created_at: new Date().toISOString(),
+        }
+        console.log('[plan_created] Mapped plan:', plan)
+        console.log('[plan_created] Calling setActivePlan')
+        setActivePlan(plan)
+        console.log('[plan_created] Calling setSteps([]) to clear pre-plan steps')
+        // Clear pre-plan steps (failed attempts before plan was created)
+        setSteps([])
+      } else {
+        console.warn('[plan_created] No plan data in event')
+      }
+      break
+    }
+
+    case 'plan_step_updated': {
+      // Backend sends stepId (camelCase)
+      const stepId = (eventRecord.stepId as string) || (eventRecord.step_id as string)
+      const status = eventRecord.status as string
+      const result = eventRecord.result as string
+      console.log('[plan_step_updated] Updating step:', stepId, 'to status:', status)
+
+      setActivePlan((prev) => {
+        if (!prev) {
+          console.warn('[plan_step_updated] No active plan')
+          return null
+        }
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.id === stepId
+              ? {
+                  ...s,
+                  status: (status as PlanStepStatus) || s.status,
+                  result: result || s.result,
+                  completed_at: ['completed', 'failed', 'skipped'].includes(status)
+                    ? new Date().toISOString()
+                    : s.completed_at,
+                }
+              : s
+          ),
+        }
+      })
+      break
+    }
+
     case 'agent_switch':
       // These are internal events, don't create visible steps
       break
@@ -452,6 +546,84 @@ function handleSSEEvent(
       break
     }
   }
+}
+
+/**
+ * Tool display name mapping - user-friendly names for tools
+ */
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  // Browser tools
+  'browser_navigate': '打开网页',
+  'browser_task': '执行浏览器操作',
+  'browser_screenshot': '截图保存',
+  'browser_click': '点击元素',
+  'browser_type': '输入文本',
+  'browser_scroll': '滚动页面',
+  'browser_snapshot': '获取页面快照',
+
+  // Search tools
+  'web_search': '网络搜索',
+  'search': '搜索',
+  'news_search': '新闻搜索',
+  'image_search': '图片搜索',
+  'video_search': '视频搜索',
+
+  // File tools
+  'write_file': '写入文件',
+  'read_file': '读取文件',
+  'Write': '写入文件',
+  'Read': '读取文件',
+
+  // Plan tools
+  'create_plan': '创建计划',
+  'update_plan_step': '更新计划步骤',
+  'complete_plan': '完成计划',
+  'get_plan_status': '获取计划状态',
+
+  // Other tools
+  'deliver_artifacts': '交付结果',
+  'pdf': 'PDF 处理',
+  'run_shell': '执行命令',
+  'Bash': '执行命令',
+  'get_skill_info': '获取技能信息',
+}
+
+/**
+ * Get user-friendly tool display name with smart parameter-based optimization
+ */
+function getToolDisplayName(toolName: string, args?: Record<string, unknown>, planStepDescription?: string): string {
+  // Priority 1: Use Plan step description if available
+  if (planStepDescription) {
+    return planStepDescription
+  }
+
+  // Priority 2: Smart optimization based on tool and args
+  if (toolName === 'browser_navigate' && args?.url) {
+    const url = args.url as string
+    try {
+      const hostname = new URL(url).hostname
+      if (hostname.includes('baidu.com')) {
+        return '打开百度首页'
+      } else if (hostname.includes('google.com')) {
+        return '打开Google'
+      } else {
+        return `打开 ${hostname}`
+      }
+    } catch {
+      return '打开网页'
+    }
+  }
+
+  if (toolName === 'web_search' && args?.query) {
+    return `搜索"${args.query}"`
+  }
+
+  if (toolName === 'browser_screenshot' && args?.path) {
+    return '截图保存'
+  }
+
+  // Priority 3: Use mapping table
+  return TOOL_DISPLAY_NAMES[toolName] || toolName
 }
 
 /**
@@ -551,6 +723,7 @@ function extractSummary(result: string | undefined): string {
  */
 function categorizeStep(title: string, tool?: string, args?: Record<string, unknown>): StepCategory {
   const textToCheck = `${title} ${tool || ''}`.toLowerCase()
+  const toolLower = (tool || '').toLowerCase()
 
   // ========== CORE OPERATIONS (check first, before internal patterns) ==========
 
@@ -584,9 +757,9 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
 
   // ========== INTERNAL PATTERNS (check after core operations) ==========
 
-  // Check if it matches internal patterns
+  // Check raw tool name against internal patterns (anchored patterns like ^create_plan$ need raw tool name)
   for (const pattern of INTERNAL_STEP_PATTERNS) {
-    if (pattern.test(textToCheck)) {
+    if (pattern.test(toolLower) || pattern.test(textToCheck)) {
       return 'internal'
     }
   }
@@ -618,8 +791,8 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
     return 'core'
   }
 
-  // Default: hide unknown steps (internal)
-  return 'internal'
+  // Default: show unknown steps as core (unless explicitly marked as internal)
+  return 'core'
 }
 
 /**

@@ -120,6 +120,7 @@ function App() {
     llmOutput,
     artifacts,
     askUserQuestion,
+    activePlan,
   } = useChat(currentSessionId)
 
   // Track timing when messageSendTime or firstTokenTime changes
@@ -313,7 +314,7 @@ function App() {
 
   // Send message handler
   const handleSendMessage = useCallback(
-    (message: string) => {
+    (message: string, isAskUserAnswer: boolean = false) => {
       // If no current session, create a new one first
       let sessionId = currentSessionId
       if (!sessionId) {
@@ -330,12 +331,28 @@ function App() {
         sessionId = newSession.id
         setCurrentSessionId(sessionId)
       } else {
-        // Save current turn before starting a new one
-        // This includes turns with steps OR turns with askUserQuestion (waiting for user input)
-        const hasContentToSave = chatSteps.length > 0 || askUserQuestion !== null
-        const currentUserMessage = currentSession?.userMessage || ''
+        // When answering ask_user, don't save the previous turn yet
+        // The answer will be part of the same conversation turn
+        if (isAskUserAnswer) {
+          // Just update the session timestamp, don't save turn
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id === sessionId) {
+                return {
+                  ...s,
+                  timestamp: Date.now(),
+                }
+              }
+              return s
+            })
+          )
+        } else {
+          // Save current turn before starting a new one
+          // This includes turns with steps OR turns with askUserQuestion (waiting for user input)
+          const hasContentToSave = chatSteps.length > 0 || askUserQuestion !== null
+          const currentUserMessage = currentSession?.userMessage || ''
 
-        if (hasContentToSave && currentUserMessage) {
+          if (hasContentToSave && currentUserMessage) {
           const currentSteps = chatSteps
           const allStepsCompleted = currentSteps.length === 0 || currentSteps.every(s => s.status === 'completed')
           const summary = llmOutput || [...currentSteps].reverse().find(s => s.type === 'llm')?.output || null
@@ -434,6 +451,7 @@ function App() {
           )
         }
       }
+      }
       isSendingRef.current = true
       // Reset edit mode state when sending new message
       setEditableResults({})
@@ -441,7 +459,7 @@ function App() {
       // before sending the new message. This prevents the UI from flashing
       // because the historical turn will be rendered first.
       requestAnimationFrame(() => {
-        sendMessage(message, undefined, executionMode === 'edit')
+        sendMessage(message, undefined, executionMode === 'edit', isAskUserAnswer)
       })
     },
     [currentSessionId, sendMessage, chatSteps, currentSession, executionMode, askUserQuestion, llmOutput]
@@ -549,6 +567,7 @@ function App() {
           onConfirmTurn={handleConfirmTurn}
           artifacts={artifacts}
           askUserQuestion={askUserQuestion}
+          activePlan={activePlan}
         />
       }
       detailPanel={selectedStep ? (

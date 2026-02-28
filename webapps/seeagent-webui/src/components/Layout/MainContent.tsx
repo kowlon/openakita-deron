@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import type { Session, Step, ExecutionMode, ConversationTurn } from '@/types'
 import type { Artifact } from '@/types/artifact'
+import type { Plan } from '@/types/plan'
 import { StepTimeline } from '@/components/Step/StepTimeline'
 import { ElapsedTimer } from '@/components/Timer/ElapsedTimer'
 import { ArtifactList } from '@/components/Artifact/ArtifactList'
+import { PlanCard } from '@/components/Plan/PlanCard'
 
 type AskUserQuestion = {
   question?: string;
@@ -24,7 +26,7 @@ type MainContentProps = {
   executionMode: ExecutionMode
   onModeChange: (mode: ExecutionMode) => void
   onStepClick: (stepId: string) => void
-  onSendMessage: (message: string) => void
+  onSendMessage: (message: string, isAskUserAnswer?: boolean) => void
   isStreaming: boolean
   isPaused?: boolean  // True when in Edit mode and waiting for step confirmation
   pausedStepId?: string | null  // The step ID that is paused
@@ -34,6 +36,7 @@ type MainContentProps = {
   onConfirmTurn?: () => void  // Called when user confirms in Edit mode
   artifacts?: Artifact[]  // Current turn artifacts
   askUserQuestion?: AskUserQuestion
+  activePlan?: Plan | null  // Active plan for Plan mode
 }
 
 /**
@@ -130,6 +133,7 @@ export function MainContent({
   onConfirmTurn,
   artifacts = [],
   askUserQuestion,
+  activePlan = null,
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -333,7 +337,7 @@ export function MainContent({
 
           {/* Current Turn - AI Response Area */}
           {/* Show if: user message exists AND not in history AND (has content OR waiting for response) */}
-          {session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (isWaiting || isRunning || isCompleted || steps.length > 0 || askUserQuestion || llmOutput) && (
+          {session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (isWaiting || isRunning || isCompleted || steps.length > 0 || askUserQuestion || llmOutput || activePlan) && (
             <div className="flex justify-start items-start gap-3 mr-12">
               {/* AI Avatar */}
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 shrink-0 flex items-center justify-center shadow-md">
@@ -349,6 +353,13 @@ export function MainContent({
                   isCompleted={isCompleted}
                   endTime={isCompleted ? Date.now() : null}
                 />
+
+                {/* Plan Card - show if Plan mode is active */}
+                {activePlan && (
+                  <div className="mt-3">
+                    <PlanCard plan={activePlan} />
+                  </div>
+                )}
 
                 {/* Current Steps (only for complex tasks with tool calls) */}
                 {steps.length > 0 && (
@@ -411,8 +422,8 @@ export function MainContent({
                                   <button
                                     key={option.id}
                                     onClick={() => {
-                                      // Send the selected option as a message
-                                      onSendMessage(option.label)
+                                      // Send the selected option as an ask_user answer
+                                      onSendMessage(option.label, true)
                                     }}
                                     className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
                                   >
@@ -433,8 +444,8 @@ export function MainContent({
                           <button
                             key={option.id}
                             onClick={() => {
-                              // Send the selected option as a message
-                              onSendMessage(option.label)
+                              // Send the selected option as an ask_user answer
+                              onSendMessage(option.label, true)
                             }}
                             className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
                           >

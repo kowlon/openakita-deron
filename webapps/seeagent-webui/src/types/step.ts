@@ -46,6 +46,15 @@ export const CORE_STEP_PATTERNS = [
   // Thinking/Intent analysis
   /意图/i,
   /分析/i,
+
+  // Browser operations - 浏览器操作
+  /browser/i,
+  /navigate/i,
+  /screenshot/i,
+  /click/i,
+  /type/i,
+  /scroll/i,
+  /snapshot/i,
 ]
 
 /**
