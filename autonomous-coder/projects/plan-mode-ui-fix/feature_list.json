@@ -43,7 +43,8 @@
       "description": "验证并修复 Plan 步骤与执行步骤关联",
       "priority": "high",
       "dependencies": ["TASK-001", "TASK-101"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 16:45",
       "files": [
         "webapps/seeagent-webui/src/hooks/useChat.ts"
       ]

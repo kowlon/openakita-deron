@@ -24,6 +24,9 @@ export function useChat(conversationId: string | null) {
   const [llmOutput, setLlmOutput] = useState<string | null>(null)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [activePlan, setActivePlan] = useState<Plan | null>(null)
+  // Ref to track the latest activePlan value for use in SSE event callbacks,
+  // avoiding the stale closure problem where the callback captures an outdated activePlan
+  const activePlanRef = useRef<Plan | null>(null)
   const [askUserQuestion, setAskUserQuestion] = useState<{
     question?: string;
     questions?: Array<{
@@ -50,7 +53,8 @@ export function useChat(conversationId: string | null) {
       // Otherwise, clear previous state when starting a new message
       if (!isAskUserAnswer) {
         setSteps([])
-        setActivePlan(null) // Reset active plan
+        setActivePlan(null)
+        activePlanRef.current = null
       }
 
       setIsStreaming(true)
@@ -84,7 +88,7 @@ export function useChat(conversationId: string | null) {
               setArtifacts,
               setAskUserQuestion,
               setActivePlan,
-              activePlan,
+              activePlanRef,
               editMode,
               (stepId, result) => {
                 setIsPaused(true)
@@ -107,7 +111,7 @@ export function useChat(conversationId: string | null) {
         setIsStreaming(false)
       }
     },
-    [conversationId, isStreaming, activePlan]
+    [conversationId, isStreaming]
   )
 
   const confirmStep = useCallback(
@@ -152,7 +156,7 @@ export function useChat(conversationId: string | null) {
               setArtifacts,
               setAskUserQuestion,
               setActivePlan,
-              activePlan,
+              activePlanRef,
               editModeRef.current,
               (stepId: string, result: string) => {
                 setIsPaused(true)
@@ -197,6 +201,7 @@ export function useChat(conversationId: string | null) {
     setArtifacts([])
     setAskUserQuestion(null)
     setActivePlan(null)
+    activePlanRef.current = null
   }, [])
 
   return {
@@ -237,7 +242,7 @@ function handleSSEEvent(
     options?: Array<{ id: string; label: string }>;
   } | null>>,
   setActivePlan: React.Dispatch<React.SetStateAction<Plan | null>>,
-  activePlan: Plan | null,
+  activePlanRef: React.MutableRefObject<Plan | null>,
   _editMode: boolean = false,
   onPause?: (stepId: string, result: string) => void
 ) {
@@ -289,9 +294,9 @@ function handleSSEEvent(
       // Find current in_progress Plan step if Plan is active
       let planStepDescription: string | undefined
       let planStepId: string | undefined
-      if (activePlan) {
-        console.log('[tool_call_start] Active plan:', activePlan)
-        const currentPlanStep = activePlan.steps.find(s => s.status === 'in_progress')
+      if (activePlanRef.current) {
+        console.log('[tool_call_start] Active plan (from ref):', activePlanRef.current)
+        const currentPlanStep = activePlanRef.current.steps.find(s => s.status === 'in_progress')
         console.log('[tool_call_start] Current plan step:', currentPlanStep)
         if (currentPlanStep) {
           planStepDescription = currentPlanStep.description
@@ -302,8 +307,15 @@ function handleSSEEvent(
 
       // Use Plan step description if available, otherwise use smart title detection
       const stepTitle = planStepDescription || getToolDisplayName(toolName, args) || formatToolTitleSmart(toolName, args)
-      const stepCategory = categorizeStep(stepTitle, toolName, args)
-      console.log('[tool_call_start] Title:', stepTitle, 'Category:', stepCategory)
+
+      // Determine step category:
+      // 1. Plan management tools (create_plan, update_plan_step, complete_plan) are ALWAYS internal
+      // 2. For other tools, when associated with a plan step, show as core (the plan step represents
+      //    a high-level user-visible task)
+      const planManagementTools = ['create_plan', 'update_plan_step', 'complete_plan', 'get_plan_status']
+      const isPlanManagementTool = planManagementTools.includes(toolName)
+      const stepCategory = isPlanManagementTool ? 'internal' : (planStepId ? 'core' : categorizeStep(stepTitle, toolName, args))
+      console.log('[tool_call_start] Title:', stepTitle, 'Category:', stepCategory, 'planStepId:', planStepId, 'isPlanManagementTool:', isPlanManagementTool)
 
       setSteps((prev) => {
         // Skip internal steps - don't add them at all
@@ -354,8 +366,12 @@ function handleSSEEvent(
         setArtifacts((prev) => [...prev, artifact])
       }
 
-      setSteps((prev) =>
-        prev.map((step) => {
+      setSteps((prev) => {
+        // Use first-match strategy to avoid updating multiple steps
+        // when they share the same originalToolName or title
+        let matched = false
+        return prev.map((step) => {
+          if (matched) return step
           // Match by id/step_id first
           const eventId = (eventRecord.id as string) || (eventRecord.step_id as string)
           // Also match by title (for merged steps) or by originalToolName (for plan-described steps)
@@ -364,6 +380,7 @@ function handleSSEEvent(
           const matchesByOriginalTool = step.status === 'running' &&
             (step.outputData as Record<string, string> | undefined)?.originalToolName === toolName
           if (matchesById || matchesByTitle || matchesByOriginalTool) {
+            matched = true
             const newDuration = Date.now() - step.startTime
             return {
               ...step,
@@ -377,7 +394,7 @@ function handleSSEEvent(
           }
           return step
         })
-      )
+      })
       break
     }
 
@@ -470,6 +487,7 @@ function handleSSEEvent(
         console.log('[plan_created] Mapped plan:', plan)
         console.log('[plan_created] Calling setActivePlan')
         setActivePlan(plan)
+        activePlanRef.current = plan
         console.log('[plan_created] Calling setSteps([]) to clear pre-plan steps')
         // Clear pre-plan steps (failed attempts before plan was created)
         setSteps([])
@@ -486,27 +504,30 @@ function handleSSEEvent(
       const result = eventRecord.result as string
       console.log('[plan_step_updated] Updating step:', stepId, 'to status:', status)
 
-      setActivePlan((prev) => {
-        if (!prev) {
-          console.warn('[plan_step_updated] No active plan')
-          return null
-        }
-        return {
-          ...prev,
-          steps: prev.steps.map((s) =>
-            s.id === stepId
-              ? {
-                  ...s,
-                  status: (status as PlanStepStatus) || s.status,
-                  result: result || s.result,
-                  completed_at: ['completed', 'failed', 'skipped'].includes(status)
-                    ? new Date().toISOString()
-                    : s.completed_at,
-                }
-              : s
-          ),
-        }
+      const updateSteps = (plan: Plan): Plan => ({
+        ...plan,
+        steps: plan.steps.map((s) =>
+          s.id === stepId
+            ? {
+                ...s,
+                status: (status as PlanStepStatus) || s.status,
+                result: result || s.result,
+                completed_at: ['completed', 'failed', 'skipped'].includes(status)
+                  ? new Date().toISOString()
+                  : s.completed_at,
+              }
+            : s
+        ),
       })
+
+      // Update ref synchronously so subsequent SSE events (e.g. tool_call_start)
+      // see the latest plan state immediately, before React flushes batched updates
+      if (activePlanRef.current) {
+        activePlanRef.current = updateSteps(activePlanRef.current)
+      }
+
+      // Update React state for re-rendering
+      setActivePlan((prev) => prev ? updateSteps(prev) : null)
       break
     }
 

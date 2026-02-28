@@ -1,0 +1,98 @@
+## Session 1 - Coding
+- Date: 2026-02-28 15:20
+- Agent: Coder
+- Feature: TASK-101 - 验证并修复 plan_created 事件处理
+
+### Completed:
+- 验证了 plan_created 事件处理的完整流程
+- 修复了 MainContent.tsx 中 console.log 在 JSX 中导致的 TypeScript 编译错误（void 不可赋值给 ReactNode）
+- 通过端到端浏览器测试验证了所有验收标准
+- 确认 TypeScript 编译和 Vite 构建均通过
+
+### Files Changed:
+- webapps/seeagent-webui/src/components/Layout/MainContent.tsx (修复 console.log JSX 错误)
+- autonomous-coder/projects/plan-mode-ui-fix/feature_list.json (更新 TASK-101 passes: true)
+
+### Test Results:
+- Step 1: ✅ PASS - 后端 plan_created 事件数据格式正确（通过 curl 和浏览器 console 验证）
+- Step 2: ✅ PASS - 前端正确解析并映射 plan 数据（camelCase → snake_case，console 日志确认）
+- Step 3: ✅ PASS - setActivePlan 被调用且状态更新成功（PlanCard 正确渲染）
+- Step 4: ✅ PASS - setSteps([]) 被调用且清空预计划步骤（无残留步骤显示）
+- Step 5: ✅ PASS - PlanCard 在页面上正确显示（截图确认：标题、摘要、进度条、步骤列表）
+- Step 6: ✅ PASS - PlanCard 显示在步骤卡片之前（截图确认渲染顺序正确）
+
+### Bug Fixed:
+- MainContent.tsx:348 - `{console.log(...)}` 在 JSX 中返回 void，导致 TypeScript 编译失败
+- 解决方案：移除 JSX 中的 console.log 调试语句
+
+### Next Steps:
+- 继续实现下一个功能: TASK-102 - 验证并修复步骤过滤逻辑
+
+---
+
+## Session 2 - Coding
+- Date: 2026-02-28 16:30
+- Agent: Coder
+- Feature: TASK-102 - 验证并修复步骤过滤逻辑
+
+### Completed:
+- 修复了 tool_call_end 无法匹配使用 plan 步骤描述作为标题的步骤（通过 originalToolName 回退匹配）
+- 修复了 categorizeStep 中 python 命令匹配过于宽泛的问题（之前所有 python 命令都被标记为 core）
+- 添加了 browser_ 工具早期返回检查，防止域名（如 config.example.com）被内部模式错误匹配
+- 精简了 CORE_STEP_PATTERNS，移除了过于宽泛的 /type/i, /click/i, /scroll/i, /snapshot/i，改用 /browser_/i 前缀
+- 修复了 INTERNAL_STEP_PATTERNS 正则表达式使用 [\s_]* 匹配带下划线的工具名
+- 添加了 Read 工具和额外中文标题的内部过滤检查
+
+### Files Changed:
+- webapps/seeagent-webui/src/hooks/useChat.ts (修复 tool_call_end 匹配、categorizeStep 逻辑、python 匹配)
+- webapps/seeagent-webui/src/types/step.ts (精简 CORE_STEP_PATTERNS、修复 INTERNAL_STEP_PATTERNS 正则)
+- autonomous-coder/projects/plan-mode-ui-fix/feature_list.json (更新 TASK-102 passes: true)
+
+### Test Results:
+- Step 1: ✅ PASS - categorizeStep 正确分类 18 种工具/场景组合（browser_navigate 到含内部关键字域名、Bash python 命令、搜索工具、plan 工具等）
+- Step 2: ✅ PASS - tool_call_end 通过 originalToolName 正确匹配 plan 描述的步骤
+- Step 3: ✅ PASS - TypeScript 编译和 Vite 构建均通过
+- Step 4: ✅ PASS - 浏览器 E2E 测试验证全部 23 个测试用例通过
+
+### Bugs Fixed:
+1. tool_call_end 无法更新 plan 步骤状态 - 步骤使用 plan 描述作为标题，但 tool_call_end 使用工具显示名匹配，导致步骤永远停留在 running 状态
+2. python 命令过于宽泛匹配 - `command.includes('python')` 导致所有 python 命令被标记为 core（应只匹配 PDF/文档生成）
+3. 浏览器导航到含内部关键字域名被隐藏 - 如 config.example.com 被 /config/i 匹配为 internal
+4. CORE_STEP_PATTERNS 中 /type/i 过于宽泛 - 匹配任何包含 "type" 的步骤
+
+### Next Steps:
+- 继续实现下一个功能: TASK-201 - 验证并修复 ask_user 上下文保持
+
+---
+
+## Session 3 - Coding
+- Date: 2026-02-28 16:45
+- Agent: Coder
+- Feature: TASK-103 - 验证并修复 Plan 步骤与执行步骤关联
+
+### Completed:
+- 修复了计划管理工具（update_plan_step, create_plan, complete_plan）被错误显示的问题
+- 这些工具即使关联了 Plan 步骤（有 planStepId）也应该始终被分类为 internal
+- 添加了 planManagementTools 列表进行检查
+
+### Files Changed:
+- webapps/seeagent-webui/src/hooks/useChat.ts (修复 stepCategory 分类逻辑)
+- autonomous-coder/projects/plan-mode-ui-fix/feature_list.json (更新 TASK-103 passes: true)
+
+### Test Results:
+- Step 1: ✅ PASS - 执行步骤的标题使用 Plan 步骤的描述（如 "打开百度网站"）
+- Step 2: ✅ PASS - 执行步骤的 outputData 包含 planStepId（浏览器 E2E 测试确认）
+- Step 3: ✅ PASS - Plan 步骤的状态随执行更新（plan_step_updated 事件正确处理）
+- Step 4: ✅ PASS - update_plan_step 被正确跳过（控制台日志确认 "Skipping internal step: up..."）
+- Step 5: ✅ PASS - complete_plan 被正确跳过（控制台日志确认 "Skipping internal step: co..."）
+- Step 6: ✅ PASS - TypeScript 编译和 Vite 构建均通过
+
+### Bug Fixed:
+- 问题：update_plan_step 在有 Plan 步骤关联时被错误分类为 core
+- 原因：stepCategory 逻辑是 "有 planStepId 就分类为 core"，但这不适用于计划管理工具
+- 解决方案：添加 planManagementTools 列表，对这些工具始终分类为 internal
+
+### Next Steps:
+- 继续实现下一个功能: TASK-201 - 验证并修复 ask_user 上下文保持
+
+---
