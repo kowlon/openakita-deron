@@ -1,5 +1,6 @@
 import type { Step } from './step'
 import type { Artifact } from './artifact'
+import type { Plan } from './plan'
 
 export type SessionStatus = 'active' | 'completed' | 'paused'
 
@@ -16,6 +17,8 @@ export interface ConversationTurn {
   endTime?: number | null
   // Generated artifacts (files)
   artifacts?: Artifact[]
+  // Plan information (for plan mode tasks)
+  plan?: Plan | null
 }
 
 export interface Session {

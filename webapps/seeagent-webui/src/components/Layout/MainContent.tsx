@@ -92,6 +92,13 @@ function ConversationTurnItem({
             )}
           </div>
 
+          {/* Plan Card - show if this turn had a plan */}
+          {turn.plan && (
+            <div className="mb-3">
+              <PlanCard plan={turn.plan} />
+            </div>
+          )}
+
           {/* Historical Steps (only for complex tasks with tool calls) */}
           {coreSteps.length > 0 && (
             <div className="mb-3">

@@ -5,6 +5,7 @@ import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
 import type { Session, Step, ExecutionMode, ConversationTurn } from './types'
+import type { Plan } from './types/plan'
 import type { EditableResult } from './components/Step/EditableResultCard'
 
 // Extended Session type with conversation history
@@ -98,6 +99,9 @@ function App() {
   const prevChatStepsRef = useRef<Step[]>([])
   const isSendingRef = useRef(false)
 
+  // Track activePlan for saving to conversation history
+  const currentActivePlanRef = useRef<Plan | null>(null)
+
   // Track timing for current turn
   const currentTurnTimingRef = useRef<{
     startTime: number | null
@@ -147,6 +151,11 @@ function App() {
     }
   }, [llmOutput])
 
+  // Update activePlan ref when it changes
+  useEffect(() => {
+    currentActivePlanRef.current = activePlan
+  }, [activePlan])
+
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) || null,
     [sessions, currentSessionId]
@@ -174,6 +183,7 @@ function App() {
       // Get steps and summary
       const steps = chatSteps.length > 0 ? chatSteps : prevChatStepsRef.current
       const summary = output || [...steps].reverse().find(s => s.type === 'llm')?.output || null
+      const plan = currentActivePlanRef.current
 
       // Create the turn
       const newTurn: ConversationTurn = {
@@ -185,6 +195,7 @@ function App() {
         startTime: timing.startTime || undefined,
         firstTokenTime: timing.firstTokenTime,
         endTime: Date.now(),
+        plan: plan || undefined,
       }
 
       setSessions((prev) =>
@@ -208,6 +219,7 @@ function App() {
       prevChatStepsRef.current = []
       currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
       currentLlmOutputRef.current = null
+      currentActivePlanRef.current = null
     }
   }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, executionMode, askUserQuestion])
 
@@ -224,6 +236,7 @@ function App() {
     // Get steps and summary
     const steps = chatSteps.length > 0 ? chatSteps : prevChatStepsRef.current
     const summary = output || [...steps].reverse().find(s => s.type === 'llm')?.output || null
+    const plan = currentActivePlanRef.current
 
     // Create the turn
     const newTurn: ConversationTurn = {
@@ -235,6 +248,7 @@ function App() {
       startTime: timing.startTime || undefined,
       firstTokenTime: timing.firstTokenTime,
       endTime: Date.now(),
+      plan: plan || undefined,
     }
 
     setSessions((prev) =>
@@ -258,6 +272,7 @@ function App() {
     prevChatStepsRef.current = []
     currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
     currentLlmOutputRef.current = null
+    currentActivePlanRef.current = null
     reset() // Clear current chat steps
   }, [currentSessionId, currentSession?.userMessage, chatSteps, executionMode, reset])
 

@@ -296,12 +296,18 @@ function handleSSEEvent(
       const args = eventRecord.args as Record<string, unknown> | undefined
       console.log('[tool_call_start] Tool:', toolName, 'Args:', args)
 
-      // Find current in_progress Plan step if Plan is active
+      // Find current Plan step if Plan is active
+      // Priority: in_progress > first pending
       let planStepDescription: string | undefined
       let planStepId: string | undefined
       if (activePlanRef.current) {
         console.log('[tool_call_start] Active plan (from ref):', activePlanRef.current)
-        const currentPlanStep = activePlanRef.current.steps.find(s => s.status === 'in_progress')
+        // First try to find in_progress step
+        let currentPlanStep = activePlanRef.current.steps.find(s => s.status === 'in_progress')
+        // If no in_progress step, find the first pending step (next to execute)
+        if (!currentPlanStep) {
+          currentPlanStep = activePlanRef.current.steps.find(s => s.status === 'pending')
+        }
         console.log('[tool_call_start] Current plan step:', currentPlanStep)
         if (currentPlanStep) {
           planStepDescription = currentPlanStep.description
@@ -327,6 +333,23 @@ function handleSSEEvent(
         if (stepCategory === 'internal') {
           console.log('[tool_call_start] Skipping internal step:', toolName)
           return prev
+        }
+
+        // When we have a planStepId, check if there's already a step for this plan step
+        // This prevents creating duplicate steps for the same plan step
+        if (planStepId) {
+          const existingStepForPlan = prev.find(s =>
+            (s.outputData as Record<string, string> | undefined)?.planStepId === planStepId
+          )
+          if (existingStepForPlan) {
+            console.log('[tool_call_start] Step already exists for plan step:', planStepId, 'updating...')
+            // Update existing step with new tool info
+            return prev.map((step) =>
+              step.id === existingStepForPlan.id
+                ? { ...step, input: { ...step.input, ...args } }
+                : step
+            )
+          }
         }
 
         // Check if the last visible step has the same title - merge them
@@ -533,6 +556,30 @@ function handleSSEEvent(
 
       // Update React state for re-rendering
       setActivePlan((prev) => prev ? updateSteps(prev) : null)
+      break
+    }
+
+    case 'plan_completed': {
+      console.log('[plan_completed] Plan completed event received')
+      const summary = eventRecord.summary as string | undefined
+
+      // Update ref synchronously
+      if (activePlanRef.current) {
+        activePlanRef.current = {
+          ...activePlanRef.current,
+          status: 'completed' as PlanStatus,
+          summary: summary || activePlanRef.current.summary,
+          completed_at: new Date().toISOString(),
+        }
+      }
+
+      // Update React state for re-rendering
+      setActivePlan((prev) => prev ? {
+        ...prev,
+        status: 'completed' as PlanStatus,
+        summary: summary || prev.summary,
+        completed_at: new Date().toISOString(),
+      } : null)
       break
     }
 

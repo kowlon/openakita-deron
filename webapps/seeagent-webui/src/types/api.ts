@@ -31,6 +31,7 @@ export type SSEEventType =
   | 'step_pause'
   | 'plan_created'
   | 'plan_step_updated'
+  | 'plan_completed'
   | 'ask_user'
   | 'agent_switch'
   | 'artifact_created'
