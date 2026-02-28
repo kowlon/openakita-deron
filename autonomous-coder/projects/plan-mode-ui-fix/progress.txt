@@ -165,3 +165,41 @@
 - 继续实现下一个功能: TASK-302 - 添加端到端测试
 
 ---
+
+## Session 6 - Coding
+- Date: 2026-02-28 18:30
+- Agent: Coder
+- Feature: TASK-302 - 添加端到端测试
+
+### Completed:
+- 安装了 @playwright/test 依赖
+- 创建了 playwright.config.ts 配置文件（180s 超时，支持 LLM 响应）
+- 创建了 e2e/plan-mode.spec.ts 测试文件（7 个测试用例）
+- 添加了 test:e2e、test:e2e:ui、test:e2e:debug 脚本到 package.json
+
+### Files Changed:
+- webapps/seeagent-webui/package.json (添加 @playwright/test 和测试脚本)
+- webapps/seeagent-webui/playwright.config.ts (新建)
+- webapps/seeagent-webui/e2e/plan-mode.spec.ts (新建)
+- autonomous-coder/projects/plan-mode-ui-fix/feature_list.json (更新 TASK-302 passes: true)
+
+### Test Cases:
+1. **should create and display plan card** - 验证 Plan 创建和显示
+2. **should display plan steps with correct status icons** - 验证步骤状态图标
+3. **should update progress bar during execution** - 验证进度条更新
+4. **should handle ask_user interaction** - 验证 ask_user 交互
+5. **should show completed state with success message** - 验证完成状态
+6. **should have plan card with slide-in animation** - 验证动画效果
+7. **should display step cards during execution** - 验证步骤卡片显示
+
+### Configuration Details:
+- 测试超时: 180 秒（3 分钟），适应 LLM 响应时间
+- 断言超时: 90 秒
+- 浏览器: Chromium
+- 失败时自动截图和录制视频
+- 复用现有开发服务器
+
+### Next Steps:
+- 所有任务已完成！项目 plan-mode-ui-fix 结束
+
+---

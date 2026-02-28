@@ -79,7 +79,8 @@
       "description": "添加端到端测试",
       "priority": "medium",
       "dependencies": ["TASK-101", "TASK-102", "TASK-103", "TASK-201"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 18:30",
       "files": [
         "webapps/seeagent-webui/e2e/plan-mode.spec.ts",
         "webapps/seeagent-webui/playwright.config.ts"
