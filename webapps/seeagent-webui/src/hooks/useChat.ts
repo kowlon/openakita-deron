@@ -42,6 +42,7 @@ export function useChat(conversationId: string | null) {
 
   const sendMessage = useCallback(
     async (message: string, endpoint?: string, editMode: boolean = false, isAskUserAnswer: boolean = false) => {
+      console.log('[sendMessage] message:', message, 'isAskUserAnswer:', isAskUserAnswer, 'editMode:', editMode)
       if (isStreaming) return
 
       // Record message send time immediately
@@ -52,9 +53,13 @@ export function useChat(conversationId: string | null) {
       // When answering ask_user, keep the context (don't reset plan/steps)
       // Otherwise, clear previous state when starting a new message
       if (!isAskUserAnswer) {
+        console.log('[sendMessage] Clearing steps and plan (new message)')
         setSteps([])
         setActivePlan(null)
         activePlanRef.current = null
+      } else {
+        console.log('[sendMessage] Keeping steps and plan (ask_user answer)')
+        console.log('[sendMessage] Current steps count:', steps.length, 'Active plan:', activePlan ? 'yes' : 'no')
       }
 
       setIsStreaming(true)

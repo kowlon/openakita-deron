@@ -54,7 +54,8 @@
       "description": "验证并修复 ask_user 上下文保持",
       "priority": "critical",
       "dependencies": ["TASK-001", "TASK-101"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 17:30",
       "files": [
         "webapps/seeagent-webui/src/hooks/useChat.ts",
         "webapps/seeagent-webui/src/App.tsx",

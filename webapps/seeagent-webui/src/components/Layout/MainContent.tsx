@@ -423,6 +423,7 @@ export function MainContent({
                                     key={option.id}
                                     onClick={() => {
                                       // Send the selected option as an ask_user answer
+                                      console.log('[ask_user] User clicked option:', option.label, 'Calling onSendMessage with isAskUserAnswer=true')
                                       onSendMessage(option.label, true)
                                     }}
                                     className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
@@ -445,6 +446,7 @@ export function MainContent({
                             key={option.id}
                             onClick={() => {
                               // Send the selected option as an ask_user answer
+                              console.log('[ask_user-simple] User clicked option:', option.label, 'Calling onSendMessage with isAskUserAnswer=true')
                               onSendMessage(option.label, true)
                             }}
                             className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-primary/30 transition-all"
