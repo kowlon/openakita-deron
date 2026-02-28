@@ -47,14 +47,10 @@ export const CORE_STEP_PATTERNS = [
   /意图/i,
   /分析/i,
 
-  // Browser operations - 浏览器操作
-  /browser/i,
+  // Browser operations - 浏览器操作 (use browser_ prefix to avoid false positives)
+  /browser_/i,
   /navigate/i,
   /screenshot/i,
-  /click/i,
-  /type/i,
-  /scroll/i,
-  /snapshot/i,
 ]
 
 /**
@@ -73,17 +69,18 @@ export const INTERNAL_STEP_PATTERNS = [
   /^get_skill/i,
   /^list_skill/i,
 
-  // File operations (internal)
-  /file\s*read/i,
-  /read\s*file/i,
-  /write\s*temp/i,
-  /temp\s*file/i,
+  // File operations (internal) - use [\s_]* to match both spaces and underscores in tool names
+  /file[\s_]*read/i,
+  /read[\s_]*file/i,
+  /^read$/i,
+  /write[\s_]*temp/i,
+  /temp[\s_]*file/i,
   /\.tmp/i,
   /cache/i,
 
-  // System operations
-  /execute\s*command/i,
-  /run\s*command/i,
+  // System operations - use [\s_]* for tool names with underscores
+  /execute[\s_]*command/i,
+  /run[\s_]*command/i,
   /shell/i,
   /bash/i,
   /terminal/i,
@@ -91,12 +88,12 @@ export const INTERNAL_STEP_PATTERNS = [
   // Config operations
   /config/i,
   /setting/i,
-  /load\s*config/i,
+  /load[\s_]*config/i,
 
   // Internal checks
-  /check\s*status/i,
-  /verify\s*internal/i,
-  /state\s*check/i,
+  /check[\s_]*status/i,
+  /verify[\s_]*internal/i,
+  /state[\s_]*check/i,
 
   // Delivery and summary - hide these cards
   /^deliver$/i,

@@ -31,7 +31,8 @@
       "description": "验证并修复步骤过滤逻辑",
       "priority": "high",
       "dependencies": ["TASK-001"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 16:30",
       "files": [
         "webapps/seeagent-webui/src/hooks/useChat.ts",
         "webapps/seeagent-webui/src/types/step.ts"

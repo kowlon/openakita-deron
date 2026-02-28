@@ -345,7 +345,7 @@ function handleSSEEvent(
     case 'tool_call_end': {
       const toolName = eventRecord.tool as string
       const args = eventRecord.args as Record<string, unknown> | undefined
-      const stepTitle = formatToolTitleSmart(toolName, args)
+      const stepTitle = getToolDisplayName(toolName, args) || formatToolTitleSmart(toolName, args)
       const result = eventRecord.result as string | undefined
 
       // Detect file creation from tool result and create artifact
@@ -356,10 +356,14 @@ function handleSSEEvent(
 
       setSteps((prev) =>
         prev.map((step) => {
-          // Match by id/step_id or by title for merged steps
+          // Match by id/step_id first
           const eventId = (eventRecord.id as string) || (eventRecord.step_id as string)
-          if (step.id === eventId ||
-              (step.status === 'running' && step.title === stepTitle)) {
+          // Also match by title (for merged steps) or by originalToolName (for plan-described steps)
+          const matchesById = step.id === eventId
+          const matchesByTitle = step.status === 'running' && step.title === stepTitle
+          const matchesByOriginalTool = step.status === 'running' &&
+            (step.outputData as Record<string, string> | undefined)?.originalToolName === toolName
+          if (matchesById || matchesByTitle || matchesByOriginalTool) {
             const newDuration = Date.now() - step.startTime
             return {
               ...step,
@@ -682,7 +686,7 @@ function formatToolTitleSmart(tool: string | undefined, args: Record<string, unk
     const command = (args?.command as string) || ''
     // PDF or document generation scripts
     if (command.includes('.pdf') || command.includes('reportlab') ||
-        command.includes('SimpleDocTemplate') || command.includes('python')) {
+        command.includes('SimpleDocTemplate')) {
       return 'PDF文件生成'
     }
     if (command.includes('.docx') || command.includes('.doc')) {
@@ -732,6 +736,13 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
     return 'core'
   }
 
+  // Browser tools are always core - check before internal patterns to avoid
+  // false matches on domain names (e.g., navigating to config.example.com
+  // should not be caught by /config/i internal pattern)
+  if (tool?.startsWith('browser_')) {
+    return 'core'
+  }
+
   // Check if write_file is writing something meaningful
   if (tool === 'write_file' || tool === 'Write') {
     const filePath = (args?.file_path as string) || (args?.path as string) || ''
@@ -748,7 +759,8 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
     const command = (args?.command as string) || ''
     // PDF or document generation scripts - core
     if (command.includes('reportlab') || command.includes('.pdf') ||
-        command.includes('SimpleDocTemplate') || command.includes('python')) {
+        command.includes('SimpleDocTemplate') || command.includes('.docx') ||
+        command.includes('.xlsx')) {
       return 'core'
     }
     // Other shell commands - internal
@@ -772,8 +784,13 @@ function categorizeStep(title: string, tool?: string, args?: Record<string, unkn
     }
   }
 
-  // "执行命令" that's not PDF related - internal
-  if (title === '执行命令' || title === '文件写入') {
+  // Read/read_file tools are always internal
+  if (tool === 'read_file' || tool === 'Read') {
+    return 'internal'
+  }
+
+  // Internal tool display names - "执行命令", "写入文件", "读取文件", "文件写入" are all internal
+  if (title === '执行命令' || title === '文件写入' || title === '写入文件' || title === '读取文件') {
     return 'internal'
   }
 
