@@ -67,10 +67,11 @@
       "description": "优化 PlanCard 显示和交互",
       "priority": "medium",
       "dependencies": ["TASK-101", "TASK-102", "TASK-103"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-02-28 18:00",
       "files": [
         "webapps/seeagent-webui/src/components/Plan/PlanCard.tsx",
-        "webapps/seeagent-webui/src/components/Layout/MainContent.tsx"
+        "webapps/seeagent-webui/src/index.css"
       ]
     },
     {

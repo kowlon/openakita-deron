@@ -6,8 +6,8 @@ type PlanCardProps = {
 }
 
 const STATUS_ICONS: Record<PlanStepStatus, string> = {
-  pending: '⬜',
-  in_progress: '🔄',
+  pending: '⏳',
+  in_progress: '▶️',
   completed: '✅',
   failed: '❌',
   skipped: '⏭️',
@@ -33,7 +33,7 @@ export function PlanCard({ plan }: PlanCardProps) {
 
   return (
     <div className="mb-6">
-      <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-primary/30 shadow-xl overflow-hidden">
+      <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-primary/30 shadow-xl overflow-hidden animate-slide-in">
         {/* Header */}
         <div className="p-5 border-b border-primary/20">
           <div className="flex items-start justify-between">
@@ -64,7 +64,7 @@ export function PlanCard({ plan }: PlanCardProps) {
             </div>
             <div className="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
               <div
-                className={`h-2.5 rounded-full transition-all duration-500 ${
+                className={`h-2.5 rounded-full progress-bar-animated ${
                   isCompleted ? 'bg-emerald-500' : isFailed ? 'bg-red-500' : 'bg-primary'
                 }`}
                 style={{ width: `${progressPercent}%` }}
@@ -81,7 +81,7 @@ export function PlanCard({ plan }: PlanCardProps) {
                 key={step.id}
                 className={`p-4 rounded-lg border transition-all ${
                   step.status === 'in_progress'
-                    ? 'bg-blue-500/10 border-blue-500/30 shadow-md'
+                    ? 'bg-blue-500/10 border-blue-500/30 shadow-md animate-pulse-glow'
                     : step.status === 'completed'
                     ? 'bg-emerald-500/5 border-emerald-500/20'
                     : step.status === 'failed'
@@ -90,7 +90,9 @@ export function PlanCard({ plan }: PlanCardProps) {
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="text-xl flex-shrink-0 mt-0.5">
+                  <span className={`text-xl flex-shrink-0 mt-0.5 ${
+                    step.status === 'in_progress' ? 'animate-pulse' : ''
+                  }`}>
                     {STATUS_ICONS[step.status]}
                   </span>
                   <div className="flex-1 min-w-0">
