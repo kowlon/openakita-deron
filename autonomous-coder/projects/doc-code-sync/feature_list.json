@@ -43,7 +43,8 @@
       "description": "更新 im-channel-setup-tutorial.md - 移除 QQ 章节",
       "priority": "critical",
       "dependencies": ["TASK-001"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-01 23:55",
       "files": [
         "docs/im-channel-setup-tutorial.md"
       ],
@@ -58,7 +59,8 @@
       "description": "更新 im-channel-setup-tutorial.md - 移除 OneBot 章节",
       "priority": "critical",
       "dependencies": ["TASK-001"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-02 00:15",
       "files": [
         "docs/im-channel-setup-tutorial.md"
       ],
@@ -73,7 +75,8 @@
       "description": "更新 im-channels.md - 移除废弃通道",
       "priority": "high",
       "dependencies": ["TASK-101", "TASK-102"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-02 10:30",
       "files": [
         "docs/im-channels.md"
       ],

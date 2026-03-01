@@ -96,3 +96,39 @@
 - 继续实现下一个功能: TASK-101 (依赖 TASK-001 已完成)
 
 ---
+
+## Session 3 - Coding
+- Date: 2026-03-02 10:30
+- Agent: Coder
+- Feature: TASK-103 - 更新 im-channels.md - 移除废弃通道
+
+### Completed:
+- 移除了平台概览表中的 QQ 官方机器人和 OneBot 行
+- 移除了媒体类型支持矩阵中的 QQ 官方机器人和 OneBot 列
+- 移除了 QQ 官方机器人章节（原第 356-410 行）
+- 移除了 OneBot 章节（原第 411-476 行）
+- 更新了统一安装部分，移除 qqbot 和 onebot 安装命令
+
+### Files Changed:
+- docs/im-channels.md
+- autonomous-coder/projects/doc-code-sync/feature_list.json
+
+### Test Results:
+- Step 1: ✅ PASS - 移除 QQ 和 OneBot 相关描述
+  - 平台概览表现在只包含：Telegram, 飞书, 钉钉, 企业微信
+  - 媒体类型支持矩阵已移除 QQ 官方机器人和 OneBot 列
+  - 移除了完整的 QQ 官方机器人章节
+  - 移除了完整的 OneBot 章节
+
+- Step 2: ✅ PASS - 更新支持的通道列表
+  - 统一安装部分已移除 qqbot 和 onebot 安装命令
+  - 组合安装示例已更新，移除 qqbot
+
+- Step 3: ✅ PASS - 保持文档结构完整
+  - 文档结构保持一致，章节顺序正确
+  - 分隔线和标题格式保持一致
+
+### Next Steps:
+- 继续实现下一个功能: TASK-201 (依赖 TASK-001 已完成)
+
+---
