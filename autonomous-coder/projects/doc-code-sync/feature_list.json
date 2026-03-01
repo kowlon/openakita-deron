@@ -8,7 +8,8 @@
       "description": "验证已移除适配器的代码状态",
       "priority": "critical",
       "dependencies": [],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-01 23:30",
       "files": [
         "src/openakita/channels/adapters/__init__.py",
         "src/openakita/config.py",
