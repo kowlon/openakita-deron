@@ -26,7 +26,8 @@
       "description": "审查其他文档的准确性",
       "priority": "high",
       "dependencies": [],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-01 23:50",
       "files": [
         "docs/llm-provider-setup-tutorial.md",
         "docs/skill-usage-guide.md",
