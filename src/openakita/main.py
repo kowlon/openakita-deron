@@ -344,39 +344,11 @@ async def start_im_channels(agent_or_master):
         except Exception as e:
             logger.error(f"Failed to start DingTalk adapter: {e}")
 
-    # OneBot (通用协议)
-    if settings.onebot_enabled and settings.onebot_ws_url:
-        try:
-            from .channels.adapters import OneBotAdapter
-
-            onebot = OneBotAdapter(
-                ws_url=settings.onebot_ws_url,
-                access_token=settings.onebot_access_token or None,
-            )
-            await _message_gateway.register_adapter(onebot)
-            adapters_started.append("onebot")
-            logger.info("OneBot adapter registered")
-        except Exception as e:
-            logger.error(f"Failed to start OneBot adapter: {e}")
-
-    # QQ 官方机器人
-    if settings.qqbot_enabled and settings.qqbot_app_id:
-        try:
-            from .channels.adapters import QQBotAdapter
-
-            qqbot = QQBotAdapter(
-                app_id=settings.qqbot_app_id,
-                app_secret=settings.qqbot_app_secret,
-                sandbox=settings.qqbot_sandbox,
-                mode=settings.qqbot_mode,
-                webhook_port=settings.qqbot_webhook_port,
-                webhook_path=settings.qqbot_webhook_path,
-            )
-            await _message_gateway.register_adapter(qqbot)
-            adapters_started.append("qqbot")
-            logger.info("QQ Official Bot adapter registered")
-        except Exception as e:
-            logger.error(f"Failed to start QQ Official Bot adapter: {e}")
+    # ========================================
+    # 已移除的适配器 (2026-03)
+    # OneBot (通用协议) 和 QQ 官方机器人适配器已废弃并移除
+    # Removed adapters: OneBot, QQ Official Bot
+    # ========================================
 
     # 设置 Agent 处理函数
     # 根据是否启用协同模式选择不同的处理方式
