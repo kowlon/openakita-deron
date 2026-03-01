@@ -345,22 +345,31 @@ class Settings(BaseSettings):
     dingtalk_client_id: str = Field(default="", description="钉钉 Client ID（原 App Key）")
     dingtalk_client_secret: str = Field(default="", description="钉钉 Client Secret（原 App Secret）")
 
-    # OneBot 协议（通用）
-    onebot_enabled: bool = Field(default=False, description="是否启用 OneBot")
-    onebot_ws_url: str = Field(default="ws://127.0.0.1:8080", description="OneBot WebSocket URL")
-    onebot_access_token: str = Field(default="", description="OneBot 访问令牌（可选）")
+    # =========================================================================
+    # 已废弃配置项 (将在未来版本中移除)
+    # OneBot 和 QQ 官方机器人适配器已移除，这些配置项不再生效
+    # =========================================================================
 
-    # QQ 官方机器人
-    qqbot_enabled: bool = Field(default=False, description="是否启用 QQ 官方机器人")
-    qqbot_app_id: str = Field(default="", description="QQ 机器人 AppID")
-    qqbot_app_secret: str = Field(default="", description="QQ 机器人 AppSecret")
-    qqbot_sandbox: bool = Field(default=False, description="是否使用沙箱环境")
+    # OneBot 协议（通用）- 已废弃
+    # Deprecated: OneBot adapter has been removed. These settings are no longer used.
+    onebot_enabled: bool = Field(default=False, description="[已废弃] 是否启用 OneBot")
+    onebot_ws_url: str = Field(default="ws://127.0.0.1:8080", description="[已废弃] OneBot WebSocket URL")
+    onebot_access_token: str = Field(default="", description="[已废弃] OneBot 访问令牌")
+
+    # QQ 官方机器人 - 已废弃
+    # Deprecated: QQ Official Bot adapter has been removed. These settings are no longer used.
+    qqbot_enabled: bool = Field(default=False, description="[已废弃] 是否启用 QQ 官方机器人")
+    qqbot_app_id: str = Field(default="", description="[已废弃] QQ 机器人 AppID")
+    qqbot_app_secret: str = Field(default="", description="[已废弃] QQ 机器人 AppSecret")
+    qqbot_sandbox: bool = Field(default=False, description="[已废弃] 是否使用沙箱环境")
     qqbot_mode: str = Field(
         default="websocket",
-        description="QQ 机器人接入模式: websocket (默认，无需公网) 或 webhook (需要公网IP/域名)",
+        description="[已废弃] QQ 机器人接入模式",
     )
-    qqbot_webhook_port: int = Field(default=9890, description="QQ Webhook 回调服务端口")
-    qqbot_webhook_path: str = Field(default="/qqbot/callback", description="QQ Webhook 回调路径")
+    qqbot_webhook_port: int = Field(default=9890, description="[已废弃] QQ Webhook 回调服务端口")
+    qqbot_webhook_path: str = Field(default="/qqbot/callback", description="[已废弃] QQ Webhook 回调路径")
+
+    # =========================================================================
 
     # === 会话配置 ===
     session_timeout_minutes: int = Field(default=30, description="会话超时时间（分钟）")

@@ -122,7 +122,8 @@
       "description": "清理 config.py 残留配置项",
       "priority": "high",
       "dependencies": ["TASK-001"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-02 15:30",
       "files": [
         "src/openakita/config.py"
       ],
