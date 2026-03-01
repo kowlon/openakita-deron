@@ -203,3 +203,6 @@ scripts/update_version.py
 
 # Tauri signing keys (NEVER commit private keys)
 .tauri/
+
+# Auto Claude data directory
+.auto-claude/

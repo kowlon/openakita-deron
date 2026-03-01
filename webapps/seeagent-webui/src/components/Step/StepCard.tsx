@@ -1,7 +1,7 @@
 import { StepStatusIcon } from './StepStatusIcon'
 import { StepTypeIcon } from './StepTypeIcon'
 import { StepTimer } from '@/components/Timer/StepTimer'
-import type { Step, StepType } from '@/types/step'
+import type { Step } from '@/types/step'
 
 type StepCardProps = {
   step: Step
@@ -12,17 +12,9 @@ type StepCardProps = {
   onClick: () => void
 }
 
-const TYPE_LABELS: Record<StepType, string> = {
-  llm: 'LLM Processing',
-  tool: 'Tool Execution',
-  skill: 'Skill Execution',
-  thinking: 'Thinking',
-  planning: 'Planning',
-}
-
 export function StepCard({
   step,
-  index,
+  index: _index,
   isLast,
   isExpanded,
   onToggleExpand,
@@ -54,10 +46,14 @@ export function StepCard({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-white">
-                  Step {index + 1}: {step.title}
+                  {step.title}
                 </h4>
                 <p className="text-xs text-slate-400">
-                  {TYPE_LABELS[step.type]} •{' '}
+                  {(step.outputData as Record<string, string> | undefined)?.originalToolName && (
+                    <span className="text-slate-500">
+                      {(step.outputData as Record<string, string>).originalToolName} •{' '}
+                    </span>
+                  )}
                   <StepTimer
                     startTime={step.startTime}
                     endTime={step.endTime}

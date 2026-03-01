@@ -1,0 +1,45 @@
+{
+  "id": "doc-code-sync",
+  "name": "文档与代码同步更新",
+  "status": "paused",
+  "created_at": "2026-03-01",
+  "updated_at": "2026-03-01 23:17:31",
+  "paused_at": "2026-03-01 23:17:31",
+  "description": "以代码为基准，将文档更新至与代码逻辑对齐。主要处理已移除的 QQ/OneBot 适配器相关文档过时问题，以及其他文档的细节更新。",
+  "target_path": "../../",
+  "total_features": 10,
+  "completed_features": 0,
+  "phases": [
+    {
+      "name": "phase-1-analysis",
+      "description": "文档差异分析与验证",
+      "tasks": 2
+    },
+    {
+      "name": "phase-2-channel-docs",
+      "description": "IM 通道文档更新 - 移除废弃内容",
+      "tasks": 3
+    },
+    {
+      "name": "phase-3-config-docs",
+      "description": "配置文档更新",
+      "tasks": 2
+    },
+    {
+      "name": "phase-4-code-cleanup",
+      "description": "代码残留清理",
+      "tasks": 2
+    },
+    {
+      "name": "phase-5-verification",
+      "description": "验证与最终检查",
+      "tasks": 1
+    }
+  ],
+  "estimated_days": 2,
+  "principles": {
+    "code_as_source": "代码是唯一真实来源，文档必须与代码一致",
+    "minimal_change": "只修改必要的文档内容，不重构文档结构",
+    "preserve_valid": "保留所有仍然正确的文档内容"
+  }
+}

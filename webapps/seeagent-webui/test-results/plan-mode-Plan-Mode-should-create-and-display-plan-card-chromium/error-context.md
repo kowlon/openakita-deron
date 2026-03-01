@@ -1,0 +1,53 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - complementary [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - heading "hub SeeAgent" [level=1] [ref=e8]:
+            - generic [ref=e9]: hub
+            - text: SeeAgent
+          - paragraph [ref=e10]: AI Orchestrator
+        - button "add New Chat" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: add
+          - generic [ref=e13]: New Chat
+        - generic [ref=e15]:
+          - generic [ref=e16]: search
+          - textbox "Search sessions..." [ref=e17]
+      - navigation [ref=e18]:
+        - generic [ref=e19] [cursor=pointer]:
+          - generic [ref=e21]: chat
+          - generic [ref=e22]:
+            - paragraph [ref=e23]: 请打开百度网站
+            - paragraph [ref=e24]: 0 steps • just now
+          - button "delete" [ref=e25]:
+            - generic [ref=e26]: delete
+      - generic [ref=e28] [cursor=pointer]:
+        - generic [ref=e29]: settings
+        - generic [ref=e30]: Settings
+  - main [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]: chat_bubble
+          - heading "请打开百度网站" [level=2] [ref=e36]
+        - generic [ref=e38]:
+          - button "Auto" [ref=e39] [cursor=pointer]
+          - button "Edit" [ref=e40] [cursor=pointer]
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - paragraph [ref=e45]: 请打开百度网站，搜索北京今天天气，然后截图保存
+          - generic [ref=e47]: U
+        - generic [ref=e48]:
+          - generic [ref=e50]: smart_toy
+          - generic [ref=e52]:
+            - generic [ref=e56]: "TTFT: 24.73s"
+            - generic [ref=e57]: "|"
+            - generic [ref=e58]: "总计: 26.36s"
+      - generic [ref=e61]:
+        - textbox "继续对话..." [ref=e62]
+        - button "send" [active] [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: send
+```

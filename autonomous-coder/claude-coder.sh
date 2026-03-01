@@ -34,11 +34,17 @@ show_help() {
     status <项目名>                 查看项目详情
 
   运行控制:
-    run <项目名> [--once] [--max N] 运行项目
-                                    --once: 只运行一次
-                                    --max N: 最多 N 次迭代
+    run <项目名> [options]          运行项目
+        --once                      只运行一次
+        --max N                     最多 N 次迭代
+        --auto, -a                  自动模式（使用 --print 连续执行，无需人工干预）
     pause <项目名>                  暂停项目
     resume <项目名>                 恢复项目
+
+  监控:
+    monitor <项目名> [options]      查看实时运行状态
+        --watch, -w                 持续监控模式（自动刷新）
+        --interval N                刷新间隔（默认 5 秒）
 
   归档:
     archive <项目名>                归档完成的项目
@@ -53,11 +59,20 @@ show_help() {
   # 列出所有项目
   ./claude-coder.sh list
 
-  # 运行项目（持续直到完成）
+  # 交互模式运行（默认）- 显示实时交互，完成后等待用户输入
   ./claude-coder.sh run my-project
 
-  # 只运行一次
-  ./claude-coder.sh run my-project --once
+  # 自动模式运行 - 连续执行，无需人工干预
+  ./claude-coder.sh run my-project --auto
+
+  # 自动模式运行一次
+  ./claude-coder.sh run my-project --once --auto
+
+  # 查看运行状态（单次）
+  ./claude-coder.sh monitor my-project
+
+  # 持续监控运行状态（每 3 秒刷新）
+  ./claude-coder.sh monitor my-project --watch --interval 3
 
   # 暂停项目
   ./claude-coder.sh pause my-project
@@ -116,12 +131,17 @@ case "$command" in
     run)
         project_name=""
         run_once=false
+        auto_mode=false
         max_iterations=100
 
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --once)
                     run_once=true
+                    shift
+                    ;;
+                --auto|-a)
+                    auto_mode=true
                     shift
                     ;;
                 --max)
@@ -148,9 +168,9 @@ case "$command" in
         fi
 
         if [ "$run_once" = true ]; then
-            run_coder_once "$project_name"
+            run_coder_once "$project_name" "" "" "$auto_mode"
         else
-            run_coder_loop "$project_name" "$max_iterations"
+            run_coder_loop "$project_name" "$max_iterations" "5" "$auto_mode"
         fi
         ;;
 
@@ -168,6 +188,42 @@ case "$command" in
             exit 1
         fi
         resume_project "$1"
+        ;;
+
+    monitor)
+        project_name=""
+        refresh_interval=5
+        watch_mode=false
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --watch|-w)
+                    watch_mode=true
+                    shift
+                    ;;
+                --interval|-i)
+                    refresh_interval="$2"
+                    shift 2
+                    ;;
+                *)
+                    if [ -z "$project_name" ]; then
+                        project_name="$1"
+                    fi
+                    shift
+                    ;;
+            esac
+        done
+
+        if [ -z "$project_name" ]; then
+            log_error "请指定项目名称"
+            exit 1
+        fi
+
+        if [ "$watch_mode" = true ]; then
+            monitor_loop "$project_name" "$refresh_interval"
+        else
+            show_monitor_status "$project_name"
+        fi
         ;;
 
     switch)
