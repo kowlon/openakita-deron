@@ -91,7 +91,8 @@
       "description": "更新 configuration-guide.md - 移除废弃配置项",
       "priority": "high",
       "dependencies": ["TASK-001"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-02 12:30",
       "files": [
         "docs/configuration-guide.md"
       ],
