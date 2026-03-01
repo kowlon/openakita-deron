@@ -107,7 +107,8 @@
       "description": "更新 configuration.md - 同步配置说明",
       "priority": "medium",
       "dependencies": ["TASK-201"],
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-03-02 14:00",
       "files": [
         "docs/configuration.md"
       ],
