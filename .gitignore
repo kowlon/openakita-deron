@@ -206,3 +206,4 @@ scripts/update_version.py
 
 # Auto Claude data directory
 .auto-claude/
+.autonomous_coder/
