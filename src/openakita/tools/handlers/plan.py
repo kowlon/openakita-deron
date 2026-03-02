@@ -354,6 +354,34 @@ class PlanHandler:
             pass
 
         steps = params.get("steps", [])
+
+        # 底层浏览器工具列表（不应在 Plan 中直接使用）
+        _INTERNAL_BROWSER_TOOLS = {
+            "browser_click",
+            "browser_type",
+            "browser_wait",
+            "browser_scroll",
+            "browser_execute_js",
+        }
+
+        # 验证并修正浏览器工具步骤
+        for step in steps:
+            tool = step.get("tool", "")
+            if tool in _INTERNAL_BROWSER_TOOLS:
+                logger.warning(
+                    f"[Plan] Step {step.get('id')} uses internal tool {tool}, "
+                    f"auto-converting to browser_task"
+                )
+                # 将底层工具转换为 browser_task
+                desc = step.get("description", "")
+                step["tool"] = "browser_task"
+                step["original_tool"] = tool  # 保留原始工具记录
+                step["description"] = f"[自动转换] {desc}"
+                # 记录日志
+                self._add_log(
+                    f"⚠️ 步骤 {step.get('id')} 工具从 {tool} 自动转换为 browser_task"
+                )
+
         for step in steps:
             step["status"] = "pending"
             step["result"] = ""
@@ -654,6 +682,17 @@ class PlanHandler:
             "IMPORTANT: This plan already exists. Do NOT call create_plan again. "
             "Continue from the current step using update_plan_step."
         )
+
+        # 检查是否有浏览器相关步骤，添加指导
+        browser_steps = [s for s in steps if s.get("tool", "").startswith("browser_")]
+        if browser_steps:
+            lines.append("")
+            lines.append("⚠️ BROWSER TOOL GUIDANCE:")
+            lines.append(
+                "For browser steps involving clicking, typing, or form interactions, "
+                "use browser_task (NOT browser_click/browser_type). "
+                "browser_task automatically handles multi-step browser interactions."
+            )
 
         return "\n".join(lines)
 

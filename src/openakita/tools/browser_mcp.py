@@ -1048,9 +1048,9 @@ class BrowserMCP:
         return {
             "success": False,
             "error": f"输入失败（重试 {max_retries} 次）: {last_error}\n"
-            f"建议: 1) 先用 browser_screenshot 截图查看当前页面状态 "
-            f"2) 使用 browser_click 点击页面空白处关闭可能的弹窗 "
-            f"3) 使用 browser_get_content 获取页面内容确认元素选择器",
+            f"建议: 1) 使用 browser_task 完成复杂的浏览器交互任务（推荐）\n"
+            f"      2) 使用 browser_screenshot 查看当前页面状态\n"
+            f"      3) 使用 browser_get_content 获取页面内容确认元素选择器",
         }
 
     async def _handle_page_overlays(self):

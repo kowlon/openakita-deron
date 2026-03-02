@@ -19,7 +19,7 @@ BROWSER_TOOLS = [
     {
         "name": "browser_task",
         "category": "Browser",
-        "description": "【推荐优先使用】智能浏览器任务 - 描述你想完成的任务，browser-use Agent 会自动规划和执行所有步骤。适用于：(1) 多步骤操作（如搜索+筛选+排序），(2) 复杂的网页交互（包括点击、输入、填表），(3) 不确定具体步骤的任务，(4) 任何需要元素交互的任务（点击、输入、标签页管理）。如果仅打开 URL，请使用 browser_navigate。",
+        "description": "【强烈推荐】【优先使用】智能浏览器任务 - 描述你想完成的任务，browser-use Agent 会自动规划和执行所有步骤。适用于：(1) 多步骤操作（如搜索+筛选+排序），(2) 复杂的网页交互（包括点击、输入、填表），(3) 不确定具体步骤的任务，(4) 任何需要元素交互的任务（点击、输入、标签页管理）。⚠️ 重要：在 Plan 模式下，浏览器相关步骤必须使用 browser_task，不要使用 browser_click/browser_type 等底层工具。如果仅打开 URL，请使用 browser_navigate。",
         "detail": build_detail(
             summary="智能浏览器任务 - 描述你想完成的任务，browser-use Agent 会自动规划和执行所有步骤。",
             scenarios=[
@@ -43,6 +43,7 @@ BROWSER_TOOLS = [
             notes=[
                 "✅ 推荐用于多步骤、复杂的浏览器任务",
                 "✅ 推荐用于所有需要点击、输入、表单填写的操作",
+                "⚠️ Plan 模式下，浏览器步骤必须使用 browser_task，禁止使用底层工具",
                 "自动继承系统 LLM 配置，无需额外设置 API Key",
                 "通过 CDP 复用已启动的浏览器",
                 "任务描述要清晰具体，避免歧义",
