@@ -28,7 +28,10 @@ router = APIRouter()
 
 
 def _resolve_agent(agent: object):
-    """Resolve the actual Agent instance (supports both Agent and MasterAgent)."""
+    """Resolve the actual Agent instance (for single-agent mode only).
+
+    In multi-agent mode, use MasterAgent.handle_request() directly.
+    """
     from openakita.core.agent import Agent
 
     if isinstance(agent, Agent):
@@ -142,7 +145,54 @@ async def _stream_chat(
             except Exception as e:
                 logger.warning(f"[Chat API] Session management error: {e}")
 
+        # ========== 多 Agent 模式支持 ==========
+        from openakita.orchestration.master import MasterAgent
+
+        if isinstance(agent, MasterAgent):
+            # 多 Agent 模式：通过 MasterAgent.handle_request() 分发任务
+            # 注意：此模式下不支持流式输出，返回完整响应
+            try:
+                # 确保 MasterAgent 已启动
+                if not getattr(agent, '_running', False):
+                    yield _sse("error", {"message": "MasterAgent not running"})
+                    yield _sse("done")
+                    return
+
+                logger.info(f"[Chat API] MasterAgent 模式: 分发任务到 Worker")
+
+                # 调用 MasterAgent（与 IM 通道一致）
+                response = await agent.handle_request(
+                    session_id=conversation_id,
+                    message=chat_request.message or "",
+                    session_messages=session_messages_history,
+                    session=session,
+                    gateway=None,
+                )
+
+                # 将完整响应包装为 SSE 事件
+                yield _sse("text_delta", {"content": response})
+
+                # 保存响应到 session
+                if session and response:
+                    session.add_message("assistant", response)
+                    if session_manager:
+                        session_manager.mark_dirty()
+
+            except Exception as e:
+                logger.error(f"[Chat API] MasterAgent error: {e}", exc_info=True)
+                yield _sse("error", {"message": str(e)[:500]})
+
+            yield _sse("done")
+            return
+        # ========== 多 Agent 模式结束 ==========
+
         # --- 委托给 Agent 统一流水线 ---
+        actual_agent = _resolve_agent(agent)
+        if actual_agent is None:
+            yield _sse("error", {"message": "Agent not initialized"})
+            yield _sse("done")
+            return
+
         async for event in actual_agent.chat_with_session_stream(
             message=chat_request.message or "",
             session_messages=session_messages_history,

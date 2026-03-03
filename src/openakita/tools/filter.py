@@ -73,9 +73,13 @@ TASK_KEYWORDS = {
     ],
 }
 
-# 高频工具（始终包含）
+# 高频工具（始终包含）- 这些工具的完整 schema 直接提供给 LLM
 ALWAYS_INCLUDE = {
-    "run_shell", "read_file", "write_file", "ask_user",
+    "run_shell", "read_file", "write_file", "ask_user"
+}
+
+# 信息查询工具（仅在需要了解工具详情时才需要）
+INFO_TOOLS = {
     "get_tool_info", "get_skill_info"
 }
 
@@ -94,6 +98,13 @@ SEARCH_KEYWORDS = {
     "搜索", "查找", "查询", "search", "find", "look up",
     "查一下", "搜一下", "查查", "查是谁", "是谁",
     "新闻", "资讯", "news", "了解", "信息",
+}
+
+# 工具用法查询关键词 - 只有这些情况才需要 get_tool_info
+TOOL_INFO_KEYWORDS = {
+    "工具怎么用", "工具用法", "如何使用工具", "how to use tool",
+    "参数是什么", "有哪些参数", "工具参数",
+    "get_tool_info", "get_skill_info",
 }
 
 # 多步骤任务关键词 - 用于检测是否需要 Plan
@@ -217,6 +228,12 @@ def get_tools_for_message(
     # IM 模式额外添加 IM 工具
     if session_type == "im":
         needed_tools |= TOOL_PRESETS.get("im", set())
+
+    # ★ 只有用户询问工具用法时才添加 INFO_TOOLS
+    message_lower = message.lower()
+    if any(kw in message_lower for kw in TOOL_INFO_KEYWORDS):
+        needed_tools |= INFO_TOOLS
+        logger.info("[ToolFilter] Tool info query detected, adding INFO_TOOLS")
 
     # 过滤工具
     filtered = []

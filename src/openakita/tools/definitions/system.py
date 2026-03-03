@@ -178,16 +178,19 @@ SYSTEM_TOOLS = [
     {
         "name": "get_tool_info",
         "category": "System",
-        "description": "获取系统工具的详细参数定义（Level 2 披露）。当你需要：(1) 了解不熟悉的工具用法，(2) 检查工具参数，(3) 学习工具示例。在调用不熟悉的工具前使用。注意：这是用于系统 TOOLS（run_shell、browser_navigate 等）。对于外部 SKILL 说明（pdf、docx 等），请改用 get_skill_info。",
+        "description": "获取系统工具的详细参数定义。**仅在需要了解不熟悉工具的详细用法时调用**。对于常用工具（run_shell、read_file、write_file等），直接调用即可，无需先查看参数。不要在简单问答场景调用此工具。",
         "detail": """获取系统工具的详细参数定义（Level 2 披露）。
 
 **适用场景**：
-- 了解不熟悉的工具用法
-- 查看工具参数
-- 学习工具示例
+- 了解不熟悉的工具用法（如 schedule_task、browser_automation 等）
+- 查看复杂工具的参数说明
 
-**建议**：
-在调用不熟悉的工具前，先用此工具了解其完整用法、参数说明和示例。""",
+**不适用场景**：
+- 简单问答、闲聊（直接文字回复）
+- 使用常用工具（run_shell、read_file、write_file、list_directory、ask_user）
+- 已知工具用法的情况
+
+**注意**：高频工具的完整 schema 已直接提供给 LLM，无需调用此工具查看。""",
         "input_schema": {
             "type": "object",
             "properties": {"tool_name": {"type": "string", "description": "工具名称"}},

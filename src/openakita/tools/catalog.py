@@ -58,7 +58,9 @@ class ToolCatalog:
     CATALOG_TEMPLATE = """
 ## Available System Tools
 
-Use `get_tool_info(tool_name)` to see full parameters before calling.
+High-frequency tools (run_shell, read_file, write_file, list_directory, ask_user) have full schemas directly available - just call them.
+
+For other tools, use `get_tool_info(tool_name)` if you need to see detailed parameters.
 
 {tool_list}
 """
