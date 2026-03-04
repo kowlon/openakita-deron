@@ -1,9 +1,9 @@
 # OpenAkita 多任务编排技术设计文档
 
-> 版本: v3.0
-> 日期: 2026-03-03
+> 版本: v3.1
+> 日期: 2026-03-04
 > 状态: 设计评审
-> 更新: **SubAgent 作为独立 Agent，统一 Agent 架构，简洁路由机制设计**
+> 更新: **SubAgent 以独立进程步骤执行模式落地，复用 WorkerAgent 架构与 ZMQ 通信**
 
 ---
 
@@ -49,31 +49,31 @@ async def _init_agent(self) -> None:
 
 #### 1.1.3 设计决策：统一 Agent 架构
 
-**SubAgent 与 WorkerAgent 采用统一架构**，核心差异仅在于**运行模式**：
+**SubAgent 与 WorkerAgent 采用统一架构**，核心差异仅在于**执行语义与配置**：
 
 | 维度 | SubAgent | WorkerAgent | 说明 |
 |------|----------|-------------|------|
 | **架构基础** | Agent 实例 | Agent 实例 | **统一架构** |
-| **进程模式** | 同进程 (inline) | 独立进程 | 通过 `process_mode` 区分 |
-| **Brain** | 共享 MainAgent.brain | 独立创建 | 通过 `brain_mode` 区分 |
+| **进程模式** | 独立进程（步骤执行模式） | 独立进程 | 通过 `process_mode` 区分 |
+| **Brain** | 共享模型配置/Brain 代理 | 独立创建 | 通过 `brain_mode` 区分 |
 | **工具集** | 受限 (allowed_tools) | 可配置 | 通过配置区分 |
 | **Prompt** | 专用 (system_prompt) | 可配置 | 通过配置区分 |
 | **生命周期** | 任务期间 | 长期运行 | 通过管理方式区分 |
-| **通信方式** | 直接调用 | ZMQ 消息 | 根据进程模式自动选择 |
+| **通信方式** | ZMQ 消息 | ZMQ 消息 | 统一通信方式 |
 
-**核心结论**: SubAgent 和 WorkerAgent **本质相同**，都是 Agent 实例，差异仅在于配置参数。
+**核心结论**: SubAgent 和 WorkerAgent **本质相同**，都是独立进程 Agent，差异仅在于配置参数。
 
-#### 1.1.4 SubAgent 作为独立 Agent 的设计
+#### 1.1.4 SubAgent 作为独立进程 Agent 的设计
 
-**SubAgent 是真正的独立 Agent**，具备完整能力：
+**SubAgent 是真正的独立进程 Agent**，具备完整能力：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SubAgent 独立 Agent 架构                       │
+│                    SubAgent 独立进程 Agent 架构                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   SubAgent (Agent 实例)                                         │
-│   ├── brain: Brain              # LLM 客户端 (共享/独立)         │
+│   SubAgent (独立进程 Agent)                                     │
+│   ├── brain: BrainProxy/Config  # 共享模型配置/代理             │
 │   ├── reasoning_engine          # 独立推理引擎                   │
 │   ├── tool_executor             # 工具执行器 (受限/完整)          │
 │   ├── agent_state               # 独立状态管理                   │
@@ -81,18 +81,18 @@ async def _init_agent(self) -> None:
 │   └── system_prompt             # 专用系统提示词                 │
 │                                                                 │
 │   与 MainAgent 的关系:                                           │
-│   ├── 共享 Brain (inline 模式)                                   │
+│   ├── 共享模型配置/Brain 代理                                    │
 │   ├── 独立 ReasoningEngine (完整推理能力)                         │
 │   ├── 受限 ToolExecutor (通过 allowed_tools 限制)                 │
-│   └── 独立 messages 历史 (每 SubAgent 维护自己的对话)              │
+│   └── 对话历史由 SubAgent 进程维护                                │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **关键特性**:
-1. **独立 Agent 实例**: SubAgent 是真正的 Agent，不是配置对象
+1. **独立进程 Agent 实例**: SubAgent 是真正的 Agent，不是配置对象
 2. **完整推理能力**: 使用 ReasoningEngine，具备多轮工具调用能力
-3. **独立上下文**: 每个 SubAgent 维护独立的 messages 历史
+3. **独立上下文**: SubAgent 进程维护完整历史，StepSession 保留快照
 4. **灵活配置**: 通过 SubAgentConfig 控制行为差异
 
 #### 1.1.5 MainAgent 与 SubAgent 的路由机制
@@ -112,7 +112,7 @@ async def _init_agent(self) -> None:
 │       ├── 检查是否有活跃任务                                      │
 │       │       │                                                 │
 │       │       ├── 有活跃任务 → 路由到当前 SubAgent                │
-│       │       │       └── task_session.chat_with_current_step() │
+│       │       │       └── task_session.dispatch_step()          │
 │       │       │                                                 │
 │       │       └── 无活跃任务 → 尝试场景匹配                        │
 │       │               │                                         │
@@ -132,10 +132,10 @@ async def _init_agent(self) -> None:
 | 维度 | MainAgent ↔ SubAgent | MainAgent ↔ WorkerAgent |
 |------|---------------------|------------------------|
 | **路由方式** | 自动路由 (场景匹配 + 任务状态) | 手动分发 (find_idle_agent) |
-| **通信方式** | 直接调用 (同进程) | ZMQ 消息 (跨进程) |
+| **通信方式** | ZMQ 消息 (跨进程) | ZMQ 消息 (跨进程) |
 | **状态管理** | TaskSession 管理 | Registry 管理 |
 | **生命周期** | 任务期间 | 长期运行 |
-| **Brain 共享** | 共享 (inline 模式) | 独立 |
+| **Brain 共享** | 共享模型配置/Brain 代理 | 独立 |
 
 #### 1.1.6 brain.messages_create 与 ReasoningEngine 能力对比
 
@@ -166,8 +166,8 @@ async def _init_agent(self) -> None:
 
 | 原设计问题 | 调整方案 |
 |-----------|---------|
-| SubAgent 作为配置对象，能力受限 | **SubAgent 是真正的 Agent 实例**，完整能力 |
-| 缺少独立 messages 历史 | 每个 SubAgent **独立 messages 历史** |
+| SubAgent 作为配置对象，能力受限 | **SubAgent 以独立进程运行**，完整能力 |
+| 缺少步骤隔离与历史管理 | SubAgent 进程维护历史，StepSession 保留快照 |
 | 路由机制不清晰 | **MainAgent 作为路由中心**，自动路由到 SubAgent |
 | 与 WorkerAgent 架构不一致 | **统一 Agent 架构**，通过配置区分 |
 
@@ -253,14 +253,14 @@ async def _init_agent(self) -> None:
 │   │   │                                                          │  │   │
 │   │   │    ┌─────────────────────────────────────────────────┐   │  │   │
 │   │   │    │                 SubAgent                        │   │  │   │
-│   │   │    │           (独立 Agent 实例)                      │   │  │   │
+│   │   │    │      (独立进程 / 步骤执行模式)                   │   │  │   │
 │   │   │    │                                                 │   │  │   │
 │   │   │    │   ┌─────────┐  ┌─────────┐  ┌─────────┐        │   │  │   │
-│   │   │    │   │  Brain  │  │Reasoning│  │  Tool   │        │   │  │   │
-│   │   │    │   │(共享)   │  │ Engine  │  │Executor │        │   │  │   │
+│   │   │    │   │ Brain   │  │Reasoning│  │  Tool   │        │   │  │   │
+│   │   │    │   │ Proxy   │  │ Engine  │  │Executor │        │   │  │   │
 │   │   │    │   └─────────┘  └─────────┘  └─────────┘        │   │  │   │
 │   │   │    │                                                 │   │  │   │
-│   │   │    │   + 独立 messages 历史                          │   │  │   │
+│   │   │    │   + 对话历史由进程维护                          │   │  │   │
 │   │   │    │   + 专用 system_prompt                          │   │  │   │
 │   │   │    │   + 受限 allowed_tools                          │   │  │   │
 │   │   │    └─────────────────────────────────────────────────┘   │  │   │
@@ -268,8 +268,8 @@ async def _init_agent(self) -> None:
 │   │   │    同架构不同配置:                                        │  │   │
 │   │   │    ┌─────────────┐   ┌─────────────┐                    │  │   │
 │   │   │    │  SubAgent   │   │ WorkerAgent  │                    │  │   │
-│   │   │    │ (同进程)    │   │ (独立进程)   │                    │  │   │
-│   │   │    │ 共享 Brain  │   │ 独立 Brain   │                    │  │   │
+│   │   │    │ (独立进程)  │   │ (独立进程)   │                    │  │   │
+│   │   │    │ Brain 代理  │   │ 独立 Brain   │                    │  │   │
 │   │   │    └─────────────┘   └─────────────┘                    │  │   │
 │   │   └───────────────────────────────────────────────────────────┘  │   │
 │   └──────────────────────────────────────────────────────────────────┘   │
@@ -375,18 +375,10 @@ class MessageRouter:
         """
         路由到 SubAgent
 
-        关键: SubAgent 是独立的 Agent 实例，
-        直接调用其 reasoning_engine.run()
+        关键: SubAgent 为独立进程步骤执行模式，
+        通过 ZMQ 发送 StepRequest 并等待 StepResult
         """
-        # 获取当前步骤的 SubAgent
-        sub_agent = await task.get_current_sub_agent()
-
-        # SubAgent 是真正的 Agent，使用完整的推理能力
-        response = await sub_agent.reasoning_engine.run(
-            messages=task.get_step_messages(),
-            system_prompt=task.get_step_system_prompt(),
-            session_id=f"{task.task_id}_{task.current_step_id}",
-        )
+        response = await task.dispatch_step(message)
 
         return response
 ```
@@ -405,10 +397,10 @@ class MessageRouter:
 │       │                                                         │
 │       ├── Step 1: 检查活跃任务                                   │
 │       │       │                                                 │
-│       │       ├── 有任务 → task.chat_with_current_step()        │
+│       │       ├── 有任务 → task.dispatch_step()                 │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
-│       │       │   SubAgent.reasoning_engine.run()               │
+│       │       │   send StepRequest via ZMQ                      │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
 │       │       │   返回响应 ✓                                     │
@@ -423,10 +415,10 @@ class MessageRouter:
 │       │       │   创建任务 (TaskSession)                         │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
-│       │       │   创建第一个 SubAgent                            │
+│       │       │   启动第一个 SubAgent 进程                        │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
-│       │       │   SubAgent.reasoning_engine.run()               │
+│       │       │   send StepRequest via ZMQ                      │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
 │       │       │   返回响应 ✓                                     │
@@ -449,22 +441,22 @@ class MessageRouter:
 | 维度 | MainAgent ↔ SubAgent | MainAgent ↔ WorkerAgent |
 |------|---------------------|------------------------|
 | **架构** | 统一 Agent 架构 | 统一 Agent 架构 |
-| **进程** | 同进程 | 独立进程 |
-| **通信** | 直接方法调用 | ZMQ 消息传递 |
+| **进程** | 独立进程 | 独立进程 |
+| **通信** | ZMQ 消息传递 | ZMQ 消息传递 |
 | **路由方式** | 自动 (基于任务状态 + 场景匹配) | 手动 (find_idle_agent) |
-| **Brain** | 共享 | 独立 |
+| **Brain** | 共享模型配置/Brain 代理 | 独立 |
 | **状态管理** | TaskSession | Registry |
 | **生命周期** | 任务期间 | 长期运行 |
 
 **关键相似点**:
-- **都是独立 Agent 实例**: SubAgent 和 WorkerAgent 内部都是完整的 Agent
+- **都是独立进程 Agent**: SubAgent 和 WorkerAgent 内部都是完整的 Agent
 - **都使用 ReasoningEngine**: 完整的推理和工具执行能力
 - **都通过配置区分行为**: allowed_tools, system_prompt 等
 
 **关键差异**:
-- **通信方式**: SubAgent 同进程直接调用，WorkerAgent 跨进程 ZMQ
+- **路由触发**: SubAgent 自动路由（场景匹配+任务状态），WorkerAgent 手动分发
 - **生命周期**: SubAgent 随任务创建销毁，WorkerAgent 长期运行
-- **资源隔离**: SubAgent 共享 Brain，WorkerAgent 完全独立
+- **模型接入**: SubAgent 共享模型配置/Brain 代理，WorkerAgent 独立 Brain
 
 ---
 
@@ -528,14 +520,14 @@ TaskState (扩展)
 
 **问题背景**: 需要支持用户与特定 SubAgent 独立对话，每个步骤需要维护独立的执行上下文。
 
-**解决方案**: 为每个步骤维护独立的会话历史和 Agent 实例。
+**解决方案**: 为每个步骤维护独立的会话快照与 SubAgent 进程标识。
 
 ```
 StepSession
 ├── step_id: str                    # 步骤标识
 ├── status: StepStatus              # 步骤状态
-├── messages: list[dict]            # 独立的消息历史 (关键!)
-├── sub_agent: Agent                # SubAgent 实例 - 独立 Agent (关键!)
+├── messages: list[dict]            # 交互快照/摘要
+├── sub_agent_id: str               # SubAgent 进程标识 (关键!)
 ├── agent_config: SubAgentConfig    # SubAgent 配置
 ├── input_data: dict                # 输入数据
 ├── output_data: dict               # 输出数据
@@ -547,27 +539,303 @@ StepSession
 ```
 
 **关键设计点**:
-- `sub_agent: Agent` 是**真正的独立 Agent 实例**，具备完整推理能力
-- `messages` 是该 SubAgent 的独立对话历史
+- `sub_agent_id` 指向独立进程的 SubAgent
+- `messages` 保存步骤交互的快照/摘要，完整历史由 SubAgent 进程维护
 - `agent_config` 包含该步骤的配置信息（system_prompt, allowed_tools 等）
 
-### 4.5 SubAgent 配置 (SubAgentConfig)
+### 4.5 SubAgent 配置文件 (YAML 格式)
 
-**用途**: 定义 SubAgent 的行为配置，与 WorkerAgent 配置结构一致。
+**用途**: 通过 YAML 配置文件定义 SubAgent 的行为，支持从文件加载配置初始化 SubAgent。
+
+**配置文件示例** (`subagents/code-reviewer.yaml`):
+
+```yaml
+schema_version: "1.0"
+subagent_id: "code-reviewer"
+name: "CodeReviewer"
+description: "专注代码审查与质量改进"
+system_prompt: |
+  你是代码审查专家，关注可读性、正确性与安全性。
+  输出格式:
+  - issues: [{severity, detail, suggestion}]
+  - summary: string
+tools:
+  system_tools: ["read_file", "search_codebase"]
+  skills: ["lint-helper", "security-audit"]
+  mcp: []
+capabilities:
+  allow_shell: false
+  allow_write: false
+runtime:
+  max_iterations: 12
+  session_type: "cli"
+  memory_policy: "task_scoped"
+  prompt_budget: "standard"
+metadata:
+  source_doc: "best_practice_x.md"
+  compiled_at: "2026-03-03T10:00:00Z"
+  author: "subagent-compiler"
+```
+
+**配置字段说明**:
 
 ```
-SubAgentConfig
-├── name: str                       # SubAgent 名称
-├── description: str                # 描述
-├── system_prompt: str              # 系统提示词
-├── allowed_tools: list[str]        # 允许使用的工具列表
-├── max_iterations: int             # 最大迭代次数 (默认 20)
-├── process_mode: ProcessMode       # INLINE | WORKER
-├── brain_mode: BrainMode           # SHARED | INDEPENDENT
-└── extra_config: dict              # 扩展配置
+SubAgentConfigFile (YAML)
+├── schema_version: str              # 配置文件版本
+├── subagent_id: str                 # SubAgent 唯一标识
+├── name: str                        # SubAgent 名称
+├── description: str                 # 描述
+├── system_prompt: str               # 系统提示词 (支持多行)
+│
+├── tools:                           # 工具配置
+│   ├── system_tools: list[str]      # 系统工具 (read_file, write_file 等)
+│   ├── skills: list[str]            # Skills 工具集
+│   └── mcp: list[str]               # MCP 工具
+│
+├── capabilities:                    # 能力限制
+│   ├── allow_shell: bool            # 是否允许 shell 命令
+│   └── allow_write: bool            # 是否允许写入文件
+│
+├── runtime:                         # 运行时配置
+│   ├── max_iterations: int          # 最大迭代次数
+│   ├── session_type: str            # 会话类型 (cli/im/web)
+│   ├── memory_policy: str           # 记忆策略 (task_scoped/persistent)
+│   └── prompt_budget: str           # 提示词预算 (minimal/standard/extended)
+│
+└── metadata:                        # 元数据
+    ├── source_doc: str              # 来源文档
+    ├── compiled_at: str             # 编译时间
+    └── author: str                  # 作者
 ```
 
-### 4.6 步骤状态 (StepState)
+### 4.6 SubAgentConfig 运行时结构
+
+**用途**: 从 YAML 配置文件解析后的运行时配置结构。
+
+```
+SubAgentConfig (运行时)
+├── subagent_id: str                 # SubAgent 唯一标识
+├── name: str                        # SubAgent 名称
+├── description: str                 # 描述
+├── system_prompt: str               # 系统提示词
+├── allowed_tools: list[str]         # 合并后的工具列表 (system_tools + skills + mcp)
+├── capabilities: CapabilitiesConfig # 能力限制
+│   ├── allow_shell: bool
+│   └── allow_write: bool
+├── runtime: RuntimeConfig           # 运行时配置
+│   ├── max_iterations: int
+│   ├── session_type: str
+│   ├── memory_policy: str
+│   └── prompt_budget: str
+├── process_mode: ProcessMode        # WORKER
+├── brain_mode: BrainMode            # SHARED_PROXY | INDEPENDENT
+└── metadata: dict                   # 元数据
+```
+
+### 4.7 配置加载流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SubAgent 配置加载流程                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   1. 加载 YAML 配置文件                                          │
+│      │                                                          │
+│      │  SubAgentConfigLoader.load("code-reviewer.yaml")         │
+│      │                                                          │
+│      ▼                                                          │
+│   2. 解析 YAML → SubAgentConfigFile                             │
+│      │                                                          │
+│      │  - 验证 schema_version                                   │
+│      │  - 解析 tools 配置                                       │
+│      │  - 解析 capabilities 配置                                │
+│      │  - 解析 runtime 配置                                     │
+│      │                                                          │
+│      ▼                                                          │
+│   3. 工具解析与合并                                              │
+│      │                                                          │
+│      │  system_tools → 查找系统工具注册表                        │
+│      │  skills → 查找 SkillManager 注册的 skills                │
+│      │  mcp → 查找 MCPManager 注册的工具                        │
+│      │                                                          │
+│      │  合并所有工具名称 → allowed_tools: list[str]             │
+│      │                                                          │
+│      ▼                                                          │
+│   4. 能力限制转换                                                │
+│      │                                                          │
+│      │  allow_shell: false → 过滤 shell 相关工具                │
+│      │  allow_write: false → 过滤写入相关工具                   │
+│      │                                                          │
+│      ▼                                                          │
+│   5. 生成 SubAgentConfig (运行时配置)                            │
+│      │                                                          │
+│      │  SubAgentConfig(                                         │
+│      │      subagent_id="code-reviewer",                        │
+│      │      name="CodeReviewer",                                │
+│      │      allowed_tools=["read_file", "search_codebase", ...],│
+│      │      ...                                                 │
+│      │  )                                                       │
+│      │                                                          │
+│      ▼                                                          │
+│   6. 创建 SubAgent 进程/实例                                     │
+│      │                                                          │
+│      │  SubAgentManager.spawn_sub_agent(config)                 │
+│      │                                                          │
+│      ▼                                                          │
+│   SubAgent (独立进程 Agent 实例)                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.8 配置加载器实现
+
+```python
+from dataclasses import dataclass
+from pathlib import Path
+import yaml
+
+@dataclass
+class CapabilitiesConfig:
+    """能力限制配置"""
+    allow_shell: bool = False
+    allow_write: bool = False
+
+@dataclass
+class RuntimeConfig:
+    """运行时配置"""
+    max_iterations: int = 20
+    session_type: str = "cli"
+    memory_policy: str = "task_scoped"
+    prompt_budget: str = "standard"
+
+@dataclass
+class SubAgentConfig:
+    """SubAgent 运行时配置"""
+    subagent_id: str
+    name: str
+    description: str
+    system_prompt: str
+    allowed_tools: list[str]
+    capabilities: CapabilitiesConfig
+    runtime: RuntimeConfig
+    process_mode: str = "WORKER"  # WORKER
+    brain_mode: str = "SHARED_PROXY"    # SHARED_PROXY | INDEPENDENT
+    metadata: dict = None
+
+class SubAgentConfigLoader:
+    """SubAgent 配置加载器"""
+
+    # 需要过滤的工具（基于能力限制）
+    SHELL_TOOLS = {"run_shell", "execute_command", "bash"}
+    WRITE_TOOLS = {"write_file", "edit_file", "create_file", "delete_file"}
+
+    def __init__(
+        self,
+        skill_manager,  # SkillManager 实例
+        mcp_manager,    # MCPManager 实例
+        system_tools_registry: dict,  # 系统工具注册表
+    ):
+        self._skill_manager = skill_manager
+        self._mcp_manager = mcp_manager
+        self._system_tools = system_tools_registry
+
+    def load(self, config_path: str | Path) -> SubAgentConfig:
+        """从 YAML 文件加载配置"""
+        path = Path(config_path)
+        if not path.exists():
+            raise FileNotFoundError(f"SubAgent config not found: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+
+        return self.parse(raw)
+
+    def parse(self, raw: dict) -> SubAgentConfig:
+        """解析原始配置字典"""
+        # 验证版本
+        schema_version = raw.get("schema_version", "1.0")
+        if schema_version != "1.0":
+            raise ValueError(f"Unsupported schema version: {schema_version}")
+
+        # 解析工具
+        allowed_tools = self._resolve_tools(raw.get("tools", {}))
+
+        # 解析能力限制
+        caps_raw = raw.get("capabilities", {})
+        capabilities = CapabilitiesConfig(
+            allow_shell=caps_raw.get("allow_shell", False),
+            allow_write=caps_raw.get("allow_write", False),
+        )
+
+        # 应用能力限制（过滤工具）
+        allowed_tools = self._apply_capabilities(allowed_tools, capabilities)
+
+        # 解析运行时配置
+        runtime_raw = raw.get("runtime", {})
+        runtime = RuntimeConfig(
+            max_iterations=runtime_raw.get("max_iterations", 20),
+            session_type=runtime_raw.get("session_type", "cli"),
+            memory_policy=runtime_raw.get("memory_policy", "task_scoped"),
+            prompt_budget=runtime_raw.get("prompt_budget", "standard"),
+        )
+
+        return SubAgentConfig(
+            subagent_id=raw["subagent_id"],
+            name=raw["name"],
+            description=raw.get("description", ""),
+            system_prompt=raw.get("system_prompt", ""),
+            allowed_tools=allowed_tools,
+            capabilities=capabilities,
+            runtime=runtime,
+            metadata=raw.get("metadata", {}),
+        )
+
+    def _resolve_tools(self, tools_config: dict) -> list[str]:
+        """解析并合并工具列表"""
+        tools = []
+
+        # 1. 系统工具
+        for tool_name in tools_config.get("system_tools", []):
+            if tool_name in self._system_tools:
+                tools.append(tool_name)
+
+        # 2. Skills
+        for skill_name in tools_config.get("skills", []):
+            # 从 SkillManager 获取 skill 中的所有工具
+            skill_tools = self._skill_manager.get_skill_tools(skill_name)
+            tools.extend(skill_tools)
+
+        # 3. MCP 工具
+        for mcp_tool in tools_config.get("mcp", []):
+            # 从 MCPManager 获取 MCP 工具
+            if self._mcp_manager.has_tool(mcp_tool):
+                tools.append(mcp_tool)
+
+        return list(set(tools))  # 去重
+
+    def _apply_capabilities(
+        self,
+        tools: list[str],
+        capabilities: CapabilitiesConfig,
+    ) -> list[str]:
+        """根据能力限制过滤工具"""
+        filtered = []
+
+        for tool in tools:
+            # 过滤 shell 工具
+            if not capabilities.allow_shell and tool in self.SHELL_TOOLS:
+                continue
+
+            # 过滤写入工具
+            if not capabilities.allow_write and tool in self.WRITE_TOOLS:
+                continue
+
+            filtered.append(tool)
+
+        return filtered
+```
+
+### 4.9 步骤状态 (StepState)
 
 ```
 StepState (简化版，用于状态追踪)
@@ -580,7 +848,7 @@ StepState (简化版，用于状态追踪)
 
 ### 4.7 独立对话架构图
 
-**关键设计**: 每个步骤维护独立的 SubAgent 实例和 messages 历史，用户可以选择与任意 SubAgent 对话。
+**关键设计**: 每个步骤维护独立 SubAgent 进程标识与交互快照，用户可以选择与任意 SubAgent 对话。
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -598,17 +866,14 @@ StepState (简化版，用于状态追踪)
 │  │   │   ├── messages: [                              │        │
 │  │   │   │   {user: "请分析这段代码"},                 │        │
 │  │   │   │   {assistant: "分析结果..."},              │        │
-│  │   │   │   {user: "我想了解更多..."},  ◄─ 独立历史  │        │
+│  │   │   │   {user: "我想了解更多..."},  ◄─ 快照     │        │
 │  │   │   ]                                           │        │
-│  │   │   ├── sub_agent: Agent ◄─ 真正的Agent实例      │        │
-│  │   │   │       ├── brain (共享)                     │        │
-│  │   │   │       ├── reasoning_engine                 │        │
-│  │   │   │       └── tool_executor                    │        │
+│  │   │   ├── sub_agent_id: str ◄─ 独立进程标识         │        │
 │  │   │   └── agent_config: SubAgentConfig             │        │
 │  │   │                                               │        │
 │  │   ├── "review": StepSession ──────────────────────┐        │
-│  │   │   ├── messages: []  ◄─ 独立历史，尚未开始     │        │
-│  │   │   ├── sub_agent: Agent                         │        │
+│  │   │   ├── messages: []  ◄─ 快照，尚未开始        │        │
+│  │   │   ├── sub_agent_id: str                        │        │
 │  │   │   └── agent_config: SubAgentConfig             │        │
 │  │   │                                               │        │
 │  │   └── "summary": StepSession                      │        │
@@ -619,11 +884,11 @@ StepState (简化版，用于状态追踪)
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.8 SubAgent 独立 Agent 架构详解
+### 4.8 SubAgent 独立进程架构详解
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              SubAgent 独立 Agent 架构                             │
+│              SubAgent 独立进程架构                                │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  TaskSession                                                    │
@@ -637,20 +902,16 @@ StepState (简化版，用于状态追踪)
 │  │   │   ├── messages: [                              │        │
 │  │   │   │   {user: "请分析这段代码"},                 │        │
 │  │   │   │   {assistant: "分析结果..."},              │        │
-│  │   │   │   {user: "我想了解更多..."},  ◄─ 独立历史  │        │
+│  │   │   │   {user: "我想了解更多..."},  ◄─ 快照     │        │
 │  │   │   ]                                           │        │
 │  │   │   │                                           │        │
-│  │   │   ├── sub_agent: Agent ◄─ 独立Agent实例       │        │
-│  │   │   │       ├── brain (共享MainAgent)           │        │
-│  │   │   │       ├── reasoning_engine (独立)         │        │
-│  │   │   │       ├── tool_executor (受限)            │        │
-│  │   │   │       └── agent_state (独立)              │        │
+│  │   │   ├── sub_agent_id: str ◄─ 独立进程标识        │        │
 │  │   │   │                                           │        │
 │  │   │   └── agent_config: SubAgentConfig            │        │
 │  │   │                                               │        │
 │  │   ├── "review": StepSession ──────────────────────┐        │
-│  │   │   ├── messages: []  ◄─ 独立历史，尚未开始     │        │
-│  │   │   ├── sub_agent: Agent (独立实例)             │        │
+│  │   │   ├── messages: []  ◄─ 快照，尚未开始        │        │
+│  │   │   ├── sub_agent_id: str                       │        │
 │  │   │   └── agent_config: SubAgentConfig            │        │
 │  │   │                                               │        │
 │  │   └── "summary": StepSession                      │        │
@@ -662,10 +923,10 @@ StepState (简化版，用于状态追踪)
 ```
 
 **关键设计点**:
-1. **每个 StepSession 有独立的 SubAgent 实例**
-2. **SubAgent 是完整的 Agent**，具备独立 ReasoningEngine
-3. **messages 历史完全独立**，每个 SubAgent 维护自己的对话
-4. **共享 Brain** 以节省资源，但推理逻辑完全独立
+1. **每个 StepSession 绑定独立 SubAgent 进程标识**
+2. **SubAgent 进程内是完整 Agent**，具备独立 ReasoningEngine
+3. **messages 本地存快照/摘要**，完整历史由 SubAgent 进程维护
+4. **共享模型配置/Brain 代理** 以节省资源，但推理逻辑完全独立
 
 ---
 
@@ -710,8 +971,8 @@ StepState (简化版，用于状态追踪)
 步骤执行循环:
     ├── 检查执行条件
     ├── 创建 SubAgentConfig
-    ├── 调用 SubAgentManager 创建 SubAgent (独立 Agent)
-    ├── 执行步骤 (SubAgent.reasoning_engine.run)
+    ├── 调用 SubAgentManager 启动 SubAgent 进程
+    ├── 执行步骤 (SubAgent 进程处理 StepRequest)
     ├── 用户确认 (可选)
     └── 更新上下文
     ↓
@@ -729,7 +990,7 @@ class SubAgentManager:
     """
     SubAgent 管理器 - 统一 Agent 架构
 
-    关键设计: SubAgent 是真正的独立 Agent 实例
+    关键设计: SubAgent 以独立进程运行
     与 WorkerAgent 架构统一，通过配置区分行为
     """
 
@@ -738,90 +999,31 @@ class SubAgentManager:
         main_agent: Agent,  # 主 Agent 引用
     ):
         self._main_agent = main_agent
-        self._sub_agents: dict[str, Agent] = {}  # step_id -> Agent 实例
+        self._sub_agents: dict[str, str] = {}  # step_id -> sub_agent_id
 
-    async def create_sub_agent(
+    async def spawn_sub_agent(
         self,
         step_id: str,
         config: SubAgentConfig,
-    ) -> Agent:
+    ) -> str:
         """
-        创建 SubAgent 实例
+        创建 SubAgent 进程
 
-        关键：SubAgent 是真正的独立 Agent 实例
+        关键：SubAgent 以独立进程运行
         与 WorkerAgent 架构统一，具备完整推理能力
         """
-        if config.process_mode == ProcessMode.INLINE:
-            # 同进程模式：共享 Brain，创建轻量 Agent
-            agent = await self._create_inline_agent(config)
-        else:
-            # Worker 模式：独立进程，类似 WorkerAgent
-            agent = await self._create_worker_agent(config)
-
-        self._sub_agents[step_id] = agent
-        return agent
-
-    async def _create_inline_agent(self, config: SubAgentConfig) -> Agent:
-        """
-        创建同进程 SubAgent (独立 Agent 实例)
-
-        特点：
-        - 共享 MainAgent 的 Brain (节省资源)
-        - 独立 ReasoningEngine (完整推理能力)
-        - 受限 ToolExecutor (通过 allowed_tools 限制)
-        - 独立 AgentState (独立状态管理)
-        """
-        # 创建完整的 Agent 实例
-        from ..core.agent import Agent
-        from ..core.reasoning_engine import ReasoningEngine
-
-        agent = Agent.__new__(Agent)
-
-        # 共享 Brain（关键设计：节省资源）
-        agent.brain = self._main_agent.brain
-
-        # 创建独立的 ReasoningEngine（关键设计：完整推理能力）
-        agent.reasoning_engine = ReasoningEngine(
-            brain=agent.brain,
-            tool_executor=None,  # 下面设置
-            max_iterations=config.max_iterations,
-        )
-
-        # 创建受限的 ToolExecutor
-        agent.tool_executor = RestrictedToolExecutor(
-            inner=self._main_agent.tool_executor,
-            allowed_tools=config.allowed_tools,
-        )
-
-        # 设置独立的 AgentState
-        agent.agent_state = AgentState()
-
-        # 应用系统提示词配置
-        agent.system_prompt = config.system_prompt
-
-        return agent
-
-    async def _create_worker_agent(self, config: SubAgentConfig) -> Agent:
-        """
-        创建 Worker 模式 SubAgent
-
-        特点：
-        - 独立进程
-        - 独立 Brain
-        - 完整 Agent 能力
-        """
-        # 复用现有 WorkerAgent 的创建逻辑
-        # 参考 src/openakita/orchestration/worker.py
-        ...
+        sub_agent_id = await self._create_worker_agent(config)
+        self._sub_agents[step_id] = sub_agent_id
+        return sub_agent_id
 
     async def destroy_sub_agent(self, step_id: str) -> None:
         """销毁 SubAgent，清理资源"""
         if step_id in self._sub_agents:
-            agent = self._sub_agents.pop(step_id)
-            # 清理逻辑...
+            sub_agent_id = self._sub_agents.pop(step_id)
+            # 发送关闭指令给 SubAgent 进程
 
-    def get_sub_agent(self, step_id: str) -> Agent | None:
-        """获取 SubAgent 实例"""
+    def get_sub_agent(self, step_id: str) -> str | None:
+        """获取 SubAgent 标识"""
         return self._sub_agents.get(step_id)
 ```
 
@@ -843,7 +1045,7 @@ class TaskSession:
     """
     任务会话 - 支持独立对话和自动路由
 
-    关键设计: 每个步骤的 SubAgent 是独立的 Agent 实例
+    关键设计: 每个步骤的 SubAgent 以独立进程运行
     """
 
     def __init__(
@@ -860,47 +1062,43 @@ class TaskSession:
         self.mode: str = "step"  # "step" | "free"
         self.context: dict[str, Any] = {}
 
-    async def chat_with_current_step(self, message: str) -> str:
+    async def dispatch_step(self, message: str) -> str:
         """
-        与当前步骤的 SubAgent 对话
+        向当前步骤的 SubAgent 发送请求
 
-        关键: SubAgent 是真正的独立 Agent 实例
-        直接调用其 reasoning_engine.run()，具备完整推理能力
+        关键: SubAgent 以独立进程运行，通过 ZMQ 消息执行
         """
         step_id = self.state.current_step_id
-        return await self.chat_with_step(step_id, message)
+        return await self.dispatch_step_to(step_id, message)
 
-    async def chat_with_step(
+    async def dispatch_step_to(
         self,
         step_id: str,
         message: str,
     ) -> str:
         """
-        与指定步骤的 SubAgent 对话
+        向指定步骤的 SubAgent 发送请求
 
-        关键: SubAgent 是真正的独立 Agent 实例，
-        使用 ReasoningEngine 确保完整推理能力
+        关键: SubAgent 以独立进程运行，
+        使用 ZMQ 消息请求/响应
         """
         # 获取或创建步骤会话
         step_session = self.step_sessions.get(step_id)
         if not step_session:
             step_session = await self._create_step_session(step_id)
 
-        # 添加用户消息到该步骤的独立历史
+        # 添加用户消息到本地快照
         step_session.messages.append({
             "role": "user",
             "content": message
         })
 
-        # 获取 SubAgent 实例（真正的独立 Agent）
-        sub_agent = step_session.sub_agent
-
         # 构建系统提示词（包含上下文注入）
         system_prompt = self._build_step_prompt(step_session)
 
-        # 核心: 使用 SubAgent 的 ReasoningEngine 执行推理
-        # SubAgent 是独立 Agent，具备完整推理能力
-        response = await sub_agent.reasoning_engine.run(
+        # 通过 ZMQ 发送 StepRequest 到 SubAgent 进程
+        response = await self._sub_agent_manager.send_step_request(
+            sub_agent_id=step_session.sub_agent_id,
             messages=step_session.messages,
             system_prompt=system_prompt,
             session_id=f"{self.state.task_id}_{step_id}",
@@ -914,17 +1112,15 @@ class TaskSession:
 
         return response
 
-    async def get_current_sub_agent(self) -> Agent:
+    async def get_current_sub_agent(self) -> str:
         """
-        获取当前步骤的 SubAgent 实例
-
-        返回真正的 Agent 实例，可直接调用其方法
+        获取当前步骤的 SubAgent 标识
         """
         step_id = self.state.current_step_id
         step_session = self.step_sessions.get(step_id)
         if not step_session:
             step_session = await self._create_step_session(step_id)
-        return step_session.sub_agent
+        return step_session.sub_agent_id
 
     async def complete_step(self, step_id: str) -> dict:
         """
@@ -976,7 +1172,7 @@ class TaskSession:
         """
         创建步骤会话
 
-        关键：创建真正的独立 Agent 实例作为 SubAgent
+        关键：创建独立进程 SubAgent
         """
         step_def = self._get_step_definition(step_id)
 
@@ -987,12 +1183,12 @@ class TaskSession:
             system_prompt=step_def.system_prompt,
             allowed_tools=step_def.tools,
             max_iterations=step_def.max_iterations or 20,
-            process_mode=ProcessMode.INLINE,  # 默认同进程
-            brain_mode=BrainMode.SHARED,       # 默认共享 Brain
+            process_mode=ProcessMode.WORKER,
+            brain_mode=BrainMode.SHARED_PROXY,
         )
 
-        # 通过 SubAgentManager 创建 SubAgent (独立 Agent 实例)
-        sub_agent = await self._sub_agent_manager.create_sub_agent(
+        # 通过 SubAgentManager 启动 SubAgent 进程
+        sub_agent_id = await self._sub_agent_manager.spawn_sub_agent(
             step_id, config
         )
 
@@ -1001,7 +1197,7 @@ class TaskSession:
             step_id=step_id,
             status=StepStatus.PENDING,
             messages=[],
-            sub_agent=sub_agent,
+            sub_agent_id=sub_agent_id,
             agent_config=config,
         )
 
@@ -1069,7 +1265,7 @@ class RestrictedToolExecutor:
 │  用户: "请分析这段代码"                                          │
 │      │                                                          │
 │      ▼                                                          │
-│  TaskSession.chat_with_step("analyze", "请分析这段代码")         │
+│  TaskSession.dispatch_step_to("analyze", "请分析这段代码")       │
 │      │                                                          │
 │      ▼                                                          │
 │  [analyze 步骤会话] messages: [{user: "请分析..."}]              │
@@ -1081,13 +1277,13 @@ class RestrictedToolExecutor:
 │  用户继续对话: "我想了解更多关于循环的问题"                       │
 │      │                                                          │
 │      ▼                                                          │
-│  TaskSession.chat_with_step("analyze", "我想了解更多...")        │
+│  TaskSession.dispatch_step_to("analyze", "我想了解更多...")      │
 │      │                                                          │
 │      ▼                                                          │
 │  [analyze 步骤会话] messages: [                                  │
 │      {user: "请分析..."},                                        │
 │      {assistant: "分析结果..."},                                 │
-│      {user: "我想了解更多..."},  ◄─ 独立历史继续累积             │
+│      {user: "我想了解更多..."},  ◄─ 快照继续累积                 │
 │  ]                                                              │
 │      │                                                          │
 │      ▼                                                          │
@@ -1189,7 +1385,7 @@ class TaskState:
 
 ### 6.3 与 ReasoningEngine 集成
 
-**关键设计决策**: SubAgent 是真正的独立 Agent 实例，天然使用 ReasoningEngine。
+**关键设计决策**: SubAgent 以独立进程运行，天然使用 ReasoningEngine。
 
 #### 6.3.1 集成架构
 
@@ -1208,12 +1404,12 @@ class TaskState:
 │       │       │                                                 │
 │       │      "analyze": StepSession                             │
 │       │           │                                             │
-│       │           │  messages (独立历史)                         │
-│       │           │  sub_agent (独立 Agent 实例)                 │
+│       │           │  messages (快照/摘要)                         │
+│       │           │  sub_agent_id (独立进程)                     │
 │       │           │                                             │
 │       │           ▼                                             │
 │       │      ┌─────────────────────────────────┐               │
-│       │      │       SubAgent (Agent)          │               │
+│       │      │   SubAgent (Worker Process)     │               │
 │       │      │                                 │               │
 │       │      │   ┌─────────────────────────┐  │               │
 │       │      │   │     ReasoningEngine     │  │               │
@@ -1233,8 +1429,8 @@ class TaskState:
 │       │      │              │                  │               │
 │       │      │              ▼                  │               │
 │       │      │      ┌───────────────┐         │               │
-│       │      │      │     Brain     │         │               │
-│       │      │      │   (共享)      │         │               │
+│       │      │      │  BrainProxy   │         │               │
+│       │      │      │ (共享配置)    │         │               │
 │       │      │      └───────────────┘         │               │
 │       │      └─────────────────────────────────┘               │
 │       │                                                         │
@@ -1249,29 +1445,28 @@ SubAgent 与 MainAgent 共享以下组件：
 
 | 组件 | 来源 | 说明 |
 |------|------|------|
-| Brain | MainAgent.brain | 共享 LLM 客户端（Inline 模式） |
+| Brain | MainAgent 配置/代理 | 共享模型配置或 Brain 代理 |
 | ReasoningEngine | SubAgent 内部创建 | **独立实例**，完整推理循环 |
 | ToolExecutor | 包装 MainAgent.tool_executor | 通过 RestrictedToolExecutor 限制 |
 
 #### 6.3.3 SubAgent 独立性
 
-SubAgent 作为独立 Agent 的关键点：
+SubAgent 作为独立进程的关键点：
 
 | 维度 | MainAgent | SubAgent |
 |------|-----------|----------|
-| Agent 实例 | 主实例 | **独立实例** |
+| Agent 实例 | 主实例 | **独立进程实例** |
 | ReasoningEngine | 独立 | **独立** |
 | system_prompt | 全能助手提示词 | 步骤专用提示词 |
 | tools | 全量工具 | 步骤允许的工具子集 |
-| messages | 主对话历史 | 步骤独立对话历史 |
+| messages | 主对话历史 | 步骤快照/摘要 |
 | context | 无前置上下文 | 前置步骤输出注入 |
 
 ```python
-# SubAgent 使用方式（与 MainAgent 完全一致）
-response = await sub_agent.reasoning_engine.run(
-    messages=step_session.messages,      # 独立对话历史
-    system_prompt=step_system_prompt,    # 步骤专用提示词
-    session_id=f"{task_id}_{step_id}",   # 独立会话ID
+# SubAgent 使用方式（跨进程）
+response = await task_session.dispatch_step_to(
+    step_id=step_id,
+    message=message,
 )
 ```
 
@@ -1291,15 +1486,10 @@ class AgentFactory:
 
         根据 config 区分：
         - MainAgent: 全量工具，完整能力
-        - SubAgent (inline): 共享 Brain，受限工具，独立 ReasoningEngine
-        - WorkerAgent: 独立进程，独立 Brain
+        - SubAgent: 独立进程步骤执行模式，受限工具，独立 ReasoningEngine
+        - WorkerAgent: 独立进程通用执行模式
         """
-        if config.process_mode == ProcessMode.WORKER:
-            # 独立进程模式
-            return await AgentFactory._create_worker(config)
-        else:
-            # 同进程模式
-            return await AgentFactory._create_inline(config)
+        return await AgentFactory._create_worker(config)
 ```
 
 **架构统一带来的好处**:
@@ -1325,12 +1515,12 @@ class AgentFactory:
 │       │                                                         │
 │       ├── MessageRouter.route()                                 │
 │       │       │                                                 │
-│       │       ├── 有任务 → TaskSession.chat_with_current_step() │
+│       │       ├── 有任务 → TaskSession.dispatch_step()          │
 │       │       │       │                                         │
 │       │       │       ▼                                         │
-│       │       │   SubAgent.reasoning_engine.run()               │
+│       │       │   send StepRequest via ZMQ                      │
 │       │       │       │                                         │
-│       │       │       └── 直接调用 (同进程)                      │
+│       │       │       └── ZMQ 消息 (跨进程)                      │
 │       │       │                                                 │
 │       │       └── 无任务 → MainAgent.reasoning_engine.run()     │
 │       │                                                         │
@@ -1368,14 +1558,14 @@ class AgentFactory:
 ```
 
 **关键相似点**:
-- **都是独立 Agent**: SubAgent 和 WorkerAgent 内部都是完整的 Agent 实例
+- **都是独立进程 Agent**: SubAgent 和 WorkerAgent 内部都是完整的 Agent
 - **都使用 ReasoningEngine**: 完整的推理和工具执行能力
 - **MainAgent 都是路由中心**: 决定消息如何分发
 
 **关键差异**:
-- **通信方式**: SubAgent 同进程直接调用，WorkerAgent 跨进程 ZMQ
 - **路由触发**: SubAgent 自动路由（场景匹配+任务状态），WorkerAgent 手动分发
-- **资源隔离**: SubAgent 共享 Brain，WorkerAgent 完全独立
+- **生命周期**: SubAgent 随任务创建销毁，WorkerAgent 长期运行
+- **模型接入**: SubAgent 共享模型配置/Brain 代理，WorkerAgent 独立 Brain
 
 ---
 
@@ -1513,7 +1703,7 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
-| SubAgent 独立实例资源消耗 | 内存使用增加 | 共享 Brain，仅创建独立 ReasoningEngine |
+| SubAgent 独立进程资源消耗 | 内存使用增加 | 共享模型配置/Brain 代理，限制并发 |
 | TaskState 扩展影响现有代码 | 状态管理复杂度增加 | 使用组合而非继承，保持向后兼容 |
 | 多步骤上下文传递复杂 | 数据流难以追踪 | 明确定义 input_schema/output_key |
 | 用户交互打断执行流 | 状态管理复杂 | 使用 WAITING_USER 状态暂停 |
@@ -1529,18 +1719,18 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 
 | 设计点 | 决策 | 原因 |
 |--------|------|------|
-| **SubAgent 本质** | 独立 Agent 实例 | 与 WorkerAgent 架构统一，完整推理能力 |
-| **独立对话** | 每个 SubAgent 独立 messages 历史 | 支持多轮交互 |
+| **SubAgent 本质** | 独立进程步骤执行模式 | 与 WorkerAgent 架构统一，完整推理能力 |
+| **独立对话** | SubAgent 进程维护历史，StepSession 保留快照 | 支持多轮交互 |
 | **执行引擎** | 独立 ReasoningEngine | 确保 SubAgent 与 MainAgent 能力一致 |
 | **路由机制** | MainAgent 自动路由 (场景匹配 + 任务状态) | 简洁高效的消息分发 |
 | **流程控制** | 用户显式调用 switch_to_step | 避免 LLM tool_call 主导流程 |
 
 ### 11.2 关键改动清单
 
-1. **SubAgent 是独立 Agent 实例** - 具备完整推理能力
-2. **StepSession** - 每个步骤有独立的消息历史和 Agent 实例
+1. **SubAgent 是独立进程执行模式** - 具备完整推理能力
+2. **StepSession** - 每个步骤绑定独立 SubAgent 进程标识与快照
 3. **MessageRouter** - MainAgent 作为路由中心，自动分发消息
-4. **chat_with_step()** - 用户可以指定跟哪个 SubAgent 对话
+4. **dispatch_step()** - 向指定 SubAgent 进程发送步骤请求
 5. **complete_step()** - 显式结束步骤，生成输出
 6. **switch_to_step()** - 用户控制流程跳转
 
@@ -1562,16 +1752,16 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 │              ▼                               ▼                 │
 │   ┌─────────────────────┐      ┌─────────────────────┐        │
 │   │      SubAgent       │      │     WorkerAgent     │        │
-│   │   (独立 Agent 实例)  │      │   (独立 Agent 实例)  │        │
+│   │   (独立进程 Agent)   │      │   (独立进程 Agent)   │        │
 │   │                     │      │                     │        │
-│   │   - 同进程          │      │   - 独立进程         │        │
-│   │   - 共享 Brain      │      │   - 独立 Brain       │        │
+│   │   - 独立进程        │      │   - 独立进程         │        │
+│   │   - Brain 代理      │      │   - 独立 Brain       │        │
 │   │   - 独立 Reasoning  │      │   - 独立 Reasoning   │        │
 │   │   - 受限工具        │      │   - 完整工具         │        │
 │   │   - 自动路由        │      │   - 手动分发         │        │
 │   └─────────────────────┘      └─────────────────────┘        │
 │                                                                 │
-│   关键相似: 都是独立 Agent 实例，使用 ReasoningEngine           │
+│   关键相似: 都是独立进程 Agent，使用 ReasoningEngine            │
 │   关键差异: 进程模式、通信方式、资源隔离                         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -1593,10 +1783,10 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 
 | 优势 | 说明 |
 |------|------|
-| **架构统一** | SubAgent 和 WorkerAgent 都是独立 Agent 实例 |
+| **架构统一** | SubAgent 和 WorkerAgent 都是独立进程 Agent |
 | **能力完整** | SubAgent 具备完整推理能力，不是阉割版 |
 | **路由简洁** | MainAgent 自动路由，无需复杂的 handoff 机制 |
-| **独立对话** | 每个 SubAgent 维护独立 messages，支持多轮交互 |
+| **独立对话** | SubAgent 进程维护历史，支持多轮交互 |
 | **易于扩展** | 通过配置调整 SubAgent 行为，无需修改核心代码 |
 
 ---
@@ -1641,7 +1831,7 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 │                                                                 │
 │  新设计                          复用现有组件                    │
 │  ────────                        ────────────                   │
-│  SubAgent (Agent 实例)           Agent 核心架构                 │
+│  SubAgent (独立进程 Agent)      Agent 核心架构                 │
 │  StepSession                     WorkerAgent 架构模式           │
 │  TaskState                       AgentState.TaskState          │
 │  Brain                           LLM 客户端                     │
@@ -1658,4 +1848,4 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-这种设计确保了与现有架构的一致性，最大化代码复用，同时保持清晰的模块边界。SubAgent 作为独立 Agent 实例，与 WorkerAgent 架构统一，具备完整的推理能力。MainAgent 作为路由中心，实现简洁高效的消息分发机制。
+这种设计确保了与现有架构的一致性，最大化代码复用，同时保持清晰的模块边界。SubAgent 以独立进程运行，与 WorkerAgent 架构统一，具备完整的推理能力。MainAgent 作为路由中心，实现简洁高效的消息分发机制。

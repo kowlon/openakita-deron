@@ -13,6 +13,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
     },
     body: JSON.stringify(body),
   })
@@ -75,6 +76,11 @@ export async function apiPostStream(
             const event = JSON.parse(data)
             console.log('[apiPostStream] Parsed event:', event)
             onEvent(event)
+            if ((event as { type?: string }).type === 'done') {
+              onComplete?.()
+              await reader.cancel()
+              return
+            }
           } catch (e) {
             console.error('[apiPostStream] Parse error:', e, 'data:', data)
           }

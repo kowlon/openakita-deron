@@ -377,12 +377,17 @@ function handleSSEEvent(
     }
 
     case 'error': {
+      const message = (eventRecord.message as string) || '发生错误，请稍后重试。'
+      setLlmOutput((prev) => {
+        if (prev && prev.trim()) return prev
+        return message
+      })
       setSteps((prev) => {
         const lastStep = prev[prev.length - 1]
         if (lastStep && lastStep.status === 'running') {
           return prev.map((step, idx) =>
             idx === prev.length - 1
-              ? { ...step, status: 'failed' as StepStatus, error: eventRecord.message as string }
+              ? { ...step, status: 'failed' as StepStatus, error: message }
               : step
           )
         }

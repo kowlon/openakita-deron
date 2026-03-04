@@ -207,3 +207,5 @@ scripts/update_version.py
 # Auto Claude data directory
 .auto-claude/
 .autonomous_coder/
+webapps/seeagent-webui/playwright-report
+webapps/seeagent-webui/package-lock.json

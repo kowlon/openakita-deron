@@ -1,7 +1,7 @@
 # 多任务编排需求整理
 
-> 版本: v1.1
-> 日期: 2026-03-03
+> 版本: v1.2
+> 日期: 2026-03-04
 > 状态: 需求确认
 
 ---
@@ -30,8 +30,8 @@ MainAgent (消息路由器)
     │
     └── 有活跃任务 → 路由到当前 SubAgent
                          │
-                         ├── chat_with_step(step_id, message)
-                         └── 共享 Brain，独立 ReasoningEngine
+                         ├── dispatch_step(step_id, message)
+                         └── 共享模型配置/Brain 代理，独立 ReasoningEngine
 ```
 
 ### 2.3 SubAgent 与 WorkerAgent 的关系
@@ -40,12 +40,21 @@ MainAgent (消息路由器)
 
 | 维度 | SubAgent | WorkerAgent |
 |------|----------|-------------|
-| 进程 | 同进程 | 独立进程 |
-| Brain | 共享 | 独立 |
+| 进程 | 独立进程（步骤执行模式） | 独立进程 |
+| Brain | 共享模型配置/代理 | 独立 |
 | 工具集 | 受限 (step_def.tools) | 可配置 |
 | Prompt | 专用 (step_def.system_prompt) | 可配置 |
 | 生命周期 | 任务期间 | 长期运行 |
-| 通信 | 直接调用 | ZMQ |
+| 通信 | ZMQ | ZMQ |
+
+**定位说明**:
+- SubAgent 是步骤执行语义，运行时可复用 WorkerAgent 进程实例
+- 通过 type/config 区分“步骤执行模式”与“通用执行模式”
+
+### 2.4 SubAgent 实现形态
+- 保留 SubAgent 概念与配置（例如 SubAgentConfig），不要求显性化 SubAgent 类
+- WorkerAgent 在 step 模式下读取 SubAgentConfig 并执行步骤逻辑
+- 编排层仍以 SubAgent 为单位管理生命周期、上下文与用户确认
 
 ## 3. 核心业务流程
 
@@ -70,7 +79,7 @@ MainAgent.chat(message)
     ├── 检查是否有活跃任务
     │       │
     │       ├── 有任务 + step 模式 → 路由到 SubAgent
-    │       │       └── TaskSession.chat_with_step(current_step_id, message)
+    │       │       └── TaskSession.dispatch_step(current_step_id, message)
     │       │
     │       └── 无任务 → 尝试场景匹配
     │               │
@@ -95,7 +104,7 @@ MainAgent.chat(message)
 - **独立 Agent 实例**: 不是配置对象，而是真正的 Agent
 - **受限工具集**: 只能使用 step_def.tools 中定义的工具
 - **专用 prompt**: 使用 step_def.system_prompt
-- **共享 Brain**: 与 MainAgent 共享 LLM 客户端，节省资源
+- **共享 Brain**: 共享模型配置/Brain 代理，跨进程不共享对象
 - **独立 ReasoningEngine**: 拥有专用的推理引擎
 - **独立对话历史**: 每个 SubAgent 维护自己的 messages
 
@@ -203,7 +212,7 @@ SubAgent 基于上下文继续工作
 - 上一步输出必须可追溯并作为下一步输入
 
 ### 7.3 资源约束
-- SubAgent 与 MainAgent 共享 Brain
+- SubAgent 与 MainAgent 共享模型配置/Brain 代理，跨进程不共享对象
 - 每个 SubAgent 创建独立的 ReasoningEngine
 - 受限工具通过 RestrictedToolExecutor 实现
 
@@ -222,7 +231,7 @@ SubAgent 基于上下文继续工作
 
 | 组件 | 来源 | 复用方式 |
 |------|------|---------|
-| Brain | MainAgent | 共享引用 |
+| Brain | MainAgent | 共享模型配置/代理 |
 | ReasoningEngine | 新建 | 每个 SubAgent 独立创建 |
-| ToolExecutor | MainAgent | 包装为 RestrictedToolExecutor |
+| ToolExecutor | WorkerAgent/Agent | 包装为 RestrictedToolExecutor |
 | TaskState | AgentState | 扩展使用 |

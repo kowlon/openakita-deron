@@ -10,7 +10,7 @@ This skill guides you through testing the OpenAkita webapp using Playwright brow
 
 Before running tests, ensure:
 1. Backend service is running (`openakita serve` on port 18900)
-2. Frontend dev server is running (`pnpm dev` on port 5174)
+2. Frontend dev server is running (`pnpm dev` on port 5175)
 3. Environment is configured (`.env` file)
 
 ## Test Categories
@@ -60,7 +60,7 @@ pnpm dev
 
 Verify frontend is running:
 ```bash
-curl http://localhost:5174
+curl http://localhost:5175
 ```
 
 ### Step 3: Run Playwright Tests
@@ -85,7 +85,7 @@ When the frontend is running, you can use Playwright MCP tools directly:
 ### Navigate to Webapp
 
 ```
-Use mcp__playwright__browser_navigate to http://localhost:5174
+Use mcp__playwright__browser_navigate to http://localhost:5175
 ```
 
 ### Test Simple Chat
@@ -199,9 +199,9 @@ curl http://localhost:18900/api/health
 
 ### Frontend Not Starting
 
-1. Check if port 5174 is in use:
+1. Check if port 5175 is in use:
    ```bash
-   lsof -i :5174
+   lsof -i :5175
    ```
 
 2. Reinstall dependencies:
@@ -219,7 +219,7 @@ curl http://localhost:18900/api/health
 ## Checklist
 
 - [ ] Backend service running on port 18900
-- [ ] Frontend dev server running on port 5174
+- [ ] Frontend dev server running on port 5175
 - [ ] Health check returns OK
 - [ ] Simple chat test passes
 - [ ] Multi-skill call test passes

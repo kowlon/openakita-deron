@@ -95,10 +95,11 @@ async def _stream_chat(
         payload = {"type": event_type, **(data or {})}
         if event_type == "text_delta" and data and "content" in data:
             chunk = data["content"]
-            _reply_chars += len(chunk)
-            _full_reply += chunk
-            if len(_reply_preview) < 120:
-                _reply_preview += chunk
+            if chunk:
+                _reply_chars += len(chunk)
+                _full_reply += chunk
+                if len(_reply_preview) < 120:
+                    _reply_preview += chunk
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     try:
@@ -138,7 +139,7 @@ async def _stream_chat(
                     # 这与 IM 路径一致：gateway 先 add_message，再传 session_messages
                     if chat_request.message:
                         session.add_message("user", chat_request.message)
-                    session_messages_history = list(session.context.messages) if hasattr(session, "context") else []
+                    session_messages_history = list(session.context.messages) if hasattr(session, "context") and session.context.messages else []
                     session_manager.mark_dirty()
             except Exception as e:
                 logger.warning(f"[Chat API] Session management error: {e}")
@@ -168,7 +169,10 @@ async def _stream_chat(
                 )
 
                 # 将完整响应包装为 SSE 事件
-                yield _sse("text_delta", {"content": response})
+                if response:
+                    yield _sse("text_delta", {"content": response})
+                else:
+                    yield _sse("text_delta", {"content": "抱歉，处理您的请求时出现问题，请稍后重试。"})
 
                 # 保存响应到 session
                 if session and response:
