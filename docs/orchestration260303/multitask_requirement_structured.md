@@ -42,7 +42,7 @@ MainAgent (消息路由器)
 |------|----------|-------------|
 | 进程 | 独立进程（步骤执行模式） | 独立进程 |
 | Brain | 共享模型配置/代理 | 独立 |
-| 工具集 | 受限 (step_def.tools) | 可配置 |
+| 工具集 | 受限 (step_def.tools，ToolExecutor 工具名) | 可配置 |
 | Prompt | 专用 (step_def.system_prompt) | 可配置 |
 | 生命周期 | 任务期间 | 长期运行 |
 | 通信 | ZMQ | ZMQ |
@@ -102,7 +102,8 @@ MainAgent.chat(message)
 ### 4.1 SubAgent 核心特性
 
 - **独立 Agent 实例**: 不是配置对象，而是真正的 Agent
-- **受限工具集**: 只能使用 step_def.tools 中定义的工具
+- **受限工具集**: tools/mcp_tools 作为可执行集合，skills 仅注入提示词并通过技能工具调用
+- **默认工具加载**: 未配置 tools/mcp_tools 时，默认包含系统核心工具与技能工具集合（list_skills / get_skill_info / run_skill_script / install_skill / load_skill / reload_skill 等）
 - **专用 prompt**: 使用 step_def.system_prompt
 - **共享 Brain**: 共享模型配置/Brain 代理，跨进程不共享对象
 - **独立 ReasoningEngine**: 拥有专用的推理引擎
@@ -214,7 +215,7 @@ SubAgent 基于上下文继续工作
 ### 7.3 资源约束
 - SubAgent 与 MainAgent 共享模型配置/Brain 代理，跨进程不共享对象
 - 每个 SubAgent 创建独立的 ReasoningEngine
-- 受限工具通过 RestrictedToolExecutor 实现
+- SubAgent 与 MainAgent 使用同一套执行链路，工具可见集合由配置裁剪
 
 ## 8. 与现有架构的关系
 
@@ -233,5 +234,5 @@ SubAgent 基于上下文继续工作
 |------|------|---------|
 | Brain | MainAgent | 共享模型配置/代理 |
 | ReasoningEngine | 新建 | 每个 SubAgent 独立创建 |
-| ToolExecutor | WorkerAgent/Agent | 包装为 RestrictedToolExecutor |
+| ToolExecutor | WorkerAgent/Agent | 与 MainAgent 一致的执行器 |
 | TaskState | AgentState | 扩展使用 |

@@ -68,8 +68,11 @@ TASK_KEYWORDS = {
         "忘记", "forget", "历史", "history",
     ],
     "im": [
-        "发送", "消息", "通知", "send", "message", "notify",
-        "交付", "deliver", "文件", "attachment",
+        # 仅在明确的 IM 场景下触发，避免通用词误触发
+        "发到飞书", "发到微信", "发到telegram", "发到钉钉",
+        "跨通道", "跨渠道", "发到im", "发到聊天",
+        "聊天记录", "get_chat_history",
+        # 注：通用词如"发送"、"文件"已移除，避免桌面模式误触发
     ],
 }
 
@@ -206,6 +209,11 @@ def get_tools_for_message(
 
     # 检测所有相关任务类型
     detected_types = detect_task_types(message)
+
+    # ★ 桌面模式下不应基于关键词触发 IM 工具
+    # IM 工具（如 deliver_artifacts）只应在实际 IM 会话中使用
+    if session_type != "im":
+        detected_types = [t for t in detected_types if t != "im"]
 
     # 合并所有检测到的类型的工具
     needed_tools = set(ALWAYS_INCLUDE)

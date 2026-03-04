@@ -56,7 +56,7 @@ async def _init_agent(self) -> None:
 | **架构基础** | Agent 实例 | Agent 实例 | **统一架构** |
 | **进程模式** | 独立进程（步骤执行模式） | 独立进程 | 通过 `process_mode` 区分 |
 | **Brain** | 共享模型配置/Brain 代理 | 独立创建 | 通过 `brain_mode` 区分 |
-| **工具集** | 受限 (allowed_tools) | 可配置 | 通过配置区分 |
+| **工具集** | 受限 (tools/mcp_tools 为可执行集合，skills 只影响提示词) | 可配置 | 通过配置区分 |
 | **Prompt** | 专用 (system_prompt) | 可配置 | 通过配置区分 |
 | **生命周期** | 任务期间 | 长期运行 | 通过管理方式区分 |
 | **通信方式** | ZMQ 消息 | ZMQ 消息 | 统一通信方式 |
@@ -75,7 +75,7 @@ async def _init_agent(self) -> None:
 │   SubAgent (独立进程 Agent)                                     │
 │   ├── brain: BrainProxy/Config  # 共享模型配置/代理             │
 │   ├── reasoning_engine          # 独立推理引擎                   │
-│   ├── tool_executor             # 工具执行器 (受限/完整)          │
+│   ├── tool_executor             # 与 MainAgent 一致的工具执行器   │
 │   ├── agent_state               # 独立状态管理                   │
 │   ├── memory_manager            # 记忆管理                       │
 │   └── system_prompt             # 专用系统提示词                 │
@@ -83,7 +83,7 @@ async def _init_agent(self) -> None:
 │   与 MainAgent 的关系:                                           │
 │   ├── 共享模型配置/Brain 代理                                    │
 │   ├── 独立 ReasoningEngine (完整推理能力)                         │
-│   ├── 受限 ToolExecutor (通过 allowed_tools 限制)                 │
+│   ├── 工具可见集合按配置裁剪（tools/mcp_tools）                   │
 │   └── 对话历史由 SubAgent 进程维护                                │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -262,7 +262,8 @@ async def _init_agent(self) -> None:
 │   │   │    │                                                 │   │  │   │
 │   │   │    │   + 对话历史由进程维护                          │   │  │   │
 │   │   │    │   + 专用 system_prompt                          │   │  │   │
-│   │   │    │   + 受限 allowed_tools                          │   │  │   │
+│   │   │    │   + tools/mcp_tools 可执行集合                  │   │  │   │
+│   │   │    │   + skills 仅注入提示词                         │   │  │   │
 │   │   │    └─────────────────────────────────────────────────┘   │  │   │
 │   │   │                                                          │  │   │
 │   │   │    同架构不同配置:                                        │  │   │
@@ -451,7 +452,7 @@ class MessageRouter:
 **关键相似点**:
 - **都是独立进程 Agent**: SubAgent 和 WorkerAgent 内部都是完整的 Agent
 - **都使用 ReasoningEngine**: 完整的推理和工具执行能力
-- **都通过配置区分行为**: allowed_tools, system_prompt 等
+- **都通过配置区分行为**: tools/mcp_tools、skills、system_prompt 等
 
 **关键差异**:
 - **路由触发**: SubAgent 自动路由（场景匹配+任务状态），WorkerAgent 手动分发
@@ -488,7 +489,8 @@ StepDefinition
 ├── name: str                     # 步骤名称
 ├── description: str              # 步骤描述
 ├── system_prompt: str            # SubAgent 系统提示词
-├── tools: list[str]              # 允许使用的工具
+├── tools: list[str]              # 允许使用的工具名 (ToolExecutor tool_name)
+├── skills: list[str]             # 提示词侧能力约束 (仅注入 system prompt)
 ├── input_schema: dict            # 输入参数定义
 ├── output_key: str               # 输出存储键名
 ├── requires_user_confirm: bool   # 是否需要用户确认
@@ -541,7 +543,7 @@ StepSession
 **关键设计点**:
 - `sub_agent_id` 指向独立进程的 SubAgent
 - `messages` 保存步骤交互的快照/摘要，完整历史由 SubAgent 进程维护
-- `agent_config` 包含该步骤的配置信息（system_prompt, allowed_tools 等）
+- `agent_config` 包含该步骤的配置信息（system_prompt, tools/mcp_tools、skills 等）
 
 ### 4.5 SubAgent 配置文件 (YAML 格式)
 
@@ -561,8 +563,9 @@ system_prompt: |
   - summary: string
 tools:
   system_tools: ["read_file", "search_codebase"]
+  mcp_tools: []
+prompt_policies:
   skills: ["lint-helper", "security-audit"]
-  mcp: []
 capabilities:
   allow_shell: false
   allow_write: false
@@ -587,10 +590,13 @@ SubAgentConfigFile (YAML)
 ├── description: str                 # 描述
 ├── system_prompt: str               # 系统提示词 (支持多行)
 │
-├── tools:                           # 工具配置
+├── tools:                           # 工具配置（可执行集合，可选）
 │   ├── system_tools: list[str]      # 系统工具 (read_file, write_file 等)
-│   ├── skills: list[str]            # Skills 工具集
-│   └── mcp: list[str]               # MCP 工具
+│   └── mcp_tools: list[str]         # MCP 工具
+│   └── default: 核心系统工具 + 技能工具集合（list_skills / get_skill_info / run_skill_script / install_skill / load_skill / reload_skill 等）
+│
+├── prompt_policies:                 # 提示词侧约束
+│   └── skills: list[str]            # Skills 作为提示词能力约束（不自动变成可执行工具）
 │
 ├── capabilities:                    # 能力限制
 │   ├── allow_shell: bool            # 是否允许 shell 命令
@@ -618,7 +624,8 @@ SubAgentConfig (运行时)
 ├── name: str                        # SubAgent 名称
 ├── description: str                 # 描述
 ├── system_prompt: str               # 系统提示词
-├── allowed_tools: list[str]         # 合并后的工具列表 (system_tools + skills + mcp)
+├── allowed_tools: list[str]         # 合并后的可执行工具列表 (system_tools + mcp_tools)
+├── skills: list[str]                # 提示词侧能力约束（不自动变成可执行工具）
 ├── capabilities: CapabilitiesConfig # 能力限制
 │   ├── allow_shell: bool
 │   └── allow_write: bool
@@ -655,10 +662,14 @@ SubAgentConfig (运行时)
 │   3. 工具解析与合并                                              │
 │      │                                                          │
 │      │  system_tools → 查找系统工具注册表                        │
-│      │  skills → 查找 SkillManager 注册的 skills                │
-│      │  mcp → 查找 MCPManager 注册的工具                        │
+│      │  mcp_tools → 查找 MCPManager 注册的工具                  │
 │      │                                                          │
-│      │  合并所有工具名称 → allowed_tools: list[str]             │
+│      │  合并工具名称 → allowed_tools: list[str]                 │
+│      │                                                          │
+│      │  解析 prompt_policies.skills → skills: list[str]          │
+│      │  （仅用于 system prompt 注入）                            │
+│      │                                                          │
+│      │  tools 为空时 → 使用默认核心工具 + 技能工具集合           │
 │      │                                                          │
 │      ▼                                                          │
 │   4. 能力限制转换                                                │
@@ -716,6 +727,7 @@ class SubAgentConfig:
     description: str
     system_prompt: str
     allowed_tools: list[str]
+    skills: list[str]
     capabilities: CapabilitiesConfig
     runtime: RuntimeConfig
     process_mode: str = "WORKER"  # WORKER
@@ -760,6 +772,9 @@ class SubAgentConfigLoader:
         # 解析工具
         allowed_tools = self._resolve_tools(raw.get("tools", {}))
 
+        prompt_raw = raw.get("prompt_policies", {})
+        skills = prompt_raw.get("skills", [])
+
         # 解析能力限制
         caps_raw = raw.get("capabilities", {})
         capabilities = CapabilitiesConfig(
@@ -785,6 +800,7 @@ class SubAgentConfigLoader:
             description=raw.get("description", ""),
             system_prompt=raw.get("system_prompt", ""),
             allowed_tools=allowed_tools,
+            skills=skills,
             capabilities=capabilities,
             runtime=runtime,
             metadata=raw.get("metadata", {}),
@@ -794,20 +810,11 @@ class SubAgentConfigLoader:
         """解析并合并工具列表"""
         tools = []
 
-        # 1. 系统工具
         for tool_name in tools_config.get("system_tools", []):
             if tool_name in self._system_tools:
                 tools.append(tool_name)
 
-        # 2. Skills
-        for skill_name in tools_config.get("skills", []):
-            # 从 SkillManager 获取 skill 中的所有工具
-            skill_tools = self._skill_manager.get_skill_tools(skill_name)
-            tools.extend(skill_tools)
-
-        # 3. MCP 工具
-        for mcp_tool in tools_config.get("mcp", []):
-            # 从 MCPManager 获取 MCP 工具
+        for mcp_tool in tools_config.get("mcp_tools", []):
             if self._mcp_manager.has_tool(mcp_tool):
                 tools.append(mcp_tool)
 
@@ -1182,6 +1189,7 @@ class TaskSession:
             description=step_def.description,
             system_prompt=step_def.system_prompt,
             allowed_tools=step_def.tools,
+            skills=step_def.skills,
             max_iterations=step_def.max_iterations or 20,
             process_mode=ProcessMode.WORKER,
             brain_mode=BrainMode.SHARED_PROXY,
@@ -1219,41 +1227,19 @@ class TaskSession:
         # 添加能力边界说明
         prompt_parts.append(f"\n## 当前步骤能力范围")
         prompt_parts.append(f"你当前的工具: {', '.join(step_def.tools)}")
+        prompt_parts.append(f"你当前的 skills: {', '.join(step_def.skills)}")
         prompt_parts.append("如果用户请求超出你的能力范围，请明确告知。")
 
         return "\n".join(prompt_parts)
 ```
 
-### 5.5 RestrictedToolExecutor (受限工具执行器)
+### 5.5 工具与技能加载一致性
 
-**职责**: 限制 SubAgent 可使用的工具范围
+**原则**: SubAgent 与 MainAgent 使用同一套 ReasoningEngine 与 ToolExecutor，不引入新的执行层差异。
 
-```python
-class RestrictedToolExecutor:
-    """受限工具执行器 - 限制 SubAgent 的工具使用"""
-
-    def __init__(
-        self,
-        inner: ToolExecutor,
-        allowed_tools: list[str],
-    ):
-        self._inner = inner
-        self._allowed_tools = set(allowed_tools)
-
-    async def execute(self, tool_name: str, **kwargs) -> Any:
-        """执行工具，检查是否在允许范围内"""
-        if tool_name not in self._allowed_tools:
-            raise PermissionError(
-                f"工具 '{tool_name}' 不在当前步骤的允许范围内。"
-                f"允许的工具: {', '.join(self._allowed_tools)}"
-            )
-
-        return await self._inner.execute(tool_name, **kwargs)
-
-    def get_available_tools(self) -> list[str]:
-        """获取可用的工具列表"""
-        return list(self._allowed_tools)
-```
+**配置裁剪方式**:
+- tools/mcp_tools: 控制对模型可见的可执行工具集合
+- skills: 仅作为提示词能力约束注入 system prompt
 
 ### 5.6 用户交互流程
 
@@ -1424,7 +1410,7 @@ class TaskState:
 │       │      │              ▼                  │               │
 │       │      │      ┌───────────────┐         │               │
 │       │      │      │ ToolExecutor  │         │               │
-│       │      │      │ (Restricted)  │         │               │
+│       │      │      │ (MainAgent 一致) │      │               │
 │       │      │      └───────────────┘         │               │
 │       │      │              │                  │               │
 │       │      │              ▼                  │               │
@@ -1447,7 +1433,7 @@ SubAgent 与 MainAgent 共享以下组件：
 |------|------|------|
 | Brain | MainAgent 配置/代理 | 共享模型配置或 Brain 代理 |
 | ReasoningEngine | SubAgent 内部创建 | **独立实例**，完整推理循环 |
-| ToolExecutor | 包装 MainAgent.tool_executor | 通过 RestrictedToolExecutor 限制 |
+| ToolExecutor | 与 MainAgent 一致 | 不引入额外执行层差异 |
 
 #### 6.3.3 SubAgent 独立性
 
@@ -1458,7 +1444,8 @@ SubAgent 作为独立进程的关键点：
 | Agent 实例 | 主实例 | **独立进程实例** |
 | ReasoningEngine | 独立 | **独立** |
 | system_prompt | 全能助手提示词 | 步骤专用提示词 |
-| tools | 全量工具 | 步骤允许的工具子集 |
+| tools | 全量工具 | 配置裁剪的工具子集 |
+| skills | 全量技能清单 | 配置裁剪的 skills 清单（提示词侧） |
 | messages | 主对话历史 | 步骤快照/摘要 |
 | context | 无前置上下文 | 前置步骤输出注入 |
 
@@ -1486,7 +1473,7 @@ class AgentFactory:
 
         根据 config 区分：
         - MainAgent: 全量工具，完整能力
-        - SubAgent: 独立进程步骤执行模式，受限工具，独立 ReasoningEngine
+        - SubAgent: 独立进程步骤执行模式，工具清单裁剪，独立 ReasoningEngine
         - WorkerAgent: 独立进程通用执行模式
         """
         return await AgentFactory._create_worker(config)
@@ -1677,7 +1664,7 @@ CODE_REVIEW_SCENARIO = ScenarioDefinition(
 | 任务 | 描述 | 依赖 |
 |------|------|------|
 | T3.1 | Agent 类扩展 (集成 MessageRouter) | T2.2, T2.4 |
-| T3.2 | 实现 RestrictedToolExecutor | T2.3 |
+| T3.2 | 实现工具可见集合裁剪 | T2.3 |
 | T3.3 | 与现有 WorkerAgent 架构统一验证 | T2.3 |
 | T3.4 | 集成测试 | T3.1-T3.3 |
 
