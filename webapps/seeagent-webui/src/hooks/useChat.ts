@@ -37,7 +37,7 @@ export function useChat(conversationId: string | null) {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(
-    async (message: string, endpoint?: string, _editMode: boolean = false, isAskUserAnswer: boolean = false) => {
+    async (message: string, endpoint?: string, _unused: boolean = false, isAskUserAnswer: boolean = false) => {
       console.log('[sendMessage] message:', message, 'isAskUserAnswer:', isAskUserAnswer)
       if (isStreaming) return
 

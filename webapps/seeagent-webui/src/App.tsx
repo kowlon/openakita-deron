@@ -152,7 +152,6 @@ function App() {
   )
 
   // Save completed conversation turn when streaming ends
-  // In Edit mode, don't auto-save - wait for user confirmation
   // Also don't save when askUserQuestion is set - waiting for user input
   useEffect(() => {
     // Detect when streaming transitions from true to false

@@ -2220,16 +2220,6 @@ NEXT: 建议的下一步（如有）"""
         """向当前任务注入用户消息（委托到 InterruptManager）"""
         return await self.interrupt_manager.insert_user_message(text, session_id)
 
-    def confirm_step(
-        self,
-        step_id: str,
-        conversation_id: str | None = None,
-        edited_results: list[dict] | None = None,
-        action: str = "confirm",
-    ) -> bool:
-        """确认暂停的步骤（委托到 InterruptManager）"""
-        return self.interrupt_manager.confirm_step(step_id, conversation_id, edited_results, action)
-
     async def execute_task_from_message(self, message: str) -> TaskResult:
         """从消息创建并执行任务"""
         task = Task(

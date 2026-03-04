@@ -128,6 +128,42 @@ class ReasoningEngine:
             "browser_get_content", "browser_screenshot",
         })
 
+    def _log_task_summary(self, state: TaskState, final_iteration: int, conversation_id: str | None) -> None:
+        """
+        打印任务完成总结日志，包括 LLM 调用轮次统计。
+
+        在任务完成时调用，输出:
+        - 总迭代次数
+        - LLM 调用总次数
+        - 各类工具调用次数
+        - Token 消耗统计
+        """
+        try:
+            # 从 react_trace 统计 LLM 调用
+            llm_calls = len(state.react_trace)
+            total_input_tokens = sum(t.get("tokens", {}).get("input", 0) for t in state.react_trace)
+            total_output_tokens = sum(t.get("tokens", {}).get("output", 0) for t in state.react_trace)
+
+            # 工具调用统计
+            tools_used = {}
+            for trace in state.react_trace:
+                for tc in trace.get("tool_calls", []):
+                    name = tc.get("name", "unknown")
+                    tools_used[name] = tools_used.get(name, 0) + 1
+
+            logger.info("=" * 60)
+            logger.info("[PERF] 📊 Task Summary")
+            logger.info("=" * 60)
+            logger.info(f"  Conversation ID: {conversation_id}")
+            logger.info(f"  Total Iterations: {final_iteration}")
+            logger.info(f"  LLM Calls: {llm_calls}")
+            logger.info(f"  Tokens: {total_input_tokens} in → {total_output_tokens} out ({total_input_tokens + total_output_tokens} total)")
+            if tools_used:
+                logger.info(f"  Tools Used: {tools_used}")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.debug(f"[PERF] Failed to log task summary: {e}")
+
     # ==================== ask_user 等待用户回复 ====================
 
     async def _wait_for_user_reply(
@@ -610,6 +646,10 @@ class ReasoningEngine:
                     "iterations": iteration,
                     "tools_used": list(set(state.tools_executed)),
                 })
+
+                # === 任务完成总结日志 ===
+                self._log_task_summary(state, iteration, conversation_id)
+
                 return result
             else:
                 await _emit_progress("🔄 任务尚未完成，继续处理...")
@@ -747,6 +787,7 @@ class ReasoningEngine:
                 _tc_args = tc.get("input", tc.get("arguments", {}))
                 await _emit_progress(f"🔧 {self._describe_tool_call(_tc_name, _tc_args)}")
 
+            _tool_exec_start = time.time()
             tool_results, executed, receipts = await self._tool_executor.execute_batch(
                 decision.tool_calls,
                 state=state,
@@ -755,11 +796,20 @@ class ReasoningEngine:
                 allow_interrupt_checks=self._state.interrupt_enabled,
                 capture_delivery_receipts=True,
             )
+            _tool_exec_ms = int((time.time() - _tool_exec_start) * 1000)
+            logger.info(f"[PERF] ⏱️ Tool execution: {_tool_exec_ms}ms ({len(executed)} tools)")
+
+            # === 工具后处理开始 - 发送中间状态通知 ===
+            _post_tool_start = time.time()
+            await _emit_progress("📋 正在分析工具结果...")
 
             if executed:
                 state.tools_executed_in_task = True
                 state.tools_executed.extend(executed)
                 state.record_tool_execution(executed)
+                _state_update_ms = int((time.time() - _post_tool_start) * 1000)
+                logger.info(f"[PERF] ⏱️ State update: {_state_update_ms}ms")
+
                 for i, tool_name in enumerate(executed):
                     result_content = ""
                     if i < len(tool_results):
@@ -790,8 +840,9 @@ class ReasoningEngine:
                 for tr in tool_results
                 if isinstance(tr, dict)
             ]
-            
-            # Loop detection parameters
+
+            # === 循环检测 - 带性能追踪 ===
+            _loop_detect_start = time.time()
             self_check_interval = 10
             extreme_threshold = 50
 
@@ -804,6 +855,9 @@ class ReasoningEngine:
                 extreme_threshold=extreme_threshold,
                 conversation_id=conversation_id,
             )
+            _loop_detect_ms = int((time.time() - _loop_detect_start) * 1000)
+            logger.info(f"[PERF] ⏱️ Loop detection: {_loop_detect_ms}ms")
+
             if loop_detected:
                 state.consecutive_tool_rounds += 1
                 if state.consecutive_tool_rounds >= self._max_consecutive_tool_rounds:
@@ -826,6 +880,12 @@ class ReasoningEngine:
 
             working_messages.append({"role": "user", "content": tool_results})
             state.react_trace.append(_iter_trace)
+
+            # === 工具后处理完成 - 发送下一轮准备通知 ===
+            _post_tool_total_ms = int((time.time() - _post_tool_start) * 1000)
+            logger.info(f"[PERF] ⏱️ Post-tool total: {_post_tool_total_ms}ms")
+            await _emit_progress("🧠 正在思考下一步...")
+
             return None
         
         return None

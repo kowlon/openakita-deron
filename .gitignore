@@ -209,3 +209,5 @@ scripts/update_version.py
 .autonomous_coder/
 webapps/seeagent-webui/playwright-report
 webapps/seeagent-webui/package-lock.json
+.pids
+.playwright-mcp
