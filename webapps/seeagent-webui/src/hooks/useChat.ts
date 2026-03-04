@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { apiPostStream, apiPost } from '@/api/client'
+import { apiPostStream } from '@/api/client'
 import type { ChatRequest, SSEEvent, Step, StepStatus, StepCategory, Plan, PlanStatus, PlanStepStatus } from '@/types'
 import type { Artifact } from '@/types/artifact'
 import { CORE_STEP_PATTERNS, INTERNAL_STEP_PATTERNS } from '@/types/step'
@@ -15,9 +15,6 @@ function generateArtifactId(): string {
 export function useChat(conversationId: string | null) {
   const [steps, setSteps] = useState<Step[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
-  const [pausedStepId, setPausedStepId] = useState<string | null>(null)
-  const [pausedStepResult, setPausedStepResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [firstTokenTime, setFirstTokenTime] = useState<number | null>(null)
   const [messageSendTime, setMessageSendTime] = useState<number | null>(null)
@@ -38,17 +35,15 @@ export function useChat(conversationId: string | null) {
     options?: Array<{ id: string; label: string }>;
   } | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const editModeRef = useRef(false)
 
   const sendMessage = useCallback(
-    async (message: string, endpoint?: string, editMode: boolean = false, isAskUserAnswer: boolean = false) => {
-      console.log('[sendMessage] message:', message, 'isAskUserAnswer:', isAskUserAnswer, 'editMode:', editMode)
+    async (message: string, endpoint?: string, _editMode: boolean = false, isAskUserAnswer: boolean = false) => {
+      console.log('[sendMessage] message:', message, 'isAskUserAnswer:', isAskUserAnswer)
       if (isStreaming) return
 
       // Record message send time immediately
       const sendTime = Date.now()
       setMessageSendTime(sendTime)
-      editModeRef.current = editMode
 
       // When answering ask_user, keep the context (don't reset plan/steps)
       // Otherwise, clear previous state when starting a new message
@@ -63,9 +58,6 @@ export function useChat(conversationId: string | null) {
       }
 
       setIsStreaming(true)
-      setIsPaused(false)
-      setPausedStepId(null)
-      setPausedStepResult(null)
       setError(null)
       setFirstTokenTime(null) // Reset first token time
       setLlmOutput(null) // Reset LLM output
@@ -75,7 +67,6 @@ export function useChat(conversationId: string | null) {
         message,
         conversation_id: conversationId || undefined,
         endpoint,
-        edit_mode: editMode,
       }
 
       abortControllerRef.current = new AbortController()
@@ -93,14 +84,7 @@ export function useChat(conversationId: string | null) {
               setArtifacts,
               setAskUserQuestion,
               setActivePlan,
-              activePlanRef,
-              editMode,
-              (stepId, result) => {
-                setIsPaused(true)
-                setPausedStepId(stepId)
-                setPausedStepResult(result)
-                setIsStreaming(false)
-              }
+              activePlanRef
             )
           },
           (err) => {
@@ -119,87 +103,15 @@ export function useChat(conversationId: string | null) {
     [conversationId, isStreaming]
   )
 
-  const confirmStep = useCallback(
-    async (stepId: string, editedResults?: unknown[], action: 'confirm' | 'skip' = 'confirm') => {
-      try {
-        const response = await apiPost('/chat/confirm', {
-          conversation_id: conversationId,
-          step_id: stepId,
-          edited_results: editedResults,
-          action,
-        })
-        return response
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to confirm step')
-        throw err
-      }
-    },
-    [conversationId]
-  )
-
-  const resumeStep = useCallback(
-    async (editedResults?: unknown[], endpoint?: string) => {
-      if (!conversationId) return
-
-      setIsStreaming(true)
-      setIsPaused(false)
-
-      try {
-        await apiPostStream(
-          '/chat/resume',
-          {
-            conversation_id: conversationId,
-            edited_results: editedResults,
-            endpoint,
-          },
-          (event: Record<string, unknown>) => {
-            handleSSEEvent(
-              event as SSEEvent,
-              setSteps,
-              setFirstTokenTime,
-              setLlmOutput,
-              setArtifacts,
-              setAskUserQuestion,
-              setActivePlan,
-              activePlanRef,
-              editModeRef.current,
-              (stepId: string, result: string) => {
-                setIsPaused(true)
-                setPausedStepId(stepId)
-                setPausedStepResult(result)
-                setIsStreaming(false)
-              }
-            )
-          },
-          (err) => {
-            setError(err.message)
-            setIsStreaming(false)
-          },
-          () => {
-            setIsStreaming(false)
-          }
-        )
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to resume')
-        setIsStreaming(false)
-      }
-    },
-    [conversationId]
-  )
-
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort()
     setIsStreaming(false)
-    setIsPaused(false)
   }, [])
 
   const reset = useCallback(() => {
     setSteps([])
     setError(null)
     setIsStreaming(false)
-    setIsPaused(false)
-    setPausedStepId(null)
-    setPausedStepResult(null)
     setFirstTokenTime(null)
     setMessageSendTime(null)
     setLlmOutput(null)
@@ -212,9 +124,6 @@ export function useChat(conversationId: string | null) {
   return {
     steps,
     isStreaming,
-    isPaused,
-    pausedStepId,
-    pausedStepResult,
     error,
     firstTokenTime,
     messageSendTime,
@@ -223,8 +132,6 @@ export function useChat(conversationId: string | null) {
     activePlan,
     askUserQuestion,
     sendMessage,
-    confirmStep,
-    resumeStep,
     cancel,
     reset,
   }
@@ -247,23 +154,12 @@ function handleSSEEvent(
     options?: Array<{ id: string; label: string }>;
   } | null>>,
   setActivePlan: React.Dispatch<React.SetStateAction<Plan | null>>,
-  activePlanRef: React.MutableRefObject<Plan | null>,
-  _editMode: boolean = false,
-  onPause?: (stepId: string, result: string) => void
+  activePlanRef: React.MutableRefObject<Plan | null>
 ) {
   console.log('[handleSSEEvent] Received event:', event.type, event)
   const eventRecord = event as Record<string, unknown>
 
   switch (event.type) {
-    case 'step_pause': {
-      // Edit mode step pause - stop streaming and notify
-      const stepId = eventRecord.step_id as string
-      const result = eventRecord.result as string | undefined
-      if (onPause) {
-        onPause(stepId, result || '')
-      }
-      break
-    }
     case 'iteration_start': {
       // Iteration start - don't create a step, just mark the beginning
       break

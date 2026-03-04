@@ -1,17 +1,8 @@
-import { useMemo } from 'react'
 import type { Step, StepStatus, StepType } from '@/types'
-import type { EditableResult } from '@/components/Step/EditableResultCard'
-import { EditableResultList } from '@/components/Step/EditableResultList'
-import { parseToolResults } from '@/utils/parseToolResult'
 
 type DetailPanelProps = {
   step: Step
   onClose: () => void
-  // Edit mode props
-  executionMode?: 'auto' | 'edit'
-  editableResults?: EditableResult[]
-  onEditableResultsChange?: (results: EditableResult[]) => void
-  onConfirmStep?: () => void
 }
 
 const STATUS_COLORS: Record<StepStatus, string> = {
@@ -56,39 +47,9 @@ function formatTime(timestamp: number): string {
 export function DetailPanel({
   step,
   onClose,
-  executionMode = 'auto',
-  editableResults,
-  onEditableResultsChange,
-  onConfirmStep,
 }: DetailPanelProps) {
   const handleCopyJson = (data: Record<string, unknown>) => {
     navigator.clipboard.writeText(JSON.stringify(data, null, 2))
-  }
-
-  // Parse tool results for editable display
-  const parsedResults = useMemo(() => {
-    if (executionMode !== 'edit') return []
-    if (step.status !== 'completed') return []
-    if (!step.output) return []
-
-    // Only parse for tool-type or skill-type steps
-    if (step.type === 'tool' || step.type === 'skill') {
-      return parseToolResults(step.title, step.output)
-    }
-    return []
-  }, [executionMode, step.status, step.output, step.type, step.title])
-
-  // Use provided editable results or parsed results
-  const displayResults = editableResults ?? parsedResults
-
-  // Check if this step has editable results
-  const hasEditableResults = executionMode === 'edit' &&
-                             step.status === 'completed' &&
-                             displayResults.length > 0
-
-  // Handle editable results change
-  const handleResultsChange = (results: EditableResult[]) => {
-    onEditableResultsChange?.(results)
   }
 
   return (
@@ -145,23 +106,6 @@ export function DetailPanel({
           </div>
         </section>
 
-        {/* Edit Mode: Editable Results */}
-        {hasEditableResults && (
-          <section className="p-5 border-b border-primary/10">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-symbols-outlined text-amber-400 text-lg">edit_note</span>
-              <p className="text-xs font-bold text-amber-300">Edit 模式 - 等待用户确认</p>
-            </div>
-
-            <EditableResultList
-              results={displayResults}
-              onChange={handleResultsChange}
-              isEditMode={true}
-              onConfirm={onConfirmStep}
-            />
-          </section>
-        )}
-
         {/* Input */}
         {step.input && Object.keys(step.input).length > 0 && (
           <section className="p-5 border-b border-primary/10">
@@ -181,36 +125,34 @@ export function DetailPanel({
           </section>
         )}
 
-        {/* Output - Only show if not in edit mode or no editable results */}
-        {(!hasEditableResults) && (
-          <section className="p-5">
-            <p className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-4">Output Results</p>
+        {/* Output */}
+        <section className="p-5">
+          <p className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-4">Output Results</p>
 
-            {step.output && (
-              <div className="prose prose-invert prose-sm mb-4">
-                <p className="text-xs text-slate-300 whitespace-pre-wrap">{step.output}</p>
-              </div>
-            )}
+          {step.output && (
+            <div className="prose prose-invert prose-sm mb-4">
+              <p className="text-xs text-slate-300 whitespace-pre-wrap">{step.output}</p>
+            </div>
+          )}
 
-            {step.outputData && (
-              <div className="bg-black/40 rounded-lg p-3 font-mono text-[11px] text-primary/80 leading-relaxed overflow-x-auto">
-                <pre>{JSON.stringify(step.outputData, null, 2)}</pre>
-              </div>
-            )}
+          {step.outputData && (
+            <div className="bg-black/40 rounded-lg p-3 font-mono text-[11px] text-primary/80 leading-relaxed overflow-x-auto">
+              <pre>{JSON.stringify(step.outputData, null, 2)}</pre>
+            </div>
+          )}
 
-            {step.error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400">
-                <p className="font-bold mb-1">Error:</p>
-                <p>{step.error}</p>
-              </div>
-            )}
+          {step.error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400">
+              <p className="font-bold mb-1">Error:</p>
+              <p>{step.error}</p>
+            </div>
+          )}
 
-            <button className="w-full mt-6 py-2 border border-slate-700 rounded text-[11px] font-bold text-slate-400 hover:text-white hover:border-slate-500 transition-all flex items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-[16px]">download</span>
-              Download Full Output
-            </button>
-          </section>
-        )}
+          <button className="w-full mt-6 py-2 border border-slate-700 rounded text-[11px] font-bold text-slate-400 hover:text-white hover:border-slate-500 transition-all flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">download</span>
+            Download Full Output
+          </button>
+        </section>
       </div>
     </aside>
   )

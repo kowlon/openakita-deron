@@ -4,7 +4,6 @@ export interface ChatRequest {
   conversation_id?: string
   endpoint?: string
   plan_mode?: boolean
-  edit_mode?: boolean
   thinking_mode?: boolean
   thinking_depth?: string
   attachments?: Attachment[]
@@ -28,7 +27,6 @@ export type SSEEventType =
   | 'text_delta'
   | 'tool_call_start'
   | 'tool_call_end'
-  | 'step_pause'
   | 'plan_created'
   | 'plan_step_updated'
   | 'plan_completed'
@@ -56,15 +54,6 @@ export interface ToolCallEndEvent extends SSEEvent {
   result?: string
   error?: string
   step_id?: string
-}
-
-export interface StepPauseEvent extends SSEEvent {
-  type: 'step_pause'
-  step_id: string
-  tool: string
-  result?: string
-  requires_confirmation: boolean
-  conversation_id?: string
 }
 
 export interface TextDeltaEvent extends SSEEvent {

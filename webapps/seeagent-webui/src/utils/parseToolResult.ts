@@ -1,7 +1,16 @@
-import type { EditableResult } from '@/components/Step/EditableResultCard'
+/**
+ * Parsed result item from tool output
+ */
+export interface ParsedResult {
+  id: string
+  title: string
+  content: string
+  source?: string
+  selected?: boolean
+}
 
 /**
- * Parse tool result output into editable result items
+ * Parse tool result output into parsed result items
  * Supports web search, news search, and other structured outputs
  */
 
@@ -9,7 +18,7 @@ import type { EditableResult } from '@/components/Step/EditableResultCard'
  * Try to parse JSON array from tool output
  * Returns null if not valid JSON array
  */
-function tryParseJsonArray(output: string): EditableResult[] | null {
+function tryParseJsonArray(output: string): ParsedResult[] | null {
   try {
     // Try to extract JSON array from the output
     const trimmed = output.trim()
@@ -53,10 +62,10 @@ function tryParseJsonArray(output: string): EditableResult[] | null {
  * Parse web search results from tool output
  * Handles various formats: JSON array, numbered list, markdown format
  */
-export function parseWebSearchResults(output: string | undefined): EditableResult[] {
+export function parseWebSearchResults(output: string | undefined): ParsedResult[] {
   if (!output) return []
 
-  const results: EditableResult[] = []
+  const results: ParsedResult[] = []
 
   // Try to parse as numbered list format (common LLM output format)
   // Format: **1. Title**\nURL\nSnippet\n
@@ -167,11 +176,11 @@ export function parseWebSearchResults(output: string | undefined): EditableResul
 /**
  * Parse news search results from tool output
  */
-export function parseNewsSearchResults(output: string | undefined): EditableResult[] {
+export function parseNewsSearchResults(output: string | undefined): ParsedResult[] {
   if (!output) return []
 
   // Similar to web search but also extracts date and source
-  const results: EditableResult[] = []
+  const results: ParsedResult[] = []
 
   // Pattern: **N. Title** (Source Date)\nURL\nSnippet
   const newsPattern = /\*\*(\d+)\.\s+([^*]+)\*\*\s*\(([^)]+)\)\s*\n([^\n]+)\s*\n([^\n]+)/g
@@ -199,12 +208,12 @@ export function parseNewsSearchResults(output: string | undefined): EditableResu
 }
 
 /**
- * Parse generic tool output into editable results
+ * Parse generic tool output into parsed results
  */
-export function parseGenericResults(output: string | undefined): EditableResult[] {
+export function parseGenericResults(output: string | undefined): ParsedResult[] {
   if (!output) return []
 
-  // For generic output, create a single editable result
+  // For generic output, create a single parsed result
   return [
     {
       id: `result-${Date.now()}`,
@@ -222,7 +231,7 @@ export function parseGenericResults(output: string | undefined): EditableResult[
 export function parseToolResults(
   toolName: string,
   output: string | undefined
-): EditableResult[] {
+): ParsedResult[] {
   if (!output) return []
 
   // First, try to parse as JSON array (for test-search and other JSON-returning tools)

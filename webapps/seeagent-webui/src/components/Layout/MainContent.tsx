@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import type { Session, Step, ExecutionMode, ConversationTurn } from '@/types'
+import type { Session, Step, ConversationTurn } from '@/types'
 import type { Artifact } from '@/types/artifact'
 import type { Plan } from '@/types/plan'
 import { StepTimeline } from '@/components/Step/StepTimeline'
@@ -23,17 +23,12 @@ type MainContentProps = {
   conversationHistory: ConversationTurn[]
   steps: Step[]  // Current turn steps only
   allSteps?: Step[]  // All steps (for detail panel)
-  executionMode: ExecutionMode
-  onModeChange: (mode: ExecutionMode) => void
   onStepClick: (stepId: string) => void
   onSendMessage: (message: string, isAskUserAnswer?: boolean) => void
   isStreaming: boolean
-  isPaused?: boolean  // True when in Edit mode and waiting for step confirmation
-  pausedStepId?: string | null  // The step ID that is paused
   firstTokenTime: number | null
   messageSendTime: number | null
   llmOutput: string | null
-  onConfirmTurn?: () => void  // Called when user confirms in Edit mode
   artifacts?: Artifact[]  // Current turn artifacts
   askUserQuestion?: AskUserQuestion
   activePlan?: Plan | null  // Active plan for Plan mode
@@ -127,17 +122,12 @@ export function MainContent({
   session,
   conversationHistory,
   steps,
-  executionMode,
-  onModeChange,
   onStepClick,
   onSendMessage,
   isStreaming,
-  isPaused = false,
-  pausedStepId = null,
   firstTokenTime,
   messageSendTime,
   llmOutput,
-  onConfirmTurn,
   artifacts = [],
   askUserQuestion,
   activePlan = null,
@@ -187,16 +177,6 @@ export function MainContent({
   const isWaiting = useMemo(() => {
     return isStreaming && steps.length === 0 && !llmOutput
   }, [isStreaming, steps.length, llmOutput])
-
-  // Check if in Edit mode and needs confirmation after completion
-  const editModeNeedsConfirmation = useMemo(() => {
-    return executionMode === 'edit' && isCompleted && !isStreaming && !isPaused
-  }, [executionMode, isCompleted, isStreaming, isPaused])
-
-  // Check if in Edit mode and paused waiting for step confirmation
-  const editModePaused = useMemo(() => {
-    return executionMode === 'edit' && isPaused && pausedStepId
-  }, [executionMode, isPaused, pausedStepId])
 
   // Get current turn summary - prefer llmOutput for simple Q&A
   const currentSummary = useMemo(() => {
@@ -294,27 +274,6 @@ export function MainContent({
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-primary">chat_bubble</span>
           <h2 className="font-semibold text-slate-200">{session?.title || 'New Chat'}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Mode Switcher */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
-            <button
-              onClick={() => onModeChange('auto')}
-              className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
-                executionMode === 'auto' ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Auto
-            </button>
-            <button
-              onClick={() => onModeChange('edit')}
-              className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
-                executionMode === 'edit' ? 'bg-primary text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Edit
-            </button>
-          </div>
         </div>
       </header>
 
@@ -470,55 +429,6 @@ export function MainContent({
                         请在下方输入框中回答
                       </div>
                     )}
-                  </div>
-                )}
-
-                {/* Edit Mode Paused - shown when step is paused waiting for confirmation */}
-                {editModePaused && pausedStepId && (
-                  <div className="mt-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-blue-400 text-lg animate-pulse">pause_circle</span>
-                        <span className="text-sm text-blue-300">
-                          Edit 模式 - 步骤暂停，等待确认
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => onStepClick(pausedStepId)}
-                          className="px-4 py-2 text-sm font-medium text-blue-300 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-500/30 rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-base">visibility</span>
-                          查看结果
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-blue-400/70 mt-2">
-                      点击"查看结果"在右侧面板查看步骤详情，编辑后点击"确认，继续下一步"
-                    </p>
-                  </div>
-                )}
-
-                {/* Edit Mode Hint - shown after task completion in Edit mode */}
-                {editModeNeedsConfirmation && (
-                  <div className="mt-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-amber-400 text-lg">edit_note</span>
-                        <span className="text-sm text-amber-300">
-                          Edit 模式：点击步骤卡片在右侧面板查看和编辑结果
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => onConfirmTurn?.()}
-                          className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/80 rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-base">check</span>
-                          确认完成
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>

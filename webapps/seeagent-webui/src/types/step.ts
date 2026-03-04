@@ -26,8 +26,6 @@ export interface Step {
   category?: StepCategory
 }
 
-export type ExecutionMode = 'auto' | 'edit'
-
 /**
  * Core step keywords - these represent meaningful business operations
  * Only show: 意图识别(thinking), 网络搜索(search), PDF/文件生成(pdf/write)

@@ -1530,7 +1530,6 @@ search_github → install_skill → 使用
         gateway: Any = None,
         *,
         plan_mode: bool = False,
-        edit_mode: bool = False,
         endpoint_override: str | None = None,
         attachments: list | None = None,
         thinking_mode: str | None = None,
@@ -1551,7 +1550,6 @@ search_github → install_skill → 使用
             session: Session 对象
             gateway: MessageGateway 对象
             plan_mode: 是否启用 Plan 模式
-            edit_mode: 是否启用 Edit 模式（步骤暂停等待用户确认）
             endpoint_override: 端点覆盖
             attachments: Desktop Chat 附件列表
             thinking_mode: 思考模式覆盖 ('auto'/'on'/'off'/None)
@@ -1683,7 +1681,6 @@ search_github → install_skill → 使用
                 task_monitor=None,  # 显式传递 None，强制使用 callbacks
                 session_type=session_type,
                 plan_mode=plan_mode,
-                edit_mode=edit_mode,
                 endpoint_override=endpoint_override,
                 conversation_id=conversation_id,
                 thinking_mode=_thinking_mode,

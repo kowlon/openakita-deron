@@ -4,9 +4,8 @@ import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
-import type { Session, Step, ExecutionMode, ConversationTurn } from './types'
+import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
-import type { EditableResult } from './components/Step/EditableResultCard'
 
 // Extended Session type with conversation history
 interface ExtendedSession extends Session {
@@ -76,10 +75,6 @@ function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>('auto')
-
-  // Edit mode state - editable results for each step
-  const [editableResults, setEditableResults] = useState<Record<string, EditableResult[]>>({})
 
   // Track if this is the initial mount (to prevent saving empty array on mount in StrictMode)
   const isInitialMountRef = useRef(true)
@@ -113,11 +108,6 @@ function App() {
     steps: chatSteps,
     sendMessage,
     isStreaming,
-    isPaused,
-    pausedStepId,
-    // pausedStepResult - available if needed in the future
-    confirmStep,
-    resumeStep,
     reset,
     firstTokenTime,
     messageSendTime,
@@ -170,9 +160,8 @@ function App() {
     prevIsStreamingRef.current = isStreaming
 
     // When streaming ends and we had a conversation
-    // In Edit mode, don't auto-save - the user needs to confirm first
     // Also don't save when askUserQuestion is set - waiting for user input
-    if (wasStreaming && !isStreaming && currentSessionId && executionMode === 'auto' && !askUserQuestion) {
+    if (wasStreaming && !isStreaming && currentSessionId && !askUserQuestion) {
       const currentUserMessage = currentSession?.userMessage || ''
       const timing = currentTurnTimingRef.current
       const output = currentLlmOutputRef.current
@@ -221,60 +210,7 @@ function App() {
       currentLlmOutputRef.current = null
       currentActivePlanRef.current = null
     }
-  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, executionMode, askUserQuestion])
-
-  // Handle Edit mode turn confirmation - save turn to history when user confirms
-  const handleConfirmTurn = useCallback(() => {
-    if (!currentSessionId || executionMode !== 'edit') return
-
-    const currentUserMessage = currentSession?.userMessage || ''
-    const timing = currentTurnTimingRef.current
-    const output = currentLlmOutputRef.current
-
-    if (!currentUserMessage) return
-
-    // Get steps and summary
-    const steps = chatSteps.length > 0 ? chatSteps : prevChatStepsRef.current
-    const summary = output || [...steps].reverse().find(s => s.type === 'llm')?.output || null
-    const plan = currentActivePlanRef.current
-
-    // Create the turn
-    const newTurn: ConversationTurn = {
-      id: `turn-${Date.now()}`,
-      userMessage: currentUserMessage,
-      steps: steps,
-      summary,
-      timestamp: Date.now(),
-      startTime: timing.startTime || undefined,
-      firstTokenTime: timing.firstTokenTime,
-      endTime: Date.now(),
-      plan: plan || undefined,
-    }
-
-    setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id === currentSessionId) {
-          // Check if this turn already exists (avoid duplicates)
-          const turnExists = s.conversationHistory.some(t => t.userMessage === currentUserMessage)
-          if (turnExists) return s
-
-          return {
-            ...s,
-            conversationHistory: [...s.conversationHistory, newTurn],
-            stepCount: s.conversationHistory.length + 1,
-          }
-        }
-        return s
-      })
-    )
-
-    // Clear refs and reset chat after confirmation
-    prevChatStepsRef.current = []
-    currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
-    currentLlmOutputRef.current = null
-    currentActivePlanRef.current = null
-    reset() // Clear current chat steps
-  }, [currentSessionId, currentSession?.userMessage, chatSteps, executionMode, reset])
+  }, [isStreaming, currentSessionId, currentSession?.userMessage, chatSteps, askUserQuestion])
 
   // Combine historical turns with current chat steps
   const displaySteps = useMemo(() => {
@@ -293,39 +229,6 @@ function App() {
     () => displaySteps.find((s) => s.id === selectedStepId) || null,
     [displaySteps, selectedStepId]
   )
-
-  // Handle editable results change from DetailPanel
-  const handleEditableResultsChange = useCallback((results: EditableResult[]) => {
-    if (selectedStepId) {
-      setEditableResults(prev => ({
-        ...prev,
-        [selectedStepId]: results
-      }))
-    }
-  }, [selectedStepId])
-
-  // Handle step confirmation in Edit mode (from DetailPanel)
-  const handleConfirmStep = useCallback(async () => {
-    // Use pausedStepId (from backend) instead of selectedStepId (UI generated)
-    const stepIdToConfirm = pausedStepId || selectedStepId
-    if (!stepIdToConfirm) return
-
-    // Get edited results for this step if any
-    const editedResults = editableResults[selectedStepId || '']
-
-    try {
-      // First confirm the step with the correct backend step_id
-      await confirmStep(stepIdToConfirm, editedResults, 'confirm')
-
-      // Then resume execution
-      await resumeStep(editedResults)
-
-      // Close detail panel after confirmation
-      setSelectedStepId(null)
-    } catch (err) {
-      console.error('Failed to confirm step:', err)
-    }
-  }, [pausedStepId, selectedStepId, editableResults, confirmStep, resumeStep])
 
   // Send message handler
   const handleSendMessage = useCallback(
@@ -468,16 +371,14 @@ function App() {
       }
       }
       isSendingRef.current = true
-      // Reset edit mode state when sending new message
-      setEditableResults({})
       // Use requestAnimationFrame to ensure the state update is rendered
       // before sending the new message. This prevents the UI from flashing
       // because the historical turn will be rendered first.
       requestAnimationFrame(() => {
-        sendMessage(message, undefined, executionMode === 'edit', isAskUserAnswer)
+        sendMessage(message, undefined, false, isAskUserAnswer)
       })
     },
-    [currentSessionId, sendMessage, chatSteps, currentSession, executionMode, askUserQuestion, llmOutput]
+    [currentSessionId, sendMessage, chatSteps, currentSession, askUserQuestion, llmOutput]
   )
 
   const handleNewSession = useCallback(() => {
@@ -569,17 +470,12 @@ function App() {
           conversationHistory={currentSession?.conversationHistory || []}
           steps={chatSteps}
           allSteps={displaySteps}
-          executionMode={executionMode}
-          onModeChange={setExecutionMode}
           onStepClick={setSelectedStepId}
           onSendMessage={handleSendMessage}
           isStreaming={isStreaming}
-          isPaused={isPaused}
-          pausedStepId={pausedStepId}
           firstTokenTime={firstTokenTime}
           messageSendTime={messageSendTime}
           llmOutput={llmOutput}
-          onConfirmTurn={handleConfirmTurn}
           artifacts={artifacts}
           askUserQuestion={askUserQuestion}
           activePlan={activePlan}
@@ -589,10 +485,6 @@ function App() {
         <DetailPanel
           step={selectedStep}
           onClose={() => setSelectedStepId(null)}
-          executionMode={executionMode}
-          editableResults={editableResults[selectedStep.id]}
-          onEditableResultsChange={handleEditableResultsChange}
-          onConfirmStep={handleConfirmStep}
         />
       ) : null}
     />
