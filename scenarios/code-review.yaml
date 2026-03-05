@@ -1,0 +1,107 @@
+# 代码审查场景
+# 多步骤代码审查流程
+
+schema_version: "1.0"
+
+scenario_id: "code-review"
+name: "代码审查"
+description: "多步骤代码审查流程，包括分析、审查和总结"
+category: "development"
+version: "1.0"
+
+trigger_patterns:
+  - type: regex
+    pattern: "(审查|review).*(代码|code)"
+    priority: 1
+  - type: keyword
+    keywords:
+      - "代码审查"
+      - "code review"
+      - "审查代码"
+    priority: 2
+
+steps:
+  - step_id: "analyze"
+    name: "代码分析"
+    description: "分析代码结构、质量和潜在问题"
+    output_key: "analysis"
+    tools:
+      system_tools:
+        - read_file
+        - grep
+        - search_file
+    system_prompt: |
+      你是一位资深代码分析专家。你的任务是分析用户提供的代码，从以下方面进行评估：
+
+      1. **代码结构**: 模块划分、函数组织、类设计
+      2. **代码质量**: 可读性、命名规范、注释完整性
+      3. **潜在问题**: 可能的 bug、性能问题、安全风险
+      4. **最佳实践**: 设计模式、代码复用、测试覆盖
+
+      请提供结构化的分析报告，包括：
+      - 整体评估（优秀/良好/一般/需改进）
+      - 主要发现（按重要性排序）
+      - 具体建议
+
+    requires_confirmation: true
+
+  - step_id: "review"
+    name: "代码审查"
+    description: "基于分析结果进行详细审查"
+    output_key: "review_result"
+    tools:
+      system_tools:
+        - read_file
+    system_prompt: |
+      你是一位代码审查专家。基于前面的分析结果，请进行详细的代码审查。
+
+      ## 前置步骤输出
+      {{context.analysis}}
+
+      请重点关注：
+      1. 关键问题的详细说明
+      2. 具体的修复建议和示例代码
+      3. 需要特别关注的代码区域
+
+      审查报告应包含：
+      - 问题清单（带严重程度）
+      - 修复建议（带代码示例）
+      - 优先级排序
+
+    requires_confirmation: true
+    dependencies:
+      - analyze
+
+  - step_id: "summary"
+    name: "总结报告"
+    description: "生成完整的审查总结报告"
+    output_key: "final_report"
+    tools:
+      system_tools: []
+    system_prompt: |
+      请基于以下信息生成一份完整的代码审查总结报告：
+
+      ## 分析结果
+      {{context.analysis}}
+
+      ## 审查结果
+      {{context.review_result}}
+
+      报告应包含：
+      1. **执行摘要**: 高层次的审查结论
+      2. **关键发现**: 最重要的 3-5 个问题
+      3. **行动计划**: 按优先级排列的改进建议
+      4. **风险评估**: 不修复可能带来的风险
+
+    requires_confirmation: false
+    dependencies:
+      - analyze
+      - review
+
+metadata:
+  author: "OpenAkita"
+  created_at: "2026-03-04"
+  tags:
+    - code
+    - review
+    - quality

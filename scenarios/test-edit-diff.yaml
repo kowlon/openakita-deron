@@ -1,0 +1,76 @@
+# 编辑对比测试场景
+# 验证编辑前后数据对比功能
+
+schema_version: "1.0"
+
+scenario_id: "test-edit-diff"
+name: "编辑对比测试"
+description: "测试编辑前后数据对比功能"
+category: "test"
+version: "1.0"
+
+trigger_patterns:
+  - type: keyword
+    keywords:
+      - "测试编辑对比"
+      - "edit diff test"
+    priority: 1
+
+steps:
+  - step_id: "generate"
+    name: "生成初始数据"
+    description: "生成初始 JSON 数据"
+    output_key: "initial"
+    skills:
+      - demo-echo-json
+    system_prompt: |
+      请生成初始 JSON 数据，包含以下字段：
+      - name: 名称
+      - version: 版本号
+      - items: 项目列表（数组）
+      - config: 配置对象（嵌套 JSON）
+
+      示例：
+      ```json
+      {
+        "name": "测试项目",
+        "version": "1.0.0",
+        "items": ["item1", "item2"],
+        "config": {"debug": false}
+      }
+      ```
+
+      用户可以编辑此数据。
+    requires_confirmation: true
+
+  - step_id: "diff"
+    name: "对比变更"
+    description: "对比编辑前后的数据变更"
+    output_key: "diff_result"
+    skills:
+      - demo-json-diff
+    system_prompt: |
+      对比编辑前后的数据变更。
+
+      ## 初始数据 (before)
+      {{context.initial}}
+
+      用户编辑后的数据将作为 after 参数。
+
+      请输出变更统计：
+      - modified: 修改的字段数
+      - added: 新增的字段数
+      - removed: 删除的字段数
+      - changed_paths: 变更的路径列表
+    requires_confirmation: false
+    dependencies:
+      - generate
+
+metadata:
+  author: "Test Suite"
+  created_at: "2026-03-05"
+  tags:
+    - test
+    - edit
+    - diff
+    - demo

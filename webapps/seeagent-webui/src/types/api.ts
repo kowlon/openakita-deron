@@ -33,6 +33,10 @@ export type SSEEventType =
   | 'ask_user'
   | 'agent_switch'
   | 'artifact_created'
+  | 'orchestration_routed'
+  | 'task_created'
+  | 'task_step_completed'
+  | 'task_waiting_confirmation'
   | 'error'
   | 'done'
 

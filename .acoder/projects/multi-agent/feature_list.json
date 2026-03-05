@@ -1,0 +1,139 @@
+{
+  "features": [
+    {
+      "id": "FIX-001",
+      "name": "实现 SubAgent 工具限制",
+      "description": "在 SubAgentRunner._execute_step 中实现工具限制功能，确保 SubAgent 只能使用配置中允许的工具。修改 subagent_manager.py:629-656，在调用 agent.chat 前应用工具过滤。这是关键的安全特性。",
+      "phase": "Phase 8: 问题修复",
+      "priority": "high",
+      "passes": true,
+      "completed_at": "2026-03-05 17:39:25"
+    },
+    {
+      "id": "FIX-002",
+      "name": "修复 SubAgent 进程启动等待逻辑",
+      "description": "优化 SubAgent 启动等待机制，确保进程完全就绪后再执行步骤。当前使用保守策略（等待60秒），需要改进状态同步机制。",
+      "phase": "Phase 8: 问题修复",
+      "priority": "medium",
+      "passes": true,
+      "completed_at": "2026-03-05 18:08:30"
+    },
+    {
+      "id": "FIX-003",
+      "name": "完善错误处理和日志",
+      "description": "添加更完善的错误处理和日志记录，特别是在 SubAgent 通信失败、步骤执行超时、进程意外退出等场景。",
+      "phase": "Phase 8: 问题修复",
+      "priority": "medium",
+      "passes": true,
+      "completed_at": "2026-03-05 18:19:31"
+    },
+    {
+      "id": "FE-001",
+      "name": "集成任务卡片到主界面",
+      "description": "将 TaskCard 组件集成到主对话界面中，在检测到场景匹配或活跃任务时显示任务卡片。需要修改主聊天组件。",
+      "phase": "Phase 9: 前端集成",
+      "priority": "high",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "FE-002",
+      "name": "实现步骤输出编辑器",
+      "description": "完善 StepOutputEditor 组件，支持用户编辑步骤输出并保存。实现编辑模式切换、保存功能、Markdown 渲染。",
+      "phase": "Phase 9: 前端集成",
+      "priority": "high",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "FE-003",
+      "name": "添加最佳实践入口",
+      "description": "在左侧边栏添加最佳实践列表入口，显示可用场景并支持快速启动。实现 ScenarioList 组件集成到现有布局中。",
+      "phase": "Phase 9: 前端集成",
+      "priority": "medium",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "FE-004",
+      "name": "实现任务状态轮询",
+      "description": "使用 useTaskPolling hook 实现任务状态的实时更新，确保前端显示与后端状态同步。",
+      "phase": "Phase 9: 前端集成",
+      "priority": "medium",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "TEST-001",
+      "name": "编写单元测试",
+      "description": "为核心模块编写单元测试：models.py, task_session.py, task_orchestrator.py, scenario_registry.py。使用 pytest 框架。",
+      "phase": "Phase 10: 测试验证",
+      "priority": "high",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "TEST-002",
+      "name": "编写集成测试",
+      "description": "编写端到端集成测试，验证完整任务流程：场景匹配 -> 任务创建 -> 步骤执行 -> 上下文传递 -> 任务完成。",
+      "phase": "Phase 10: 测试验证",
+      "priority": "high",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "TEST-003",
+      "name": "验证场景配置",
+      "description": "使用现有的 6 个场景配置进行手动测试，验证 SubAgent 创建、执行和销毁流程。",
+      "phase": "Phase 10: 测试验证",
+      "priority": "medium",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "TEST-004",
+      "name": "API 接口测试",
+      "description": "测试所有 API 端点：POST /api/tasks, GET /api/tasks, GET /api/tasks/{id}, POST /api/tasks/{id}/cancel 等。",
+      "phase": "Phase 10: 测试验证",
+      "priority": "medium",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "DOC-001",
+      "name": "更新 API 文档",
+      "description": "为新添加的 API 端点编写文档，包括请求/响应格式、错误码说明。",
+      "phase": "Phase 11: 文档",
+      "priority": "low",
+      "passes": false,
+      "completed_at": null
+    },
+    {
+      "id": "DOC-002",
+      "name": "更新 README",
+      "description": "更新项目 README，添加多任务编排功能的使用说明和示例。",
+      "phase": "Phase 11: 文档",
+      "priority": "low",
+      "passes": false,
+      "completed_at": null
+    }
+  ],
+  "implementation_order": [
+    "FIX-001",
+    "FIX-002",
+    "FIX-003",
+    "FE-001",
+    "FE-002",
+    "FE-003",
+    "FE-004",
+    "TEST-001",
+    "TEST-002",
+    "TEST-003",
+    "TEST-004",
+    "DOC-001",
+    "DOC-002"
+  ],
+  "metadata": {
+    "updated_at": "2026-03-05 17:05:05"
+  }
+}

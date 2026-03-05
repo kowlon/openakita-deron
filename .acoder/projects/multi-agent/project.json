@@ -1,0 +1,19 @@
+{
+  "id": "multi-agent",
+  "name": "multi-agent",
+  "status": "ready",
+  "created_at": "2026-03-05 17:00:33",
+  "updated_at": "2026-03-05 18:19:31",
+  "paused_at": null,
+  "description": "",
+  "target_path": "../../",
+  "total_features": 13,
+  "completed_features": 3,
+  "branch": "main",
+  "session": {
+    "phase": "initialized",
+    "current_step": 0,
+    "total_steps": 0,
+    "current_task_id": null
+  }
+}

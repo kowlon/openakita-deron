@@ -453,8 +453,21 @@ class AgentBus:
         """处理收到的消息"""
         logger.debug(f"Received message: {message.msg_type} from {sender_identity}")
 
+        # Master 端：检查是否需要路由消息到其他 Worker
+        if self.is_master and message.target_id and message.target_id not in ("master", "*"):
+            # 消息目标不是 Master，转发给目标 Agent
+            logger.debug(f"Routing message from {message.sender_id} to {message.target_id}")
+            await self._send_to_worker(message, message.target_id)
+            return
+
         # 检查是否是响应消息
         if message.msg_type == MessageType.RESPONSE.value:
+            # Master 端：响应消息需要路由回发送者
+            if self.is_master and message.target_id and message.target_id != "master":
+                logger.debug(f"Routing response to {message.target_id}")
+                await self._send_to_worker(message, message.target_id)
+                return
+            # 本地处理响应
             await self._handle_response(message)
             return
 
@@ -500,7 +513,14 @@ class AgentBus:
         if future and not future.done():
             future.set_result(message)
         else:
-            logger.warning(f"No pending request for correlation_id: {correlation_id}")
+            # 如果内置机制没有找到，尝试默认处理器
+            if self._default_handler:
+                try:
+                    await self._default_handler(message)
+                except Exception as e:
+                    logger.error(f"Default handler error for response: {e}")
+            else:
+                logger.warning(f"No pending request for correlation_id: {correlation_id}")
 
     # ==================== 处理器注册 ====================
 

@@ -14,15 +14,17 @@ FastAPI HTTP API server for OpenAkita.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import socket
 import time
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import chat, chat_models, config, files, health, im, logs, skills, token_stats, upload
+from .routes import chat, chat_models, config, files, health, im, logs, skills, token_stats, upload, tasks, scenarios, tasks, scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,29 @@ def wait_for_port_free(host: str, port: int, timeout: float = 30.0) -> bool:
     return False
 
 
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    """Application lifespan manager for async initialization and cleanup."""
+    # Startup: Initialize TaskOrchestrator
+    orchestrator = getattr(app.state, "task_orchestrator", None)
+    if orchestrator:
+        try:
+            await orchestrator.initialize()
+            logger.info("TaskOrchestrator async initialization completed")
+        except Exception as e:
+            logger.error(f"Failed to initialize TaskOrchestrator: {e}")
+
+    yield
+
+    # Shutdown: Cleanup TaskOrchestrator
+    if orchestrator:
+        try:
+            await orchestrator.shutdown()
+            logger.info("TaskOrchestrator shutdown completed")
+        except Exception as e:
+            logger.error(f"Failed to shutdown TaskOrchestrator: {e}")
+
+
 def create_app(
     agent: Any = None,
     shutdown_event: asyncio.Event | None = None,
@@ -67,6 +92,7 @@ def create_app(
         title="OpenAkita API",
         description="OpenAkita HTTP API for Chat, Health, Skills",
         version=get_version_string(),
+        lifespan=app_lifespan,
     )
 
     # CORS: 允许 Setup Center (localhost) 访问
@@ -84,6 +110,52 @@ def create_app(
     app.state.session_manager = session_manager
     app.state.gateway = gateway
 
+    # Initialize TaskOrchestrator for multi-task orchestration
+    try:
+        from openakita.orchestration import (
+            OrchestratorConfig,
+            ScenarioRegistry,
+            SubAgentManager,
+            TaskOrchestrator,
+        )
+        from openakita.config import settings
+
+        _scenario_registry = ScenarioRegistry()
+        _sub_agent_manager = SubAgentManager(
+            router_address=settings.orchestration_bus_address,
+            pub_address=settings.orchestration_pub_address,
+        )
+        _orchestrator_config = OrchestratorConfig(
+            scenario_directories=[str(settings.project_root / "scenarios")],
+        )
+        _task_orchestrator = TaskOrchestrator(
+            scenario_registry=_scenario_registry,
+            sub_agent_manager=_sub_agent_manager,
+            config=_orchestrator_config,
+            data_dir=settings.project_root / "data",
+        )
+
+        # Load scenarios from directory
+        scenarios_dir = settings.project_root / "scenarios"
+        if scenarios_dir.exists():
+            count = _scenario_registry.load_from_directory(scenarios_dir)
+            logger.info(f"Loaded {count} scenarios from {scenarios_dir}")
+
+        # Store orchestrator references
+        app.state.task_orchestrator = _task_orchestrator
+        app.state.scenario_registry = _scenario_registry
+
+        # Set orchestrator on agent if available
+        if agent is not None and hasattr(agent, 'set_task_orchestrator'):
+            agent.set_task_orchestrator(_task_orchestrator)
+            logger.info("TaskOrchestrator set on Agent for message routing")
+
+        logger.info("TaskOrchestrator created for multi-task orchestration")
+    except Exception as e:
+        logger.warning(f"Failed to create TaskOrchestrator: {e}")
+        app.state.task_orchestrator = None
+        app.state.scenario_registry = None
+
     # Mount routes
     app.include_router(chat.router)
     app.include_router(chat_models.router)
@@ -95,6 +167,8 @@ def create_app(
     app.include_router(skills.router)
     app.include_router(token_stats.router)
     app.include_router(upload.router)
+    app.include_router(tasks.router)
+    app.include_router(scenarios.router)
 
     @app.get("/")
     async def root():

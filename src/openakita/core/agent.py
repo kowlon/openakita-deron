@@ -288,6 +288,11 @@ class Agent:
             agent_state=self.agent_state,
         )
 
+        # 多任务编排系统（Phase 4.2 新增）
+        # 初始化为 None，在 initialize() 中或通过 set_task_orchestrator() 设置
+        self._task_orchestrator: Any = None  # TaskOrchestrator
+        self._orchestration_enabled = False  # 是否启用编排功能
+
         logger.info(f"Agent '{self.name}' created (with refactored sub-modules)")
 
     @classmethod
@@ -390,6 +395,75 @@ class Agent:
     @_mcp_catalog_text.setter
     def _mcp_catalog_text(self, value):
         self.mcp_manager.catalog_text = value
+
+    # ==================== 多任务编排系统 ====================
+
+    def set_task_orchestrator(self, orchestrator: Any) -> None:
+        """
+        设置任务编排器
+
+        Args:
+            orchestrator: TaskOrchestrator 实例
+        """
+        self._task_orchestrator = orchestrator
+        self._orchestration_enabled = orchestrator is not None
+        if orchestrator:
+            logger.info("TaskOrchestrator set, orchestration enabled")
+        else:
+            logger.info("TaskOrchestrator cleared, orchestration disabled")
+
+    @property
+    def task_orchestrator(self) -> Any:
+        """获取任务编排器"""
+        return self._task_orchestrator
+
+    @property
+    def orchestration_enabled(self) -> bool:
+        """检查编排功能是否启用"""
+        return self._orchestration_enabled
+
+    async def _try_orchestration_route(
+        self,
+        message: str,
+        session_id: str,
+    ) -> tuple[bool, str | None]:
+        """
+        尝试将消息路由到编排系统
+
+        Args:
+            message: 用户消息
+            session_id: 会话 ID
+
+        Returns:
+            (routed, response): routed 表示是否被路由，response 为响应内容
+        """
+        if not self._orchestration_enabled or not self._task_orchestrator:
+            return False, None
+
+        # 1. 检查是否有活跃任务
+        active_task = self._task_orchestrator.get_active_task(session_id)
+        if active_task:
+            # 路由到活跃任务
+            response = await self._task_orchestrator.dispatch_message(session_id, message)
+            if response is not None:
+                return True, response
+
+        # 2. 尝试场景匹配
+        match_result = self._task_orchestrator.scenario_registry.match_from_dialog(message)
+        if match_result:
+            # 创建新任务
+            task_session = await self._task_orchestrator.create_task_from_dialog(
+                message=message,
+                session_id=session_id,
+                context={},
+            )
+            if task_session:
+                # 启动任务并获取第一步响应
+                await self._task_orchestrator.start_task(task_session.state.task_id)
+                response = await self._task_orchestrator.dispatch_message(session_id, message)
+                return True, response or f"已启动场景任务: {match_result.scenario.name}"
+
+        return False, None
 
     def _get_tool_handler_name(self, tool_name: str) -> str | None:
         """获取工具对应的 handler 名称（用于互斥/并发策略）"""
@@ -1570,6 +1644,20 @@ search_github → install_skill → 使用
             yield {"type": "text_delta", "content": "✅ 好的，已停止当前任务。有什么其他需要帮助的吗？"}
             yield {"type": "done"}
             return
+
+        # === 编排系统路由检测 ===
+        # 检查是否有活跃任务或场景匹配
+        if self._orchestration_enabled and self._task_orchestrator:
+            try:
+                routed, response = await self._try_orchestration_route(message, session_id)
+                if routed and response:
+                    logger.info(f"[Orchestration] Routed message to orchestrator (session={session_id})")
+                    yield {"type": "orchestration_routed", "scenario": True}
+                    yield {"type": "text_delta", "content": response}
+                    yield {"type": "done"}
+                    return
+            except Exception as e:
+                logger.warning(f"[Orchestration] Route failed, falling back to normal chat: {e}")
 
         # 清理上一轮残留的任务状态（按 session 隔离）
         _prev_task = (

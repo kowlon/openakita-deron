@@ -65,6 +65,11 @@ class CommandType(Enum):
     CHAT_REQUEST = "chat_request"  # 对话请求
     CHAT_RESPONSE = "chat_response"  # 对话响应
 
+    # 步骤执行（多任务编排）
+    STEP_REQUEST = "step_request"  # 步骤执行请求
+    STEP_RESPONSE = "step_response"  # 步骤执行响应
+    STEP_CANCEL = "step_cancel"  # 步骤取消
+
 
 class EventType(Enum):
     """事件类型"""
@@ -379,4 +384,143 @@ def create_chat_response(
             "success": success,
             "error": error,
         },
+    )
+
+
+# ==================== 步骤执行消息 ====================
+
+
+@dataclass
+class StepRequest:
+    """
+    步骤执行请求
+
+    用于向 SubAgent 发送步骤执行请求
+    """
+
+    request_id: str  # 请求唯一 ID
+    step_id: str  # 步骤标识
+    task_id: str  # 任务标识
+    message: str  # 用户消息
+    context: dict[str, Any] = field(default_factory=dict)  # 步骤间上下文
+    system_prompt_override: str | None = None  # 系统提示词覆盖
+    timeout_seconds: int = 300  # 超时时间
+
+    def to_dict(self) -> dict:
+        """序列化为字典"""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "StepRequest":
+        """从字典反序列化"""
+        return cls(
+            request_id=data["request_id"],
+            step_id=data["step_id"],
+            task_id=data["task_id"],
+            message=data["message"],
+            context=data.get("context", {}),
+            system_prompt_override=data.get("system_prompt_override"),
+            timeout_seconds=data.get("timeout_seconds", 300),
+        )
+
+    def to_agent_message(self, sender_id: str, target_id: str) -> AgentMessage:
+        """转换为 AgentMessage"""
+        return AgentMessage.command(
+            sender_id=sender_id,
+            target_id=target_id,
+            command_type=CommandType.STEP_REQUEST,
+            payload=self.to_dict(),
+        )
+
+
+@dataclass
+class StepResponse:
+    """
+    步骤执行响应
+
+    SubAgent 执行步骤后返回的响应
+    """
+
+    request_id: str  # 对应的请求 ID
+    step_id: str  # 步骤标识
+    task_id: str  # 任务标识
+    success: bool  # 是否成功
+    output: str | None = None  # 输出内容
+    output_data: dict[str, Any] = field(default_factory=dict)  # 结构化输出
+    error: str | None = None  # 错误信息
+    requires_confirmation: bool = False  # 是否需要用户确认
+    suggested_next_step: str | None = None  # 建议的下一步
+    duration_seconds: float = 0.0  # 执行时长
+
+    def to_dict(self) -> dict:
+        """序列化为字典"""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "StepResponse":
+        """从字典反序列化"""
+        return cls(
+            request_id=data["request_id"],
+            step_id=data["step_id"],
+            task_id=data["task_id"],
+            success=data["success"],
+            output=data.get("output"),
+            output_data=data.get("output_data", {}),
+            error=data.get("error"),
+            requires_confirmation=data.get("requires_confirmation", False),
+            suggested_next_step=data.get("suggested_next_step"),
+            duration_seconds=data.get("duration_seconds", 0.0),
+        )
+
+    def to_agent_message(self, sender_id: str, target_id: str) -> AgentMessage:
+        """转换为 AgentMessage"""
+        return AgentMessage.response(
+            sender_id=sender_id,
+            target_id=target_id,
+            correlation_id=self.request_id,
+            payload=self.to_dict(),
+        )
+
+
+# ==================== 便捷函数 ====================
+
+
+def create_step_request(
+    step_id: str,
+    task_id: str,
+    message: str,
+    context: dict[str, Any] | None = None,
+    system_prompt_override: str | None = None,
+) -> StepRequest:
+    """创建步骤执行请求"""
+    return StepRequest(
+        request_id=str(uuid.uuid4()),
+        step_id=step_id,
+        task_id=task_id,
+        message=message,
+        context=context or {},
+        system_prompt_override=system_prompt_override,
+    )
+
+
+def create_step_response(
+    request_id: str,
+    step_id: str,
+    task_id: str,
+    success: bool,
+    output: str | None = None,
+    output_data: dict[str, Any] | None = None,
+    error: str | None = None,
+    requires_confirmation: bool = False,
+) -> StepResponse:
+    """创建步骤执行响应"""
+    return StepResponse(
+        request_id=request_id,
+        step_id=step_id,
+        task_id=task_id,
+        success=success,
+        output=output,
+        output_data=output_data or {},
+        error=error,
+        requires_confirmation=requires_confirmation,
     )

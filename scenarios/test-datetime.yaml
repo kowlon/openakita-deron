@@ -1,0 +1,47 @@
+# 单步骤时间查询测试场景
+# 验证 datetime-tool 技能集成
+
+schema_version: "1.0"
+
+scenario_id: "test-datetime"
+name: "时间查询测试"
+description: "测试 datetime-tool 技能的单步骤执行"
+category: "test"
+version: "1.0"
+
+trigger_patterns:
+  - type: regex
+    pattern: "(几点|时间|日期|星期)"
+    priority: 1
+  - type: keyword
+    keywords:
+      - "现在几点"
+      - "今天日期"
+      - "当前时间"
+    priority: 2
+
+steps:
+  - step_id: "get_time"
+    name: "获取时间"
+    description: "获取当前时间和日期信息"
+    output_key: "time_result"
+    skills:
+      - datetime-tool
+    system_prompt: |
+      用户询问时间相关的问题。
+
+      请获取当前时间信息，包括：
+      - 当前日期和时间
+      - 星期几
+      - 时区信息
+
+      以友好的方式回答用户。
+    requires_confirmation: false
+
+metadata:
+  author: "Test Suite"
+  created_at: "2026-03-05"
+  tags:
+    - test
+    - datetime
+    - single-step
