@@ -2,10 +2,12 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import type { Session, Step, ConversationTurn } from '@/types'
 import type { Artifact } from '@/types/artifact'
 import type { Plan } from '@/types/plan'
+import type { Task } from '@/types/task'
 import { StepTimeline } from '@/components/Step/StepTimeline'
 import { ElapsedTimer } from '@/components/Timer/ElapsedTimer'
 import { ArtifactList } from '@/components/Artifact/ArtifactList'
 import { PlanCard } from '@/components/Plan/PlanCard'
+import { TaskCard } from '@/components/Task/TaskCard'
 
 type AskUserQuestion = {
   question?: string;
@@ -32,6 +34,10 @@ type MainContentProps = {
   artifacts?: Artifact[]  // Current turn artifacts
   askUserQuestion?: AskUserQuestion
   activePlan?: Plan | null  // Active plan for Plan mode
+  activeTask?: Task | null  // Active task for multi-task orchestration
+  onTaskConfirm?: (stepId: string) => void
+  onTaskCancel?: () => void
+  onTaskSwitchStep?: (stepId: string) => void
 }
 
 /**
@@ -131,6 +137,10 @@ export function MainContent({
   artifacts = [],
   askUserQuestion,
   activePlan = null,
+  activeTask = null,
+  onTaskConfirm,
+  onTaskCancel,
+  onTaskSwitchStep,
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -324,6 +334,18 @@ export function MainContent({
                 {activePlan && (
                   <div className="mt-3">
                     <PlanCard plan={activePlan} />
+                  </div>
+                )}
+
+                {/* Task Card - show if there's an active task */}
+                {activeTask && (
+                  <div className="mt-3">
+                    <TaskCard
+                      task={activeTask}
+                      onConfirm={onTaskConfirm}
+                      onCancel={onTaskCancel}
+                      onSwitchStep={onTaskSwitchStep}
+                    />
                   </div>
                 )}
 

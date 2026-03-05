@@ -4,13 +4,14 @@
 
 export type TaskStatus = 'pending' | 'running' | 'waiting_user' | 'completed' | 'cancelled' | 'failed'
 
-export type StepStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'failed'
+// Note: Using a different name to avoid conflict with StepStatus from ./step.ts
+export type TaskStepStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'skipped' | 'failed'
 
 export interface TaskStep {
   step_id: string
   name: string
   description?: string
-  status: StepStatus
+  status: TaskStepStatus
   output?: Record<string, unknown>
   error?: string
   requires_confirmation: boolean

@@ -4,6 +4,7 @@ import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
+import { useTasks } from './hooks/useOrchestration'
 import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
 
@@ -116,6 +117,19 @@ function App() {
     askUserQuestion,
     activePlan,
   } = useChat(currentSessionId)
+
+  // Task orchestration hook
+  const {
+    tasks,
+    cancelTask,
+    confirmStep,
+  } = useTasks()
+
+  // Get the active task for the current session
+  const activeTask = useMemo(() => {
+    if (!currentSessionId) return null
+    return tasks.find(t => t.status === 'running' || t.status === 'waiting_user') || null
+  }, [tasks, currentSessionId])
 
   // Track timing when messageSendTime or firstTokenTime changes
   useEffect(() => {
@@ -478,6 +492,17 @@ function App() {
           artifacts={artifacts}
           askUserQuestion={askUserQuestion}
           activePlan={activePlan}
+          activeTask={activeTask}
+          onTaskConfirm={(stepId) => {
+            if (activeTask) {
+              confirmStep(activeTask.task_id, { step_id: stepId })
+            }
+          }}
+          onTaskCancel={() => {
+            if (activeTask) {
+              cancelTask(activeTask.task_id)
+            }
+          }}
         />
       }
       detailPanel={selectedStep ? (
