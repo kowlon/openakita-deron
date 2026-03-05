@@ -20,6 +20,10 @@ class MockTaskOrchestrator:
         self.scenario_registry = MockScenarioRegistry()
 
     async def create_task_manual(self, scenario_id: str, session_id: str = None, context: dict = None):
+        # Check if scenario exists
+        if not self.scenario_registry.get(scenario_id):
+            return None
+
         self._task_counter += 1
         task_id = f"task-{self._task_counter:03d}"
         from openakita.orchestration.models import TaskState, TaskStatus
@@ -150,6 +154,12 @@ class MockScenarioRegistry:
 
     def list_all(self):
         return self._scenarios
+
+    def list_by_category(self, category: str):
+        return [s for s in self._scenarios if s.category == category]
+
+    def list_categories(self):
+        return list(set(s.category for s in self._scenarios))
 
 
 @pytest.fixture
@@ -386,11 +396,37 @@ class TestScenarioAPI:
         assert response.status_code == 200
         data = response.json()
         assert "scenarios" in data
+        assert "total" in data
+        assert data["total"] >= 2  # Mock has 2 scenarios
+
+    def test_list_scenarios_with_category_filter(self, client):
+        """Test listing scenarios filtered by category"""
+        response = client.get("/api/scenarios?category=test")
+        assert response.status_code == 200
+        data = response.json()
+        assert "scenarios" in data
+        # All returned scenarios should have category "test"
+        for scenario in data["scenarios"]:
+            assert scenario["category"] == "test"
+
+    def test_list_categories(self, client):
+        """Test listing all categories"""
+        response = client.get("/api/scenarios/categories")
+        assert response.status_code == 200
+        data = response.json()
+        assert "categories" in data
+        assert "test" in data["categories"]
+        assert "development" in data["categories"]
 
     def test_get_scenario(self, client):
         """Test getting a specific scenario"""
         response = client.get("/api/scenarios/test-scenario")
-        # Note: This depends on the mock having the scenario
+        assert response.status_code == 200
+        data = response.json()
+        assert data["scenario_id"] == "test-scenario"
+        assert data["name"] == "Test Scenario"
+        assert "steps" in data
+        assert "category" in data
 
     def test_get_scenario_not_found(self, client):
         """Test getting a non-existent scenario"""
@@ -403,7 +439,47 @@ class TestScenarioAPI:
             "/api/scenarios/test-scenario/start",
             json={"session_id": "test-session"},
         )
-        # Note: Response depends on mock implementation
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
+        assert data["scenario_id"] == "test-scenario"
+        assert "status" in data
+
+    def test_start_scenario_with_context(self, client):
+        """Test starting a scenario with initial context"""
+        response = client.post(
+            "/api/scenarios/test-scenario/start",
+            json={
+                "session_id": "test-session",
+                "context": {"key": "value"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
+
+    def test_start_scenario_not_found(self, client):
+        """Test starting a non-existent scenario"""
+        response = client.post(
+            "/api/scenarios/nonexistent/start",
+            json={},
+        )
+        assert response.status_code == 404
+
+    def test_scenario_response_format(self, client):
+        """Test scenario response format"""
+        response = client.get("/api/scenarios/test-scenario")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify expected fields
+        assert "scenario_id" in data
+        assert "name" in data
+        assert "description" in data
+        assert "category" in data
+        assert "version" in data
+        assert "steps" in data
+        assert "metadata" in data
 
 
 class TestAPIErrorHandling:
