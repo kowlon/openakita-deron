@@ -4,7 +4,7 @@ import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { useChat } from './hooks/useChat'
-import { useTasks } from './hooks/useOrchestration'
+import { useTasks, useScenarios } from './hooks/useOrchestration'
 import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
 
@@ -124,6 +124,12 @@ function App() {
     cancelTask,
     confirmStep,
   } = useTasks()
+
+  // Scenarios hook
+  const {
+    scenarios,
+    startScenario,
+  } = useScenarios()
 
   // Get the active task for the current session
   const activeTask = useMemo(() => {
@@ -475,6 +481,10 @@ function App() {
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onSearchChange={setSearchQuery}
+          scenarios={scenarios}
+          onStartScenario={(scenarioId) => {
+            startScenario(scenarioId, currentSessionId || undefined)
+          }}
         />
       }
       mainContent={
