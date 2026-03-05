@@ -73,18 +73,32 @@ export function useTasks() {
           body: JSON.stringify(request),
         })
         if (!response.ok) throw new Error('Failed to confirm step')
+        // Refresh tasks after confirmation
+        fetchTasks()
         return true
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
         return false
       }
     },
-    []
+    [fetchTasks]
   )
 
+  // Initial fetch
   useEffect(() => {
     fetchTasks()
   }, [fetchTasks])
+
+  // Poll for active task updates
+  useEffect(() => {
+    const hasActiveTask = tasks.some(
+      (t) => t.status === 'running' || t.status === 'waiting_user'
+    )
+    if (!hasActiveTask) return
+
+    const interval = setInterval(fetchTasks, 3000)
+    return () => clearInterval(interval)
+  }, [tasks, fetchTasks])
 
   return {
     tasks,
