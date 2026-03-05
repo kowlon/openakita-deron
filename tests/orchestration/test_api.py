@@ -346,6 +346,88 @@ class TestTaskAPI:
         response = client.get("/api/tasks/nonexistent/context")
         assert response.status_code == 404
 
+    def test_context_data_integrity(self, client):
+        """Test context data integrity after multiple operations"""
+        # Create task with initial context
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "scenario_id": "test-scenario",
+                "context": {
+                    "initial_key": "initial_value",
+                    "nested": {"key": "value"},
+                    "list_data": [1, 2, 3],
+                },
+            },
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Get context and verify all data
+        context_response = client.get(f"/api/tasks/{task_id}/context")
+        assert context_response.status_code == 200
+        data = context_response.json()
+        context = data["context"]
+
+        assert context["initial_key"] == "initial_value"
+        assert context["nested"]["key"] == "value"
+        assert context["list_data"] == [1, 2, 3]
+
+    def test_context_with_special_characters(self, client):
+        """Test context with special characters and unicode"""
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "scenario_id": "test-scenario",
+                "context": {
+                    "unicode": "你好世界",
+                    "emoji": "🎉🚀",
+                    "special": "quote\"backslash\\newline\n",
+                },
+            },
+        )
+        task_id = create_response.json()["task_id"]
+
+        context_response = client.get(f"/api/tasks/{task_id}/context")
+        assert context_response.status_code == 200
+        context = context_response.json()["context"]
+
+        assert context["unicode"] == "你好世界"
+        assert context["emoji"] == "🎉🚀"
+        assert "quote" in context["special"]
+
+    def test_empty_context(self, client):
+        """Test task with empty context"""
+        create_response = client.post(
+            "/api/tasks",
+            json={"scenario_id": "test-scenario"},
+        )
+        task_id = create_response.json()["task_id"]
+
+        context_response = client.get(f"/api/tasks/{task_id}/context")
+        assert context_response.status_code == 200
+        context = context_response.json()["context"]
+        assert context == {}
+
+    def test_context_preserved_after_operations(self, client):
+        """Test context preserved after step operations"""
+        # Create task with context
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "scenario_id": "test-scenario",
+                "context": {"preserved": "value"},
+            },
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Perform switch step operation
+        client.post(f"/api/tasks/{task_id}/switch", json={"step_id": "step-1"})
+
+        # Context should still be accessible
+        context_response = client.get(f"/api/tasks/{task_id}/context")
+        assert context_response.status_code == 200
+        assert context_response.json()["context"]["preserved"] == "value"
+
     def test_get_task_detail(self, client):
         """Test getting task detail"""
         # First create a task
