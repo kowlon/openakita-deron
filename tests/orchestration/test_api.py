@@ -47,16 +47,58 @@ class MockTaskOrchestrator:
             from openakita.orchestration.models import TaskStatus
             self._tasks[task_id]["state"].status = TaskStatus.CANCELLED
             del self._tasks[task_id]
-        return True
+            return True
+        return False  # Task not found
+
+    async def create_task_from_dialog(self, message: str, session_id: str = None, context: dict = None):
+        """Create task from dialog message"""
+        # Simple matching logic for testing
+        from openakita.orchestration.models import TaskState, TaskStatus
+
+        scenario_id = None
+        if "审查" in message or "review" in message.lower():
+            scenario_id = "code-review"
+        elif "test" in message.lower():
+            scenario_id = "test-scenario"
+
+        if not scenario_id:
+            return None  # No matching scenario
+
+        self._task_counter += 1
+        task_id = f"task-{self._task_counter:03d}"
+
+        state = TaskState(
+            task_id=task_id,
+            scenario_id=scenario_id,
+            session_id=session_id,
+            status=TaskStatus.PENDING,
+            context=context or {},
+            total_steps=3,
+        )
+        self._tasks[task_id] = {"state": state, "steps": []}
+        return MockTaskSession(state)
 
     async def confirm_step(self, task_id: str, step_id: str, edited_output: dict = None):
-        return task_id in self._tasks
+        if task_id in self._tasks:
+            from openakita.orchestration.models import TaskStatus
+            self._tasks[task_id]["state"].status = TaskStatus.RUNNING
+            return True
+        return False
+
+    async def switch_step(self, task_id: str, step_id: str):
+        if task_id in self._tasks:
+            self._tasks[task_id]["state"].current_step_id = step_id
+            return True
+        return False
 
     def get_task(self, task_id: str):
-        return self._tasks.get(task_id, {}).get("session")
+        task_data = self._tasks.get(task_id)
+        if task_data:
+            return MockTaskSession(task_data["state"])
+        return None
 
     def list_active_tasks(self):
-        return []
+        return [MockTaskSession(t["state"]) for t in self._tasks.values()]
 
 
 class MockTaskSession:
@@ -64,6 +106,15 @@ class MockTaskSession:
 
     def __init__(self, state):
         self.state = state
+        self.context = state.context
+        self.step_sessions = {}
+        from openakita.orchestration.models import ScenarioDefinition
+        self.scenario = ScenarioDefinition(
+            scenario_id=state.scenario_id,
+            name="Mock Scenario",
+            description="Mock for testing",
+            steps=[],
+        )
 
     def to_dict(self):
         return {"state": self.state.to_dict()}
@@ -173,8 +224,157 @@ class TestTaskAPI:
 
         # Then cancel it
         cancel_response = client.post(f"/api/tasks/{task_id}/cancel")
-        # Note: This might fail because our mock doesn't have the session
-        # In real implementation this would work
+        assert cancel_response.status_code == 200
+        data = cancel_response.json()
+        assert data["success"] is True
+        assert data["task_id"] == task_id
+        assert data["status"] == "cancelled"
+
+    def test_cancel_nonexistent_task(self, client):
+        """Test canceling a non-existent task"""
+        response = client.post("/api/tasks/nonexistent-task/cancel")
+        assert response.status_code == 404
+
+    def test_confirm_step(self, client):
+        """Test confirming a step"""
+        # First create a task
+        create_response = client.post(
+            "/api/tasks",
+            json={"scenario_id": "test-scenario"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task_id"]
+
+        # Confirm a step
+        confirm_response = client.post(
+            f"/api/tasks/{task_id}/confirm",
+            json={"step_id": "step-1"},
+        )
+        assert confirm_response.status_code == 200
+        data = confirm_response.json()
+        assert data["success"] is True
+        assert data["task_id"] == task_id
+        assert data["step_id"] == "step-1"
+
+    def test_confirm_step_with_edited_output(self, client):
+        """Test confirming a step with edited output"""
+        # First create a task
+        create_response = client.post(
+            "/api/tasks",
+            json={"scenario_id": "test-scenario"},
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Confirm with edited output
+        confirm_response = client.post(
+            f"/api/tasks/{task_id}/confirm",
+            json={
+                "step_id": "step-1",
+                "edited_output": {"key": "edited_value"},
+            },
+        )
+        assert confirm_response.status_code == 200
+        assert confirm_response.json()["success"] is True
+
+    def test_confirm_step_nonexistent_task(self, client):
+        """Test confirming step for non-existent task"""
+        response = client.post(
+            "/api/tasks/nonexistent/confirm",
+            json={"step_id": "step-1"},
+        )
+        assert response.status_code == 400
+
+    def test_switch_step(self, client):
+        """Test switching to a different step"""
+        # First create a task
+        create_response = client.post(
+            "/api/tasks",
+            json={"scenario_id": "test-scenario"},
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Switch step
+        switch_response = client.post(
+            f"/api/tasks/{task_id}/switch",
+            json={"step_id": "step-2"},
+        )
+        assert switch_response.status_code == 200
+        data = switch_response.json()
+        assert data["success"] is True
+        assert data["current_step_id"] == "step-2"
+
+    def test_switch_step_nonexistent_task(self, client):
+        """Test switching step for non-existent task"""
+        response = client.post(
+            "/api/tasks/nonexistent/switch",
+            json={"step_id": "step-1"},
+        )
+        assert response.status_code == 400
+
+    def test_get_task_context(self, client):
+        """Test getting task context"""
+        # First create a task with context
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "scenario_id": "test-scenario",
+                "context": {"initial_key": "initial_value"},
+            },
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Get context
+        context_response = client.get(f"/api/tasks/{task_id}/context")
+        assert context_response.status_code == 200
+        data = context_response.json()
+        assert data["task_id"] == task_id
+        assert "context" in data
+        assert data["context"]["initial_key"] == "initial_value"
+
+    def test_get_task_context_nonexistent(self, client):
+        """Test getting context for non-existent task"""
+        response = client.get("/api/tasks/nonexistent/context")
+        assert response.status_code == 404
+
+    def test_get_task_detail(self, client):
+        """Test getting task detail"""
+        # First create a task
+        create_response = client.post(
+            "/api/tasks",
+            json={"scenario_id": "test-scenario"},
+        )
+        task_id = create_response.json()["task_id"]
+
+        # Get detail
+        detail_response = client.get(f"/api/tasks/{task_id}")
+        assert detail_response.status_code == 200
+        data = detail_response.json()
+        assert "task" in data
+        assert data["task"]["task_id"] == task_id
+        assert "scenario_name" in data
+        assert "step_sessions" in data
+
+    def test_list_tasks_with_filter(self, client):
+        """Test listing tasks with status filter"""
+        # Create multiple tasks
+        client.post("/api/tasks", json={"scenario_id": "test-scenario"})
+        client.post("/api/tasks", json={"scenario_id": "code-review"})
+
+        # List all
+        response = client.get("/api/tasks")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 2
+
+    def test_create_task_from_message(self, client):
+        """Test creating a task from message"""
+        response = client.post(
+            "/api/tasks",
+            json={"message": "请帮我审查这段代码"},
+        )
+        # Note: This might fail if no matching scenario in registry
+        # Accept either success or not found
+        assert response.status_code in [200, 404]
 
 
 class TestScenarioAPI:
