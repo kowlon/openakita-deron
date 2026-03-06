@@ -69,6 +69,11 @@ from .models import (
 )
 from .monitor import AgentMonitor
 from .registry import AgentRegistry
+from .payload import (
+    PayloadAssembler,
+    PayloadAssemblerConfig,
+    assemble_payload,
+)
 from .session_tasks import RouteResult, SessionTasks as SessionTasksManager
 from .storage import TaskStorage, get_task_storage, close_task_storage
 from .subagent_worker import (
@@ -156,4 +161,8 @@ __all__ = [
     "StepResult",
     "ArtifactReference",
     "WorkerPool",
+    # Payload Assembler
+    "PayloadAssembler",
+    "PayloadAssemblerConfig",
+    "assemble_payload",
 ]
