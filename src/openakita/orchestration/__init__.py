@@ -71,6 +71,13 @@ from .monitor import AgentMonitor
 from .registry import AgentRegistry
 from .session_tasks import RouteResult, SessionTasks as SessionTasksManager
 from .storage import TaskStorage, get_task_storage, close_task_storage
+from .subagent_worker import (
+    ArtifactReference,
+    StepResult,
+    SubAgentPayload,
+    SubAgentWorker,
+    WorkerPool,
+)
 from .task_orchestrator import (
     RouteDecision,
     RouteOutput,
@@ -143,4 +150,10 @@ __all__ = [
     "EventType",
     "TransportError",
     "TransportTimeoutError",
+    # SubAgent Worker
+    "SubAgentWorker",
+    "SubAgentPayload",
+    "StepResult",
+    "ArtifactReference",
+    "WorkerPool",
 ]
