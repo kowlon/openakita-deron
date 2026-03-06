@@ -211,3 +211,4 @@ webapps/seeagent-webui/playwright-report
 webapps/seeagent-webui/package-lock.json
 .pids
 .playwright-mcp
+.acoder/
