@@ -378,3 +378,346 @@ class TargetNotFoundError(TransportError):
     """目标不存在错误"""
 
     pass
+
+
+# ==================== MemoryTransport 实现 ====================
+
+
+import asyncio
+import logging
+from typing import TypeVar
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+class _MessageWrapper:
+    """消息包装器，用于区分消息类型"""
+
+    def __init__(self, message: Command | Response):
+        self.message = message
+        self.is_response = isinstance(message, Response)
+        self.is_command = isinstance(message, Command)
+
+
+class MemoryTransport(AgentTransport):
+    """
+    进程内通信传输实现
+
+    使用 asyncio.Queue 实现消息传递，具有零拷贝、无序列化开销的优势。
+    适用于单机部署场景。
+
+    特性:
+    - 零拷贝：Python 对象引用传递
+    - 无序列化：避免 JSON/Pickle 开销
+    - 支持请求-响应配对
+    - 支持事件广播
+    """
+
+    def __init__(self, transport_id: str = "main"):
+        """
+        初始化 MemoryTransport
+
+        Args:
+            transport_id: 传输层唯一标识
+        """
+        self.transport_id = transport_id
+
+        # 运行状态
+        self._running = False
+
+        # 每个 target 的消息队列
+        self._queues: dict[str, asyncio.Queue] = {}
+
+        # 等待响应的 Future
+        self._pending_responses: dict[str, asyncio.Future] = {}
+
+        # 事件订阅
+        self._subscriptions: dict[str, list[Callable[[Event], Awaitable[None]]]] = {}
+
+        # 命令处理器
+        self._command_handlers: dict[str, Callable[[Command], Awaitable[Response]]] = {}
+
+        # 消息处理任务
+        self._receive_tasks: dict[str, asyncio.Task] = {}
+
+    async def start(self) -> None:
+        """启动传输层"""
+        if self._running:
+            return
+
+        self._running = True
+        logger.info(f"MemoryTransport started: {self.transport_id}")
+
+    async def stop(self) -> None:
+        """停止传输层"""
+        if not self._running:
+            return
+
+        self._running = False
+
+        # 取消所有接收任务
+        for task in self._receive_tasks.values():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        # 清空队列
+        self._queues.clear()
+        self._receive_tasks.clear()
+
+        # 取消所有等待中的响应
+        for future in self._pending_responses.values():
+            if not future.done():
+                future.cancel()
+        self._pending_responses.clear()
+
+        # 清空订阅
+        self._subscriptions.clear()
+
+        logger.info(f"MemoryTransport stopped: {self.transport_id}")
+
+    def register_target(self, target_id: str) -> asyncio.Queue:
+        """
+        注册目标
+
+        为目标创建消息队列，目标可以通过队列接收消息。
+
+        Args:
+            target_id: 目标 ID
+
+        Returns:
+            目标的消息队列
+        """
+        if target_id not in self._queues:
+            self._queues[target_id] = asyncio.Queue()
+            # 启动接收任务
+            if self._running:
+                self._receive_tasks[target_id] = asyncio.create_task(
+                    self._receive_loop(target_id)
+                )
+        return self._queues[target_id]
+
+    def unregister_target(self, target_id: str) -> None:
+        """
+        注销目标
+
+        Args:
+            target_id: 目标 ID
+        """
+        if target_id in self._queues:
+            del self._queues[target_id]
+
+        if target_id in self._receive_tasks:
+            self._receive_tasks[target_id].cancel()
+            del self._receive_tasks[target_id]
+
+    async def send_command(
+        self,
+        target: str,
+        command: Command,
+        wait_response: bool = True,
+        timeout: float | None = None,
+    ) -> Response | None:
+        """
+        发送命令
+
+        Args:
+            target: 目标 ID
+            command: 命令对象
+            wait_response: 是否等待响应
+            timeout: 超时时间（秒）
+
+        Returns:
+            响应对象（如果 wait_response=True）
+
+        Raises:
+            TransportNotStartedError: 传输层未启动
+            TargetNotFoundError: 目标不存在
+            TransportTimeoutError: 超时
+        """
+        if not self._running:
+            raise TransportNotStartedError("Transport not started")
+
+        # 确保目标存在
+        if target not in self._queues:
+            raise TargetNotFoundError(f"Target not found: {target}")
+
+        # 发送命令
+        await self._queues[target].put(command)
+        logger.debug(f"Command sent: {command.command_id} -> {target}")
+
+        if not wait_response:
+            return None
+
+        # 创建 Future 等待响应
+        future: asyncio.Future[Response] = asyncio.get_event_loop().create_future()
+        self._pending_responses[command.command_id] = future
+
+        try:
+            timeout_val = timeout if timeout is not None else command.timeout
+            response = await asyncio.wait_for(future, timeout=timeout_val)
+            return response
+        except asyncio.TimeoutError:
+            logger.warning(f"Command timeout: {command.command_id}")
+            raise TransportTimeoutError(f"Command timeout: {command.command_id}")
+        finally:
+            self._pending_responses.pop(command.command_id, None)
+
+    async def send_response(self, response: Response, target: str) -> None:
+        """
+        发送响应
+
+        Args:
+            response: 响应对象
+            target: 目标 ID
+        """
+        if not self._running:
+            raise TransportNotStartedError("Transport not started")
+
+        # 检查是否有等待这个响应的 Future
+        future = self._pending_responses.get(response.command_id)
+        if future and not future.done():
+            future.set_result(response)
+            logger.debug(f"Response delivered: {response.response_id}")
+        else:
+            # 如果没有等待的 Future，发送到目标队列
+            if target in self._queues:
+                await self._queues[target].put(response)
+
+    async def publish_event(self, event: Event) -> None:
+        """
+        发布事件
+
+        将事件广播给所有匹配主题的订阅者。
+
+        Args:
+            event: 事件对象
+        """
+        if not self._running:
+            raise TransportNotStartedError("Transport not started")
+
+        topic = event.topic or event.event_type
+        handlers = self._subscriptions.get(topic, [])
+
+        logger.debug(f"Publishing event: {event.event_id} to {len(handlers)} handlers")
+
+        # 并发调用所有处理器
+        for handler in handlers:
+            try:
+                await handler(event)
+            except Exception as e:
+                logger.error(f"Event handler error: {e}")
+
+    async def subscribe(
+        self,
+        topic: str,
+        handler: Callable[[Event], Awaitable[None]],
+    ) -> None:
+        """
+        订阅主题
+
+        Args:
+            topic: 主题名称
+            handler: 异步事件处理函数
+        """
+        if topic not in self._subscriptions:
+            self._subscriptions[topic] = []
+        self._subscriptions[topic].append(handler)
+        logger.debug(f"Subscribed to topic: {topic}")
+
+    async def unsubscribe(self, topic: str) -> None:
+        """
+        取消订阅
+
+        Args:
+            topic: 主题名称
+        """
+        self._subscriptions.pop(topic, None)
+        logger.debug(f"Unsubscribed from topic: {topic}")
+
+    def register_command_handler(
+        self,
+        command_type: str,
+        handler: Callable[[Command], Awaitable[Response]],
+    ) -> None:
+        """
+        注册命令处理器
+
+        Args:
+            command_type: 命令类型
+            handler: 异步命令处理函数
+        """
+        self._command_handlers[command_type] = handler
+        logger.debug(f"Registered command handler: {command_type}")
+
+    def unregister_command_handler(self, command_type: str) -> None:
+        """
+        注销命令处理器
+
+        Args:
+            command_type: 命令类型
+        """
+        self._command_handlers.pop(command_type, None)
+
+    async def _receive_loop(self, target_id: str) -> None:
+        """消息接收循环"""
+        queue = self._queues.get(target_id)
+        if not queue:
+            return
+
+        while self._running:
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=0.1)
+
+                if isinstance(message, Command):
+                    await self._handle_command(message)
+                elif isinstance(message, Response):
+                    await self._handle_response(message)
+
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Receive loop error: {e}")
+
+    async def _handle_command(self, command: Command) -> None:
+        """处理收到的命令"""
+        handler = self._command_handlers.get(command.command_type)
+        if handler:
+            try:
+                response = await handler(command)
+                # 发送响应
+                future = self._pending_responses.get(command.command_id)
+                if future and not future.done():
+                    future.set_result(response)
+            except Exception as e:
+                logger.error(f"Command handler error: {e}")
+                # 发送错误响应
+                response = Response.error_response(command.command_id, str(e))
+                future = self._pending_responses.get(command.command_id)
+                if future and not future.done():
+                    future.set_result(response)
+        else:
+            logger.warning(f"No handler for command type: {command.command_type}")
+
+    async def _handle_response(self, response: Response) -> None:
+        """处理收到的响应"""
+        future = self._pending_responses.get(response.command_id)
+        if future and not future.done():
+            future.set_result(response)
+
+    def get_stats(self) -> dict:
+        """获取统计信息"""
+        return {
+            "transport_id": self.transport_id,
+            "running": self._running,
+            "targets": list(self._queues.keys()),
+            "pending_responses": len(self._pending_responses),
+            "subscriptions": list(self._subscriptions.keys()),
+            "command_handlers": list(self._command_handlers.keys()),
+        }
