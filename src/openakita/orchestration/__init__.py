@@ -56,6 +56,17 @@ from .messages import (
     CommandType,
     MessageType,
 )
+from .models import (
+    BestPracticeConfig,
+    OrchestrationTask,
+    SessionTasks,
+    StepStatus,
+    StepTemplate,
+    SubAgentConfig,
+    TaskStatus,
+    TaskStep,
+    TriggerType,
+)
 from .monitor import AgentMonitor
 from .registry import AgentRegistry
 from .worker import WorkerAgent
@@ -78,4 +89,14 @@ __all__ = [
     "HandoffAgent",
     "HandoffTarget",
     "HandoffOrchestrator",
+    # 任务编排模型
+    "TaskStatus",
+    "StepStatus",
+    "TriggerType",
+    "SubAgentConfig",
+    "StepTemplate",
+    "BestPracticeConfig",
+    "TaskStep",
+    "OrchestrationTask",
+    "SessionTasks",
 ]
