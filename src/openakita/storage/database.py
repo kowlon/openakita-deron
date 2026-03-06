@@ -36,6 +36,9 @@ class Database:
         self._connection = await aiosqlite.connect(self.db_path)
         self._connection.row_factory = aiosqlite.Row
 
+        # 启用外键约束
+        await self._connection.execute("PRAGMA foreign_keys = ON")
+
         await self._init_tables()
 
         logger.info(f"Database connected: {self.db_path}")
@@ -222,6 +225,44 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session_id);
             CREATE INDEX IF NOT EXISTS idx_token_usage_endpoint ON token_usage(endpoint_name);
             CREATE INDEX IF NOT EXISTS idx_token_usage_op ON token_usage(operation_type);
+
+            -- ========== 任务编排表 (v0.6.0) ==========
+
+            -- 编排任务表
+            CREATE TABLE IF NOT EXISTS orchestration_tasks (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                template_id TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                name TEXT,
+                context_json TEXT DEFAULT '{}',
+                meta_json TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+
+            -- 编排步骤表
+            CREATE TABLE IF NOT EXISTS orchestration_steps (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                step_index INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                io_json TEXT DEFAULT '{}',
+                config_json TEXT DEFAULT '{}',
+                user_feedback TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                FOREIGN KEY (task_id) REFERENCES orchestration_tasks(id) ON DELETE CASCADE
+            );
+
+            -- 任务编排索引
+            CREATE INDEX IF NOT EXISTS idx_orchestration_tasks_session ON orchestration_tasks(session_id);
+            CREATE INDEX IF NOT EXISTS idx_orchestration_tasks_status ON orchestration_tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_orchestration_steps_task ON orchestration_steps(task_id);
+            CREATE INDEX IF NOT EXISTS idx_orchestration_steps_status ON orchestration_steps(status);
         """)
         await self._connection.commit()
 
