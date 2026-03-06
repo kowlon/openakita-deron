@@ -1,0 +1,89 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - complementary [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - heading "hub SeeAgent" [level=1] [ref=e8]:
+            - generic [ref=e9]: hub
+            - text: SeeAgent
+          - paragraph [ref=e10]: AI Orchestrator
+        - button "add New Chat" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: add
+          - generic [ref=e13]: New Chat
+        - generic [ref=e15]:
+          - generic [ref=e16]: search
+          - textbox "Search sessions..." [active] [ref=e17]: 数据处理流水线
+      - generic [ref=e18]:
+        - button "auto_awesome Best Practices expand_less" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]:
+            - generic [ref=e21]: auto_awesome
+            - generic [ref=e22]: Best Practices
+          - generic [ref=e23]: expand_less
+        - generic [ref=e24]:
+          - button "science 编辑流程测试 3 steps" [ref=e25] [cursor=pointer]:
+            - generic [ref=e26]: science
+            - generic [ref=e27]:
+              - generic [ref=e28]: 编辑流程测试
+              - generic [ref=e29]: 3 steps
+          - button "science 用户确认测试 3 steps" [ref=e30] [cursor=pointer]:
+            - generic [ref=e31]: science
+            - generic [ref=e32]:
+              - generic [ref=e33]: 用户确认测试
+              - generic [ref=e34]: 3 steps
+          - button "science Demo 技能流程测试 4 steps" [ref=e35] [cursor=pointer]:
+            - generic [ref=e36]: science
+            - generic [ref=e37]:
+              - generic [ref=e38]: Demo 技能流程测试
+              - generic [ref=e39]: 4 steps
+          - button "auto_awesome 数据处理流水线 4 steps" [ref=e40] [cursor=pointer]:
+            - generic [ref=e41]: auto_awesome
+            - generic [ref=e42]:
+              - generic [ref=e43]: 数据处理流水线
+              - generic [ref=e44]: 4 steps
+          - button "science 上下文传递测试 2 steps" [ref=e45] [cursor=pointer]:
+            - generic [ref=e46]: science
+            - generic [ref=e47]:
+              - generic [ref=e48]: 上下文传递测试
+              - generic [ref=e49]: 2 steps
+          - generic [ref=e50]: +4 more
+      - generic [ref=e51]: No sessions found
+      - generic [ref=e53] [cursor=pointer]:
+        - generic [ref=e54]: settings
+        - generic [ref=e55]: Settings
+  - main [ref=e56]:
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e61]: smart_toy
+        - heading "OpenAkita Agent" [level=1] [ref=e62]
+        - paragraph [ref=e63]: 智能助手，帮你完成复杂任务
+      - generic [ref=e64]:
+        - button "search 网络搜索 搜索最新信息" [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: search
+          - generic [ref=e67]:
+            - generic [ref=e68]: 网络搜索
+            - generic [ref=e69]: 搜索最新信息
+        - button "description 文档处理 生成 PDF、Word 等" [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: description
+          - generic [ref=e72]:
+            - generic [ref=e73]: 文档处理
+            - generic [ref=e74]: 生成 PDF、Word 等
+        - button "code 代码助手 编写、调试代码" [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]: code
+          - generic [ref=e77]:
+            - generic [ref=e78]: 代码助手
+            - generic [ref=e79]: 编写、调试代码
+        - button "analytics 数据分析 分析和可视化数据" [ref=e80] [cursor=pointer]:
+          - generic [ref=e81]: analytics
+          - generic [ref=e82]:
+            - generic [ref=e83]: 数据分析
+            - generic [ref=e84]: 分析和可视化数据
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - textbox "输入你的问题或任务..." [ref=e87]
+          - button "arrow_upward" [disabled] [ref=e88]:
+            - generic [ref=e89]: arrow_upward
+        - paragraph [ref=e90]: 按 Enter 发送，Shift + Enter 换行
+```

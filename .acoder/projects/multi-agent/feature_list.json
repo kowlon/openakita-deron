@@ -33,8 +33,8 @@
       "description": "将 TaskCard 组件集成到主对话界面中，在检测到场景匹配或活跃任务时显示任务卡片。需要修改主聊天组件。",
       "phase": "Phase 9: 前端集成",
       "priority": "high",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:21:10"
     },
     {
       "id": "FE-002",
@@ -42,8 +42,8 @@
       "description": "完善 StepOutputEditor 组件，支持用户编辑步骤输出并保存。实现编辑模式切换、保存功能、Markdown 渲染。",
       "phase": "Phase 9: 前端集成",
       "priority": "high",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:25:30"
     },
     {
       "id": "FE-003",
@@ -51,8 +51,8 @@
       "description": "在左侧边栏添加最佳实践列表入口，显示可用场景并支持快速启动。实现 ScenarioList 组件集成到现有布局中。",
       "phase": "Phase 9: 前端集成",
       "priority": "medium",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:30:01"
     },
     {
       "id": "FE-004",
@@ -60,8 +60,8 @@
       "description": "使用 useTaskPolling hook 实现任务状态的实时更新，确保前端显示与后端状态同步。",
       "phase": "Phase 9: 前端集成",
       "priority": "medium",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:33:14"
     },
     {
       "id": "TEST-001",
@@ -69,8 +69,8 @@
       "description": "为核心模块编写单元测试：models.py, task_session.py, task_orchestrator.py, scenario_registry.py。使用 pytest 框架。",
       "phase": "Phase 10: 测试验证",
       "priority": "high",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:44:43"
     },
     {
       "id": "TEST-002",
@@ -78,8 +78,8 @@
       "description": "编写端到端集成测试，验证完整任务流程：场景匹配 -> 任务创建 -> 步骤执行 -> 上下文传递 -> 任务完成。",
       "phase": "Phase 10: 测试验证",
       "priority": "high",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:48:31"
     },
     {
       "id": "TEST-003",
@@ -87,8 +87,8 @@
       "description": "使用现有的 6 个场景配置进行手动测试，验证 SubAgent 创建、执行和销毁流程。",
       "phase": "Phase 10: 测试验证",
       "priority": "medium",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 20:49:41"
     },
     {
       "id": "TEST-004",
@@ -96,8 +96,8 @@
       "description": "测试所有 API 端点：POST /api/tasks, GET /api/tasks, GET /api/tasks/{id}, POST /api/tasks/{id}/cancel 等。",
       "phase": "Phase 10: 测试验证",
       "priority": "medium",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 21:01:33"
     },
     {
       "id": "DOC-001",
@@ -105,8 +105,8 @@
       "description": "为新添加的 API 端点编写文档，包括请求/响应格式、错误码说明。",
       "phase": "Phase 11: 文档",
       "priority": "low",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 21:05:14"
     },
     {
       "id": "DOC-002",
@@ -114,8 +114,8 @@
       "description": "更新项目 README，添加多任务编排功能的使用说明和示例。",
       "phase": "Phase 11: 文档",
       "priority": "low",
-      "passes": false,
-      "completed_at": null
+      "passes": true,
+      "completed_at": "2026-03-05 21:05:14"
     }
   ],
   "implementation_order": [

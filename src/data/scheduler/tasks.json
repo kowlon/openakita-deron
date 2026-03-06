@@ -1,0 +1,56 @@
+[
+  {
+    "id": "system_daily_memory",
+    "name": "每日记忆整理",
+    "description": "整理当天对话，提取记忆，刷新 MEMORY.md",
+    "trigger_type": "cron",
+    "trigger_config": {
+      "cron": "0 3 * * *"
+    },
+    "task_type": "task",
+    "reminder_message": null,
+    "prompt": "执行每日记忆整理：整理当天对话历史，提取精华记忆，刷新 MEMORY.md",
+    "script_path": null,
+    "action": "system:daily_memory",
+    "channel_id": null,
+    "chat_id": null,
+    "user_id": null,
+    "enabled": true,
+    "status": "scheduled",
+    "deletable": false,
+    "last_run": null,
+    "next_run": "2026-03-07T03:00:00",
+    "run_count": 0,
+    "fail_count": 0,
+    "created_at": "2026-03-06T12:58:15.935587",
+    "updated_at": "2026-03-06T12:58:15.935588",
+    "metadata": {}
+  },
+  {
+    "id": "system_daily_selfcheck",
+    "name": "每日系统自检",
+    "description": "分析 ERROR 日志、尝试修复工具问题、生成报告",
+    "trigger_type": "cron",
+    "trigger_config": {
+      "cron": "0 4 * * *"
+    },
+    "task_type": "task",
+    "reminder_message": null,
+    "prompt": "执行每日系统自检：分析 ERROR 日志，尝试修复工具问题，生成报告",
+    "script_path": null,
+    "action": "system:daily_selfcheck",
+    "channel_id": null,
+    "chat_id": null,
+    "user_id": null,
+    "enabled": true,
+    "status": "scheduled",
+    "deletable": false,
+    "last_run": null,
+    "next_run": "2026-03-07T04:00:00",
+    "run_count": 0,
+    "fail_count": 0,
+    "created_at": "2026-03-06T12:58:15.936377",
+    "updated_at": "2026-03-06T12:58:15.936378",
+    "metadata": {}
+  }
+]

@@ -21,6 +21,8 @@ cd "$PROJECT_ROOT"
 BACKEND_HOST="127.0.0.1"
 BACKEND_PORT=18900
 FRONTEND_PORT=5175
+PYTHON_BIN="${OPENAKITA_PYTHON:-/opt/anaconda3/bin/python}"
+SRC_DIR="$PROJECT_ROOT/src"
 PID_DIR="$PROJECT_ROOT/.pids"
 BACKEND_PID_FILE="$PID_DIR/backend.pid"
 FRONTEND_PID_FILE="$PID_DIR/frontend.pid"
@@ -107,11 +109,8 @@ start_backend() {
         return 1
     fi
 
-    # 激活虚拟环境并启动
-    source "$PROJECT_ROOT/venv/bin/activate"
-
     # 后台启动
-    nohup python -m openakita serve > "$BACKEND_LOG" 2>&1 &
+    nohup bash -lc "cd \"$SRC_DIR\" && \"$PYTHON_BIN\" -m openakita serve" > "$BACKEND_LOG" 2>&1 &
     local pid=$!
     echo $pid > "$BACKEND_PID_FILE"
 

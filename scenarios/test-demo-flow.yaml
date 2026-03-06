@@ -1,0 +1,129 @@
+# Demo 技能流程测试场景
+# 使用 4 个 demo skills 验证完整的多任务编排流程
+
+schema_version: "1.0"
+
+scenario_id: "test-demo-flow"
+name: "Demo 技能流程测试"
+description: "使用 demo skills 验证完整的步骤执行、上下文传递和用户确认流程"
+category: "test"
+version: "1.0"
+
+trigger_patterns:
+  - type: keyword
+    keywords:
+      - "测试demo流程"
+      - "demo flow test"
+      - "demo技能测试"
+    priority: 1
+
+steps:
+  - step_id: "echo"
+    name: "生成测试数据"
+    description: "使用 demo-echo-json 生成包含 trace_id 的测试 JSON"
+    output_key: "echo_result"
+    skills:
+      - demo-echo-json
+    system_prompt: |
+      你是一个测试数据生成器。请调用 demo-echo-json 技能生成测试数据。
+
+      调用方式：
+      使用 run_skill_script 工具，参数如下：
+      - skill_name: "demo-echo-json"
+      - script_name: "echo.py"
+      - args: ["--json", "{\"trace_id\":\"demo-flow-001\",\"user\":\"test_user\",\"action\":\"multi_step_test\",\"timestamp\":\"2026-03-05\"}"]
+
+      执行后返回 JSON 结果。
+    requires_confirmation: false
+
+  - step_id: "hash"
+    name: "计算数据指纹"
+    description: "使用 demo-context-hash 对上一步输出计算 SHA256 摘要"
+    output_key: "hash_result"
+    skills:
+      - demo-context-hash
+    system_prompt: |
+      你是一个数据指纹计算器。请基于上一步的输出计算 SHA256 摘要。
+
+      ## 前置步骤输出
+      {{context.echo_result}}
+
+      请将上一步的完整 JSON 输出作为文本计算摘要。
+
+      调用方式：
+      使用 run_skill_script 工具，参数如下：
+      - skill_name: "demo-context-hash"
+      - script_name: "hash.py"
+      - args: ["--json", "{\"text\":\"<将echo_result转为JSON字符串并转义>\",\"algorithm\":\"sha256\"}"]
+
+      注意：需要将 echo_result 的 JSON 内容作为 text 字段的值传入。
+    requires_confirmation: false
+    dependencies:
+      - echo
+
+  - step_id: "validate"
+    name: "校验数据结构"
+    description: "使用 demo-schema-check 对第一步生成的数据进行 schema 校验"
+    output_key: "validation_result"
+    skills:
+      - demo-schema-check
+    system_prompt: |
+      你是一个数据校验器。请对第一步生成的数据进行 schema 校验。
+
+      ## 原始数据
+      {{context.echo_result}}
+
+      请检查 payload 部分是否符合 demo_draft_v1 schema（需要 title 和 bullets 字段）。
+
+      调用方式：
+      使用 run_skill_script 工具，参数如下：
+      - skill_name: "demo-schema-check"
+      - script_name: "check.py"
+      - args: ["--json", "{\"schema_id\":\"demo_draft_v1\",\"data\":{\"title\":\"测试标题\",\"bullets\":[\"item1\",\"item2\"]}}"]
+
+      注意：由于原始数据可能不符合 schema，校验可能会失败，这是正常的测试场景。
+    requires_confirmation: true
+    dependencies:
+      - echo
+
+  - step_id: "summary"
+    name: "生成测试报告"
+    description: "汇总所有步骤的结果，生成测试报告"
+    output_key: "final_report"
+    skills:
+      - demo-echo-json
+    system_prompt: |
+      请生成一份测试执行报告，汇总以下所有步骤的结果：
+
+      ## Step 1: 生成测试数据
+      {{context.echo_result}}
+
+      ## Step 2: 计算数据指纹
+      {{context.hash_result}}
+
+      ## Step 3: 校验数据结构
+      {{context.validation_result}}
+
+      请生成一个 JSON 格式的测试报告，包含：
+      - trace_id: 从第一步获取
+      - steps_completed: 已完成的步骤数
+      - hash_digest: 从第二步获取
+      - validation_status: 校验结果（ok 或 failed）
+      - overall_status: "success" 或 "partial"
+
+      使用 demo-echo-json 返回此报告。
+    requires_confirmation: false
+    dependencies:
+      - echo
+      - hash
+      - validate
+
+metadata:
+  author: "Test Suite"
+  created_at: "2026-03-05"
+  purpose: "验证多步骤任务的完整执行流程，包括技能调用、上下文传递和用户确认"
+  tags:
+    - test
+    - demo
+    - flow
+    - context

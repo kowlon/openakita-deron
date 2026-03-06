@@ -1,0 +1,475 @@
+{
+  "features": [
+    {
+      "id": "TEST-001",
+      "name": "编写 ScenarioRegistry 单元测试",
+      "description": "测试场景注册、注销、匹配功能。测试文件: tests/orchestration/test_scenario_registry.py。验证正则匹配和关键词匹配。",
+      "phase": "Phase 1: 后端单元测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_scenario_registry.py"
+      ],
+      "acceptance_criteria": [
+        "测试场景注册和注销",
+        "测试正则模式匹配",
+        "测试关键词匹配",
+        "测试匹配置信度计算"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-05 22:53:03"
+    },
+    {
+      "id": "TEST-002",
+      "name": "编写 TaskSession 单元测试",
+      "description": "测试任务会话的生命周期管理、步骤执行、状态转换。测试文件: tests/orchestration/test_task_session.py",
+      "phase": "Phase 1: 后端单元测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_task_session.py"
+      ],
+      "acceptance_criteria": [
+        "测试任务创建和初始化",
+        "测试步骤执行流程",
+        "测试状态转换（PENDING->RUNNING->COMPLETED）",
+        "测试上下文存储和获取"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-05 23:00:12"
+    },
+    {
+      "id": "TEST-003",
+      "name": "编写上下文传递机制测试",
+      "description": "验证步骤间上下文自动传递功能。测试 {{context.xxx}} 模板变量替换。测试文件: tests/orchestration/test_context_passing.py",
+      "phase": "Phase 1: 后端单元测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_context_passing.py"
+      ],
+      "acceptance_criteria": [
+        "测试单步骤无上下文场景",
+        "测试两步骤上下文传递",
+        "测试多步骤链式传递",
+        "测试上下文模板变量替换"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-05 23:09:18"
+    },
+    {
+      "id": "TEST-004",
+      "name": "编写用户确认机制测试",
+      "description": "测试 requires_confirmation 步骤的等待和确认流程。测试文件: tests/orchestration/test_user_confirmation.py",
+      "phase": "Phase 1: 后端单元测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_user_confirmation.py"
+      ],
+      "acceptance_criteria": [
+        "测试确认步骤的等待状态",
+        "测试用户确认后继续执行",
+        "测试编辑后确认",
+        "测试取消确认"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-05 23:23:29"
+    },
+    {
+      "id": "TEST-005",
+      "name": "编写 demo-echo-json 技能测试",
+      "description": "测试 JSON 回显技能的调用和输出。验证 trace_id 传递。",
+      "phase": "Phase 2: Demo Skills 集成测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_demo_skills.py"
+      ],
+      "acceptance_criteria": [
+        "测试技能脚本执行",
+        "验证 JSON 输出格式",
+        "验证 trace_id 正确返回"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:07:00"
+    },
+    {
+      "id": "TEST-006",
+      "name": "编写 demo-context-hash 技能测试",
+      "description": "测试 SHA256 摘要计算技能。验证上下文注入后摘要计算。",
+      "phase": "Phase 2: Demo Skills 集成测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_demo_skills.py"
+      ],
+      "acceptance_criteria": [
+        "测试摘要计算正确性",
+        "验证算法参数传递",
+        "测试大文本处理"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:07:00"
+    },
+    {
+      "id": "TEST-007",
+      "name": "编写 demo-json-diff 技能测试",
+      "description": "测试 JSON 对比技能。验证变更检测和统计。",
+      "phase": "Phase 2: Demo Skills 集成测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_demo_skills.py"
+      ],
+      "acceptance_criteria": [
+        "测试新增字段检测",
+        "测试修改字段检测",
+        "测试删除字段检测",
+        "验证变更统计正确"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:07:00"
+    },
+    {
+      "id": "TEST-008",
+      "name": "编写 demo-schema-check 技能测试",
+      "description": "测试 Schema 校验技能。验证 demo_draft_v1 和 demo_final_v1 schema。",
+      "phase": "Phase 2: Demo Skills 集成测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_demo_skills.py"
+      ],
+      "acceptance_criteria": [
+        "测试校验通过场景",
+        "测试校验失败场景",
+        "验证错误信息返回"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:07:00"
+    },
+    {
+      "id": "TEST-009",
+      "name": "编写任务 API 测试",
+      "description": "测试 /api/tasks 系列端点：创建、查询、启动、取消、确认。测试文件: tests/orchestration/test_api.py",
+      "phase": "Phase 3: API 端点测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_api.py"
+      ],
+      "acceptance_criteria": [
+        "测试 POST /api/tasks 创建任务",
+        "测试 GET /api/tasks 列表查询",
+        "测试 POST /api/tasks/{id}/start 启动",
+        "测试 POST /api/tasks/{id}/cancel 取消",
+        "测试 POST /api/tasks/{id}/confirm 确认"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:10:14"
+    },
+    {
+      "id": "TEST-010",
+      "name": "编写场景 API 测试",
+      "description": "测试 /api/scenarios 系列端点：列表、详情、启动。测试文件: tests/orchestration/test_api.py",
+      "phase": "Phase 3: API 端点测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_api.py"
+      ],
+      "acceptance_criteria": [
+        "测试 GET /api/scenarios 列表",
+        "测试 GET /api/scenarios/{id} 详情",
+        "测试 POST /api/scenarios/{id}/start 启动",
+        "测试分类过滤"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:12:44"
+    },
+    {
+      "id": "TEST-011",
+      "name": "编写上下文 API 测试",
+      "description": "测试 GET /api/tasks/{id}/context 端点。验证上下文数据完整性。",
+      "phase": "Phase 3: API 端点测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_api.py"
+      ],
+      "acceptance_criteria": [
+        "测试获取任务上下文",
+        "验证步骤输出数据",
+        "测试部分上下文获取"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:14:34"
+    },
+    {
+      "id": "TEST-012",
+      "name": "编写 test-demo-flow 场景 E2E 测试",
+      "description": "使用 test-demo-flow.yaml 场景进行端到端测试。验证 4 步骤流程执行。",
+      "phase": "Phase 4: 端到端测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_e2e.py"
+      ],
+      "acceptance_criteria": [
+        "创建任务成功",
+        "4 个步骤顺序执行",
+        "上下文正确传递",
+        "最终报告生成正确"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:42:20"
+    },
+    {
+      "id": "TEST-013",
+      "name": "编写 test-edit-flow 场景 E2E 测试",
+      "description": "使用 test-edit-flow.yaml 场景测试编辑流程。验证编辑和 diff 功能。",
+      "phase": "Phase 4: 端到端测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/orchestration/test_e2e.py"
+      ],
+      "acceptance_criteria": [
+        "初始数据生成正确",
+        "编辑后确认流程正常",
+        "diff 结果正确",
+        "最终版本生成"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:42:20"
+    },
+    {
+      "id": "TEST-014",
+      "name": "编写 code-review 场景 E2E 测试",
+      "description": "使用 code-review.yaml 场景测试实际代码审查流程。",
+      "phase": "Phase 4: 端到端测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/orchestration/test_e2e.py"
+      ],
+      "acceptance_criteria": [
+        "场景匹配成功",
+        "3 步骤执行完整",
+        "分析报告生成",
+        "审查结果输出"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:42:20"
+    },
+    {
+      "id": "FE-TEST-001",
+      "name": "编写任务卡片组件测试",
+      "description": "使用 Playwright 测试任务卡片渲染、进度显示、状态变化。测试文件: tests/e2e/task_card.spec.ts",
+      "phase": "Phase 5: 前端可视化测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/task_card.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "任务卡片正确渲染",
+        "进度显示正确（0/3 -> 1/3 -> 2/3 -> 3/3）",
+        "状态图标/颜色正确变化",
+        "取消按钮可点击"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:46:01"
+    },
+    {
+      "id": "FE-TEST-002",
+      "name": "编写步骤输出编辑器测试",
+      "description": "测试步骤输出的显示、编辑、保存功能。测试文件: tests/e2e/step_editor.spec.ts",
+      "phase": "Phase 5: 前端可视化测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/step_editor.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "JSON/文本格式化显示正确",
+        "编辑模式可激活",
+        "内容可修改",
+        "保存后状态更新"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:49:28"
+    },
+    {
+      "id": "FE-TEST-003",
+      "name": "编写对话触发场景测试",
+      "description": "测试在对话框输入消息触发最佳实践场景。测试文件: tests/e2e/dialog_trigger.spec.ts",
+      "phase": "Phase 5: 前端可视化测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/dialog_trigger.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "输入触发词后显示场景匹配",
+        "任务卡片出现",
+        "SubAgent 状态显示正确",
+        "步骤进度实时更新"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:53:31"
+    },
+    {
+      "id": "FE-TEST-004",
+      "name": "编写最佳实践入口测试",
+      "description": "测试左侧最佳实践入口的列表、筛选、快速启动功能。测试文件: tests/e2e/best_practice_entry.spec.ts",
+      "phase": "Phase 5: 前端可视化测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/e2e/best_practice_entry.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "场景列表正确显示",
+        "分类筛选功能正常",
+        "点击卡片启动任务"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:56:39"
+    },
+    {
+      "id": "FE-TEST-005",
+      "name": "编写响应式布局测试",
+      "description": "测试三栏布局在不同窗口大小下的自适应。测试文件: tests/e2e/responsive_layout.spec.ts",
+      "phase": "Phase 5: 前端可视化测试",
+      "priority": "low",
+      "files_affected": [
+        "tests/e2e/responsive_layout.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "三栏布局正确显示",
+        "窗口调整时布局自适应",
+        "移动端侧边栏可收起"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 00:59:18"
+    },
+    {
+      "id": "CHROME-TEST-001",
+      "name": "编写 Chrome 插件安装和启动测试",
+      "description": "测试 Chrome 插件的安装、连接、初始化流程。测试文件: tests/e2e/chrome_extension.spec.ts",
+      "phase": "Phase 6: Chrome 插件专用测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/chrome_extension.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "插件安装成功",
+        "连接后端服务成功",
+        "初始化界面显示正确"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:01:03"
+    },
+    {
+      "id": "CHROME-TEST-002",
+      "name": "编写 SSE 流式响应测试",
+      "description": "测试 Chrome 插件的 SSE 流式消息接收和显示。测试文件: tests/e2e/chrome_extension.spec.ts",
+      "phase": "Phase 6: Chrome 插件专用测试",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/chrome_extension.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "SSE 连接建立成功",
+        "流式消息实时显示",
+        "消息顺序正确"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:01:03"
+    },
+    {
+      "id": "CHROME-TEST-003",
+      "name": "编写多任务并发测试",
+      "description": "测试同时运行多个任务的场景。验证资源隔离和状态管理。测试文件: tests/e2e/chrome_extension.spec.ts",
+      "phase": "Phase 6: Chrome 插件专用测试",
+      "priority": "medium",
+      "files_affected": [
+        "tests/e2e/chrome_extension.spec.ts"
+      ],
+      "acceptance_criteria": [
+        "多任务并行执行",
+        "任务间状态隔离",
+        "资源正确清理"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:01:03"
+    },
+    {
+      "id": "INFRA-001",
+      "name": "配置 Playwright 测试环境",
+      "description": "设置 Playwright 测试框架、浏览器配置、测试数据。测试文件: tests/e2e/playwright.config.ts",
+      "phase": "Phase 7: 测试基础设施",
+      "priority": "high",
+      "files_affected": [
+        "tests/e2e/playwright.config.ts",
+        "tests/e2e/fixtures/"
+      ],
+      "acceptance_criteria": [
+        "Playwright 配置正确",
+        "测试 fixtures 可用",
+        "测试数据准备脚本"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:05:22"
+    },
+    {
+      "id": "INFRA-002",
+      "name": "编写测试辅助函数",
+      "description": "创建测试辅助函数：API 客户端、Mock 数据生成、断言工具。测试文件: tests/conftest.py, tests/e2e/helpers/",
+      "phase": "Phase 7: 测试基础设施",
+      "priority": "medium",
+      "files_affected": [
+        "tests/conftest.py",
+        "tests/e2e/helpers/"
+      ],
+      "acceptance_criteria": [
+        "API 客户端封装",
+        "Mock 数据生成器",
+        "常用断言函数"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:05:22"
+    },
+    {
+      "id": "INFRA-003",
+      "name": "编写测试运行脚本",
+      "description": "创建测试运行脚本：后端测试、前端测试、覆盖率报告。测试文件: scripts/run_tests.sh",
+      "phase": "Phase 7: 测试基础设施",
+      "priority": "low",
+      "files_affected": [
+        "scripts/run_tests.sh"
+      ],
+      "acceptance_criteria": [
+        "后端测试命令",
+        "前端测试命令",
+        "覆盖率报告生成"
+      ],
+      "passes": true,
+      "completed_at": "2026-03-06 01:05:22"
+    }
+  ],
+  "implementation_order": [
+    "TEST-001",
+    "TEST-002",
+    "TEST-003",
+    "TEST-004",
+    "TEST-005",
+    "TEST-006",
+    "TEST-007",
+    "TEST-008",
+    "TEST-009",
+    "TEST-010",
+    "TEST-011",
+    "TEST-012",
+    "TEST-013",
+    "TEST-014",
+    "FE-TEST-001",
+    "FE-TEST-002",
+    "FE-TEST-003",
+    "FE-TEST-004",
+    "FE-TEST-005",
+    "CHROME-TEST-001",
+    "CHROME-TEST-002",
+    "CHROME-TEST-003",
+    "INFRA-001",
+    "INFRA-002",
+    "INFRA-003"
+  ],
+  "metadata": {
+    "updated_at": "2026-03-05 21:46:31"
+  }
+}

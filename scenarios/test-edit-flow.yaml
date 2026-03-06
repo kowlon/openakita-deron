@@ -1,0 +1,126 @@
+# 编辑流程测试场景
+# 验证用户编辑、确认和变更对比功能
+
+schema_version: "1.0"
+
+scenario_id: "test-edit-flow"
+name: "编辑流程测试"
+description: "测试用户编辑步骤输出、确认变更和 diff 对比功能"
+category: "test"
+version: "1.0"
+
+trigger_patterns:
+  - type: keyword
+    keywords:
+      - "测试编辑流程"
+      - "edit flow test"
+      - "编辑测试"
+    priority: 1
+
+steps:
+  - step_id: "generate"
+    name: "生成初始数据"
+    description: "生成一份可编辑的草稿数据"
+    output_key: "initial_data"
+    skills:
+      - demo-echo-json
+    system_prompt: |
+      你是一个文档生成器。请生成一份项目计划草稿。
+
+      调用 demo-echo-json 技能，生成以下结构的 JSON：
+      {
+        "title": "项目计划草稿",
+        "bullets": [
+          "完成需求分析",
+          "设计系统架构",
+          "开发核心功能"
+        ],
+        "approved": false,
+        "version": "draft"
+      }
+
+      调用方式：
+      使用 run_skill_script 工具，参数如下：
+      - skill_name: "demo-echo-json"
+      - script_name: "echo.py"
+      - args: ["--json", "{\"title\":\"项目计划草稿\",\"bullets\":[\"完成需求分析\",\"设计系统架构\",\"开发核心功能\"],\"approved\":false,\"version\":\"draft\"}"]
+
+      用户将可以编辑此草稿内容。
+    requires_confirmation: true
+
+  - step_id: "diff"
+    name: "对比变更"
+    description: "对比用户编辑前后的数据变更"
+    output_key: "diff_result"
+    skills:
+      - demo-json-diff
+    system_prompt: |
+      你是一个变更分析器。请对比用户编辑前后的数据变更。
+
+      ## 原始数据（编辑前）
+      这里的数据来自步骤执行时的原始输出。
+
+      ## 用户编辑后的数据
+      {{context.initial_data}}
+
+      请使用 demo-json-diff 技能对比变更：
+
+      调用方式：
+      使用 run_skill_script 工具，参数如下：
+      - skill_name: "demo-json-diff"
+      - script_name: "diff.py"
+      - args: ["--json", "{\"before\":{\"title\":\"项目计划草稿\",\"bullets\":[\"完成需求分析\",\"设计系统架构\",\"开发核心功能\"],\"approved\":false,\"version\":\"draft\"},\"after\":<用户编辑后的initial_data>}"]
+
+      注意：before 使用固定的原始数据，after 使用用户实际编辑后的数据。
+      如果用户没有修改，diff 结果应该显示无变更。
+    requires_confirmation: false
+    dependencies:
+      - generate
+
+  - step_id: "finalize"
+    name: "确认最终版本"
+    description: "生成最终确认的版本"
+    output_key: "final_version"
+    skills:
+      - demo-echo-json
+    system_prompt: |
+      请生成最终确认的版本。
+
+      ## 用户编辑后的数据
+      {{context.initial_data}}
+
+      ## 变更对比结果
+      {{context.diff_result}}
+
+      如果用户修改了数据，请生成包含以下字段的最终版本：
+      - 保留用户编辑后的 title 和 bullets
+      - 将 approved 设置为 true
+      - 将 version 设置为 "final"
+
+      调用方式：
+      使用 run_skill_script 工具返回最终版本。
+    requires_confirmation: false
+    dependencies:
+      - generate
+      - diff
+
+metadata:
+  author: "Test Suite"
+  created_at: "2026-03-05"
+  purpose: "验证用户编辑、确认和变更对比功能"
+  test_instructions: |
+    ## 测试步骤
+
+    1. 输入 "测试编辑流程" 触发场景
+    2. Step 1 生成初始草稿数据
+    3. **关键测试点**: 在确认界面编辑数据
+       - 修改 title
+       - 添加/删除/修改 bullets 中的项目
+    4. 点击确认进入 Step 2
+    5. 验证 diff_result 正确显示变更
+    6. Step 3 生成最终版本
+  tags:
+    - test
+    - edit
+    - diff
+    - confirm

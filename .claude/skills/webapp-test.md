@@ -41,7 +41,7 @@ Tests plan creation and execution:
 ### Step 1: Start Backend Service
 
 ```bash
-cd /Users/zd/agents/openakita-deron
+cd /Users/zd/agents/openakita-main
 source venv/bin/activate
 openakita serve
 ```
@@ -54,7 +54,7 @@ curl http://localhost:18900/api/health
 ### Step 2: Start Frontend Dev Server
 
 ```bash
-cd /Users/zd/agents/openakita-deron/webapps/seeagent-webui
+cd /Users/zd/agents/openakita-main/webapps/seeagent-webui
 pnpm dev
 ```
 
@@ -66,7 +66,7 @@ curl http://localhost:5175
 ### Step 3: Run Playwright Tests
 
 ```bash
-cd /Users/zd/agents/openakita-deron/webapps/seeagent-webui
+cd /Users/zd/agents/openakita-main/webapps/seeagent-webui
 
 # Run all tests
 pnpm test:e2e
@@ -119,7 +119,7 @@ Use mcp__playwright__browser_navigate to http://localhost:5175
 
 1. Verify orchestration is enabled:
    ```bash
-   grep ORCHESTRATION_ENABLED /Users/zd/agents/openakita-deron/.env
+   grep ORCHESTRATION_ENABLED /Users/zd/agents/openakita-main/.env
    ```
 
 2. Send a task that might trigger worker distribution:
