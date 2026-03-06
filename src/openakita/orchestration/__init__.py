@@ -69,6 +69,27 @@ from .models import (
 )
 from .monitor import AgentMonitor
 from .registry import AgentRegistry
+from .session_tasks import RouteResult, SessionTasks as SessionTasksManager
+from .storage import TaskStorage, get_task_storage, close_task_storage
+from .task_orchestrator import (
+    RouteDecision,
+    RouteOutput,
+    TaskOrchestrator,
+    TaskExecutionError,
+    TaskNotFoundError,
+    TemplateNotFoundError,
+)
+from .transport import (
+    AgentTransport,
+    Command,
+    CommandType as TransportCommandType,
+    Event,
+    EventType,
+    MemoryTransport,
+    Response,
+    TransportError,
+    TransportTimeoutError,
+)
 from .worker import WorkerAgent
 
 __all__ = [
@@ -99,4 +120,27 @@ __all__ = [
     "TaskStep",
     "OrchestrationTask",
     "SessionTasks",
+    "SessionTasksManager",
+    "RouteResult",
+    # 任务编排存储
+    "TaskStorage",
+    "get_task_storage",
+    "close_task_storage",
+    # 任务编排核心
+    "TaskOrchestrator",
+    "RouteDecision",
+    "RouteOutput",
+    "TaskNotFoundError",
+    "TaskExecutionError",
+    "TemplateNotFoundError",
+    # Transport
+    "AgentTransport",
+    "MemoryTransport",
+    "Command",
+    "TransportCommandType",
+    "Response",
+    "Event",
+    "EventType",
+    "TransportError",
+    "TransportTimeoutError",
 ]
