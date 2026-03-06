@@ -47,20 +47,27 @@ class TaskStorage:
     是编排层和存储层之间的桥梁。
     """
 
-    def __init__(self, db_path: Path | None = None):
+    def __init__(self, db_path: Path | str | None = None):
         """
         初始化存储管理器
 
         Args:
             db_path: 数据库路径，默认使用 settings 中的配置
         """
-        self.db_path = db_path or settings.db_full_path
+        if db_path is None:
+            self.db_path = settings.db_full_path
+        elif isinstance(db_path, str):
+            self.db_path = Path(db_path)
+        else:
+            self.db_path = db_path
         self._connection: aiosqlite.Connection | None = None
         self._lock = asyncio.Lock()
 
     async def connect(self) -> None:
         """连接数据库"""
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Only create parent directories if not using in-memory database
+        if str(self.db_path) != ":memory:":
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(self.db_path)
         self._connection.row_factory = aiosqlite.Row
         await self._connection.execute("PRAGMA foreign_keys = ON")
