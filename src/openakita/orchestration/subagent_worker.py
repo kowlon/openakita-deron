@@ -509,6 +509,73 @@ class SubAgentWorker:
             # 清理资源
             await agent.shutdown()
 
+    async def execute_stream(
+        self,
+        payload: SubAgentPayload,
+    ) -> AsyncIterator[dict]:
+        """
+        流式执行步骤，yield 事件
+
+        使用 Agent.chat_with_session_stream() 实现流式输出。
+
+        Args:
+            payload: 执行载荷
+
+        Yields:
+            流式事件字典
+        """
+        from collections.abc import AsyncIterator
+
+        if not self._running:
+            await self.start()
+
+        if self.is_busy:
+            yield {"type": "error", "message": "Worker is busy with another task"}
+            return
+
+        self._current_task_id = payload.task_id
+
+        agent_config = payload.agent_config
+        if not agent_config:
+            yield {"type": "error", "message": "Missing agent_config in payload"}
+            self._current_task_id = None
+            return
+
+        # 构建系统提示词和消息
+        system_prompt = self._build_system_prompt(agent_config, payload)
+        messages = self._build_chat_messages(payload, system_prompt)
+
+        # 创建 Agent 实例
+        agent = Agent(name=agent_config.name)
+
+        try:
+            # 初始化 Agent
+            await agent.initialize(start_scheduler=False)
+
+            # 流式执行
+            async for event in agent.chat_with_session_stream(
+                message=payload.user_input,
+                session_messages=messages,
+                session_id=f"task-{payload.task_id}-step-{payload.step_id}",
+            ):
+                yield event
+
+            # 发送步骤完成事件
+            yield {
+                "type": "step_complete",
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
+
+        except Exception as e:
+            logger.error(f"Stream execution error: {e}", exc_info=True)
+            yield {"type": "error", "message": str(e)}
+
+        finally:
+            # 清理资源
+            await agent.shutdown()
+            self._current_task_id = None
+
     def _extract_artifacts(self, response: Any) -> list[dict]:
         """
         从响应中提取制品
