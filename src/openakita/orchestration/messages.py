@@ -57,6 +57,10 @@ class CommandType(Enum):
     CANCEL_TASK = "cancel_task"  # 取消任务
     TASK_RESULT = "task_result"  # 任务结果
 
+    # 流式输出
+    STREAM_EVENT = "stream_event"  # 流式事件
+    STREAM_DONE = "stream_done"  # 流式结束
+
     # 状态查询
     GET_STATUS = "get_status"  # 获取状态
     LIST_AGENTS = "list_agents"  # 列出所有 Agent
@@ -315,6 +319,28 @@ class TaskResult:
 
     @classmethod
     def from_dict(cls, data: dict) -> "TaskResult":
+        return cls(**data)
+
+
+@dataclass
+class StreamEventPayload:
+    """
+    流式事件负载
+
+    用于 STREAM_EVENT 命令，传递 Agent.chat_with_session_stream() 产生的事件
+    """
+
+    task_id: str  # 关联的任务 ID
+    event_type: str  # 事件类型 (text_delta, tool_start, tool_result, etc.)
+    sequence: int = 0  # 事件序号（可选的顺序保证）
+    content: dict[str, Any] = field(default_factory=dict)  # 事件内容
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "StreamEventPayload":
         return cls(**data)
 
 

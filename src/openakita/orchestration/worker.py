@@ -31,6 +31,7 @@ from .messages import (
     AgentStatus,
     AgentType,
     CommandType,
+    StreamEventPayload,
     TaskPayload,
     TaskResult,
     create_register_command,
@@ -282,10 +283,17 @@ class WorkerAgent:
         执行任务
 
         根据任务类型调用相应的处理方法
+        支持流式任务分发
         """
         try:
+            # 检查是否请求流式输出
+            stream_mode = task.context.get("stream", False)
+
             if task.task_type == "chat":
-                return await self._execute_chat_task(task)
+                if stream_mode:
+                    return await self._execute_chat_task_stream(task)
+                else:
+                    return await self._execute_chat_task(task)
             elif task.task_type == "execute":
                 return await self._execute_execute_task(task)
             else:
@@ -333,6 +341,152 @@ class WorkerAgent:
                 success=False,
                 error=str(e),
             )
+
+    async def _execute_chat_task_stream(self, task: TaskPayload) -> TaskResult:
+        """
+        执行对话任务（流式版本）
+
+        使用 Agent.chat_with_session_stream() 流式执行，
+        将事件通过 ZMQ 传递给 Master
+        """
+        session_messages = task.context.get("session_messages", [])
+        session_id = task.session_id or "worker"
+        sequence = 0
+        final_response = ""
+
+        try:
+            if session_messages:
+                # 使用 session 上下文流式执行
+                async for event in self._agent.chat_with_session_stream(
+                    message=task.content,
+                    session_messages=session_messages,
+                    session_id=session_id,
+                ):
+                    # 发送流式事件
+                    await self._send_stream_event(
+                        task_id=task.task_id,
+                        event_type=event.get("type", "unknown"),
+                        sequence=sequence,
+                        content=event,
+                    )
+                    sequence += 1
+
+                    # 收集最终响应文本
+                    if event.get("type") == "text_delta":
+                        final_response += event.get("content", "")
+
+                    # 处理错误事件
+                    if event.get("type") == "error":
+                        # 发送流式结束标记
+                        await self._send_stream_done(task.task_id, sequence)
+                        return TaskResult(
+                            task_id=task.task_id,
+                            success=False,
+                            error=event.get("message", "Unknown error"),
+                        )
+            else:
+                # 使用简单对话模式（非流式）
+                response = await self._agent.chat(task.content, session_id=session_id)
+                # 将非流式响应包装为单个事件发送
+                await self._send_stream_event(
+                    task_id=task.task_id,
+                    event_type="text_delta",
+                    sequence=0,
+                    content={"type": "text_delta", "content": response},
+                )
+                sequence += 1
+                final_response = response
+
+            # 发送流式结束标记
+            await self._send_stream_done(task.task_id, sequence)
+
+            return TaskResult(
+                task_id=task.task_id,
+                success=True,
+                result=final_response,
+            )
+
+        except Exception as e:
+            logger.error(f"Chat task stream error: {e}", exc_info=True)
+            # 发送错误事件
+            await self._send_stream_event(
+                task_id=task.task_id,
+                event_type="error",
+                sequence=sequence,
+                content={"type": "error", "message": str(e)[:500]},
+            )
+            sequence += 1
+            # 发送流式结束标记
+            await self._send_stream_done(task.task_id, sequence)
+
+            return TaskResult(
+                task_id=task.task_id,
+                success=False,
+                error=str(e),
+            )
+
+    async def _send_stream_event(
+        self,
+        task_id: str,
+        event_type: str,
+        sequence: int,
+        content: dict[str, Any],
+    ) -> None:
+        """
+        发送流式事件给 Master
+
+        Args:
+            task_id: 任务 ID
+            event_type: 事件类型
+            sequence: 事件序号
+            content: 事件内容
+        """
+        payload = StreamEventPayload(
+            task_id=task_id,
+            event_type=event_type,
+            sequence=sequence,
+            content=content,
+        )
+
+        message = AgentMessage.command(
+            sender_id=self.agent_id,
+            target_id="master",
+            command_type=CommandType.STREAM_EVENT,
+            payload=payload.to_dict(),
+        )
+
+        try:
+            await self.bus._send_to_master(message)
+            logger.debug(
+                f"Worker {self.agent_id}: stream event sent "
+                f"(task={task_id}, type={event_type}, seq={sequence})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send stream event: {e}")
+
+    async def _send_stream_done(self, task_id: str, final_sequence: int) -> None:
+        """
+        发送流式结束标记给 Master
+
+        Args:
+            task_id: 任务 ID
+            final_sequence: 最终事件序号
+        """
+        message = AgentMessage.command(
+            sender_id=self.agent_id,
+            target_id="master",
+            command_type=CommandType.STREAM_DONE,
+            payload={
+                "task_id": task_id,
+                "final_sequence": final_sequence,
+            },
+        )
+
+        try:
+            await self.bus._send_to_master(message)
+            logger.debug(f"Worker {self.agent_id}: stream done sent (task={task_id})")
+        except Exception as e:
+            logger.error(f"Failed to send stream done: {e}")
 
     async def _execute_execute_task(self, task: TaskPayload) -> TaskResult:
         """执行执行类任务（使用 Ralph 循环）"""
