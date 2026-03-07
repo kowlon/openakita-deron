@@ -256,6 +256,11 @@ class Agent:
         # 初始化为 None，在 initialize() 中设置
         self.evolution_orchestrator = None
 
+        # 任务编排系统（Task Mode）
+        # 初始化为 None，在 initialize() 中设置
+        self._task_orchestrator = None
+        self._task_mode_enabled = settings.task_mode_enabled
+
         # 响应处理器（委托自 _verify_task_completion 等）
         self.response_handler = ResponseHandler(
             brain=self.brain,
@@ -655,6 +660,20 @@ class Agent:
             logger.info("[EvolutionSystem] Initialized")
         except Exception as e:
             logger.warning(f"[EvolutionSystem] Initialization failed: {e}")
+
+        # === 任务编排系统初始化 ===
+        # 任务模式：多步骤任务编排
+        if self._task_mode_enabled:
+            try:
+                from ..orchestration import TaskOrchestrator, TaskStorage
+                storage = TaskStorage(settings.db_full_path)
+                await storage.connect()
+                self._task_orchestrator = TaskOrchestrator(storage=storage)
+                await self._task_orchestrator.start()
+                logger.info("[TaskOrchestrator] Initialized and started")
+            except Exception as e:
+                logger.warning(f"[TaskOrchestrator] Initialization failed: {e}")
+                self._task_orchestrator = None
 
         # 启动记忆会话
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
@@ -2979,6 +2998,14 @@ NEXT: 建议的下一步（如有）"""
             errors=errors or [],
         )
 
+        # 关闭任务编排器
+        if self._task_orchestrator:
+            try:
+                await self._task_orchestrator.stop()
+                logger.info("[TaskOrchestrator] Stopped")
+            except Exception as e:
+                logger.warning(f"[TaskOrchestrator] Shutdown error: {e}")
+
         # MEMORY.md 由 DailyConsolidator 在凌晨刷新，shutdown 时不同步
 
         self._running = False
@@ -2999,3 +3026,82 @@ NEXT: 建议的下一步（如有）"""
     def get_memory_stats(self) -> dict:
         """获取记忆统计"""
         return self.memory_manager.get_stats()
+
+    # ==================== 任务模式方法 ====================
+
+    def get_task_orchestrator(self):
+        """获取任务编排器实例"""
+        return self._task_orchestrator
+
+    async def create_task(
+        self,
+        session_id: str,
+        template_id: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        input_payload: dict | None = None,
+    ):
+        """
+        创建任务
+
+        Args:
+            session_id: 会话 ID
+            template_id: 最佳实践模板 ID
+            name: 任务名称
+            description: 任务描述
+            input_payload: 初始输入数据
+
+        Returns:
+            创建的任务对象
+        """
+        if not self._task_orchestrator:
+            raise RuntimeError("Task orchestrator not initialized")
+        return await self._task_orchestrator.create_task(
+            session_id=session_id,
+            template_id=template_id,
+            name=name,
+            description=description,
+            input_payload=input_payload,
+        )
+
+    async def route_input(self, session_id: str, user_input: str):
+        """
+        路由用户输入
+
+        检查是否有活跃任务，决定路由到任务还是普通对话。
+
+        Args:
+            session_id: 会话 ID
+            user_input: 用户输入
+
+        Returns:
+            路由结果
+        """
+        if not self._task_orchestrator:
+            from ..orchestration.task_orchestrator import RouteDecision, RouteOutput
+            return RouteOutput(decision=RouteDecision.TO_NORMAL_CHAT)
+        return await self._task_orchestrator.route_input(session_id, user_input)
+
+    async def resume_task(self, task_id: str):
+        """恢复暂停的任务"""
+        if not self._task_orchestrator:
+            raise RuntimeError("Task orchestrator not initialized")
+        return await self._task_orchestrator.resume_task(task_id)
+
+    async def pause_task(self, task_id: str, reason: str = "user_requested"):
+        """暂停任务"""
+        if not self._task_orchestrator:
+            raise RuntimeError("Task orchestrator not initialized")
+        await self._task_orchestrator.pause_task(task_id, reason)
+
+    async def cancel_task(self, task_id: str):
+        """取消任务"""
+        if not self._task_orchestrator:
+            raise RuntimeError("Task orchestrator not initialized")
+        await self._task_orchestrator.cancel_task(task_id)
+
+    def get_task_stats(self) -> dict:
+        """获取任务统计"""
+        if self._task_orchestrator:
+            return self._task_orchestrator.get_stats()
+        return {"running": False, "task_mode_enabled": False}

@@ -393,6 +393,12 @@ class Settings(BaseSettings):
     orchestration_heartbeat_interval: int = Field(default=5, description="Worker 心跳间隔（秒）")
     orchestration_health_check_interval: int = Field(default=10, description="健康检查间隔（秒）")
 
+    # === 任务模式配置 ===
+    task_mode_enabled: bool = Field(default=True, description="是否启用任务模式")
+    task_auto_suspend_threshold: int = Field(default=5, description="自动暂停阈值（连续无关对话次数）")
+    task_max_history_messages: int = Field(default=20, description="任务历史消息最大保留数")
+    task_default_timeout: int = Field(default=300, description="任务默认超时时间（秒）")
+
 
     # === 追踪配置 ===
     tracing_enabled: bool = Field(default=False, description="是否启用 Agent 追踪")
