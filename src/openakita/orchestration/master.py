@@ -297,12 +297,12 @@ class MasterAgent:
             ):
                 yield event
         else:
-            # 分发给 Worker - 目前不支持流式，返回最终结果
-            logger.info(f"[MasterAgent] Distributing to Worker (no stream): {message[:50]}...")
-            result = await self._distribute_task(
+            # 分发给 Worker - 使用流式分发
+            logger.info(f"[MasterAgent] Distributing to Worker (streaming): {message[:50]}...")
+            async for event in self._distribute_task_stream(
                 session_id, message, session_messages, session, gateway
-            )
-            yield {"type": "text_delta", "content": result}
+            ):
+                yield event
 
     async def _handle_locally_stream(
         self,
