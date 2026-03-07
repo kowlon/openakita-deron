@@ -503,6 +503,167 @@ class TaskOrchestrator:
 
             raise TaskExecutionError(f"Step execution failed: {e}") from e
 
+    async def execute_task_stream(
+        self,
+        task: OrchestrationTask,
+    ) -> AsyncIterator[dict]:
+        """
+        流式执行任务，yield 步骤事件
+
+        用于最佳实践任务的多步骤执行。
+
+        Args:
+            task: 任务对象
+
+        Yields:
+            SSE 事件字典
+        """
+        from collections.abc import AsyncIterator
+
+        # 更新任务状态
+        task.status = TaskStatus.RUNNING.value
+        await self._storage.save_task(task)
+
+        # 发布任务开始事件
+        yield {
+            "type": "task_started",
+            "task_id": task.id,
+            "task_name": task.name,
+            "total_steps": len(task.steps),
+        }
+
+        try:
+            for step in task.steps:
+                # 发布步骤开始事件
+                yield {
+                    "type": "step_started",
+                    "task_id": task.id,
+                    "step_id": step.id,
+                    "step_name": step.name,
+                    "step_index": step.index,
+                }
+
+                # 执行步骤（流式）
+                async for event in self._execute_step_stream(task, step):
+                    yield event
+
+                # 检查步骤状态
+                if step.status == StepStatus.FAILED.value:
+                    # 发布步骤完成事件
+                    yield {
+                        "type": "step_completed",
+                        "task_id": task.id,
+                        "step_id": step.id,
+                        "success": False,
+                    }
+                    break
+
+                # 发布步骤完成事件
+                yield {
+                    "type": "step_completed",
+                    "task_id": task.id,
+                    "step_id": step.id,
+                    "success": True,
+                }
+
+            # 更新任务状态
+            if step.status == StepStatus.FAILED.value:
+                task.status = TaskStatus.FAILED.value
+            else:
+                task.status = TaskStatus.COMPLETED.value
+            await self._storage.save_task(task)
+
+            # 发布任务完成事件
+            yield {
+                "type": "task_completed",
+                "task_id": task.id,
+                "success": task.status == TaskStatus.COMPLETED.value,
+            }
+
+        except Exception as e:
+            # 更新任务状态为失败
+            task.status = TaskStatus.FAILED.value
+            await self._storage.save_task(task)
+
+            yield {
+                "type": "task_failed",
+                "task_id": task.id,
+                "error": str(e),
+            }
+
+    async def _execute_step_stream(
+        self,
+        task: OrchestrationTask,
+        step: TaskStep,
+    ) -> AsyncIterator[dict]:
+        """
+        流式执行单个步骤
+
+        Args:
+            task: 任务对象
+            step: 步骤对象
+
+        Yields:
+            步骤执行事件
+        """
+        from collections.abc import AsyncIterator
+
+        # 更新步骤状态
+        step.set_status(StepStatus.RUNNING)
+        await self._storage.save_step(step)
+
+        try:
+            # 构建执行命令
+            command = Command.create(
+                command_type=CommandType.EXECUTE_STEP,
+                payload={
+                    "task_id": task.id,
+                    "step_id": step.id,
+                    "step_index": step.index,
+                    "input_args": step.input_args,
+                    "sub_agent_config": step.sub_agent_config.to_dict() if step.sub_agent_config else None,
+                    "context_variables": task.context_variables,
+                },
+                sender_id="orchestrator",
+                target_id="worker",
+            )
+
+            # 发布步骤执行中事件
+            yield {
+                "type": "step_progress",
+                "task_id": task.id,
+                "step_id": step.id,
+                "status": "executing",
+            }
+
+            # TODO: 实际调用 SubAgentWorker.execute_stream()
+            # 目前返回模拟响应
+            yield {
+                "type": "step_progress",
+                "task_id": task.id,
+                "step_id": step.id,
+                "status": "completed",
+            }
+
+            # 更新步骤状态
+            step.set_status(StepStatus.COMPLETED)
+            step.output_result = {"status": "completed"}
+            await self._storage.save_step(step)
+
+        except Exception as e:
+            # 更新步骤状态为失败
+            step.set_status(StepStatus.FAILED)
+            await self._storage.save_step(step)
+
+            yield {
+                "type": "step_failed",
+                "task_id": task.id,
+                "step_id": step.id,
+                "error": str(e),
+            }
+
+            raise TaskExecutionError(f"Step execution failed: {e}") from e
+
     async def advance_task(self, task: OrchestrationTask) -> bool:
         """
         推进任务到下一步
