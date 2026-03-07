@@ -148,8 +148,7 @@ async def _stream_chat(
         from openakita.orchestration.master import MasterAgent
 
         if isinstance(agent, MasterAgent):
-            # 多 Agent 模式：通过 MasterAgent.handle_request() 分发任务
-            # 注意：此模式下不支持流式输出，返回完整响应
+            # 多 Agent 模式：使用流式输出
             try:
                 # 确保 MasterAgent 已启动
                 if not getattr(agent, '_running', False):
@@ -157,28 +156,60 @@ async def _stream_chat(
                     yield _sse("done")
                     return
 
-                logger.info(f"[Chat API] MasterAgent 模式: 分发任务到 Worker")
+                logger.info(f"[Chat API] MasterAgent 模式: 流式处理")
 
-                # 调用 MasterAgent（与 IM 通道一致）
-                response = await agent.handle_request(
+                # 使用流式方法处理请求
+                async for event in agent.handle_request_stream(
                     session_id=conversation_id,
                     message=chat_request.message or "",
                     session_messages=session_messages_history,
                     session=session,
                     gateway=None,
-                )
+                ):
+                    # Check if client disconnected
+                    if await _check_disconnected():
+                        break
 
-                # 将完整响应包装为 SSE 事件
-                if response:
-                    yield _sse("text_delta", {"content": response})
-                else:
-                    yield _sse("text_delta", {"content": "抱歉，处理您的请求时出现问题，请稍后重试。"})
+                    event_type = event.get("type", "")
 
-                # 保存响应到 session
-                if session and response:
-                    session.add_message("assistant", response)
-                    if session_manager:
-                        session_manager.mark_dirty()
+                    # 捕获 ask_user 问题文本（用于 session 保存）
+                    if event_type == "ask_user":
+                        _ask_user_question = event.get("question", "")
+
+                    # 转发事件
+                    yield _sse(event_type, {k: v for k, v in event.items() if k != "type"})
+
+                    # 处理 artifact 事件
+                    if event_type == "tool_call_end" and event.get("tool") == "deliver_artifacts":
+                        try:
+                            result_str = event.get("result", "{}")
+                            _log_marker = "\n\n[执行日志]"
+                            if _log_marker in result_str:
+                                result_str = result_str[: result_str.index(_log_marker)]
+                            result_data = json.loads(result_str)
+                            for receipt in result_data.get("receipts", []):
+                                if receipt.get("status") == "delivered" and receipt.get("file_url"):
+                                    yield _sse("artifact", {
+                                        "artifact_type": receipt.get("type", "file"),
+                                        "file_url": receipt["file_url"],
+                                        "path": receipt.get("path", ""),
+                                        "name": receipt.get("name", ""),
+                                        "caption": receipt.get("caption", ""),
+                                        "size": receipt.get("size"),
+                                    })
+                        except (json.JSONDecodeError, TypeError, KeyError) as _exc:
+                            logger.warning(
+                                f"[Chat API] Failed to parse deliver_artifacts result: {_exc}"
+                            )
+
+                    # 收集响应文本用于统计
+                    if event_type == "text_delta" and event.get("content"):
+                        chunk = event["content"]
+                        if chunk:
+                            _reply_chars += len(chunk)
+                            _full_reply += chunk
+                            if len(_reply_preview) < 120:
+                                _reply_preview += chunk
 
             except Exception as e:
                 logger.error(f"[Chat API] MasterAgent error: {e}", exc_info=True)

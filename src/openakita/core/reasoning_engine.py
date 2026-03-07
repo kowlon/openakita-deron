@@ -3241,9 +3241,11 @@ class ReasoningEngine:
             True 如果是简单问候/闲聊，应直接返回
         """
         if not user_message:
+            logger.debug(f"[ReAct] _is_simple_greeting_or_chat: user_message is empty")
             return False
 
         msg_lower = user_message.strip().lower()
+        logger.debug(f"[ReAct] _is_simple_greeting_or_chat: msg_lower={msg_lower!r}, len={len(msg_lower)}")
 
         # 1. 简单问候模式
         greeting_patterns = [
@@ -3253,6 +3255,7 @@ class ReasoningEngine:
         ]
         for pattern in greeting_patterns:
             if msg_lower == pattern or msg_lower.startswith(pattern + " ") or msg_lower.startswith(pattern + "！"):
+                logger.info(f"[ReAct] _is_simple_greeting_or_chat: matched greeting pattern={pattern!r}")
                 return True
 
         # 2. 短消息闲聊（< 10 字符且无明显任务关键词）
@@ -3377,9 +3380,11 @@ class ReasoningEngine:
         if no_tool_call_count <= max_no_tool_retries:
             # 检查是否是简单问候/闲聊，如果是则直接返回，不需要强制重试
             user_message = ResponseHandler.get_last_user_request(original_messages)
+            logger.info(f"[ReAct] _handle_final_answer: user_message={user_message!r}, is_greeting={self._is_simple_greeting_or_chat(user_message, decision.text_content)}")
             if self._is_simple_greeting_or_chat(user_message, decision.text_content):
                 logger.info(f"[ReAct] Simple greeting/chat detected, skipping force retry")
                 cleaned_text = clean_llm_response(decision.text_content)
+                logger.info(f"[ReAct] _handle_final_answer returning string (greeting): {cleaned_text[:50]!r}...")
                 return cleaned_text
 
             if decision.text_content:

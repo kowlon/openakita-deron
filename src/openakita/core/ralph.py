@@ -158,31 +158,37 @@ class RalphLoop:
             try:
                 # 执行任务（一步或全部）
                 result = await execute_fn(task)
+                logger.debug(f"[RalphLoop] execute_fn returned: result_type={type(result).__name__}, task_status={task.status.value}")
 
-                # 检查是否应该停止（例如任务被取消或失败）
-                if self._stop_hook.should_stop():
-                    break
-
-                # 如果任务已完成
+                # 如果任务已完成（先检查完成，再检查停止）
+                logger.debug(f"[RalphLoop] Checking completion: task.status={task.status}, result is not None={result is not None}")
                 if task.status == TaskStatus.COMPLETED or result is not None:
+                    logger.info(f"[RalphLoop] Entering completion block: task.status={task.status.value}, result_type={type(result).__name__}")
                     if task.status != TaskStatus.COMPLETED:
                          try:
                              task.transition(TaskStatus.COMPLETED)
                          except ValueError:
                              pass
-                    
-                    logger.info(f"Task {task.task_id} completed successfully")
-                    
+
+                    logger.info(f"Task {task.task_id} completed successfully, result_type={type(result).__name__}")
+
                     # 保存进度
                     await self._save_progress()
 
                     duration = (datetime.now() - start_time).total_seconds()
-                    return TaskResult(
+                    task_result = TaskResult(
                         success=True,
                         data=result,
                         iterations=self._iteration,
                         duration_seconds=duration,
                     )
+                    logger.info(f"[RalphLoop] Returning TaskResult: success={task_result.success}, data_type={type(task_result.data).__name__ if task_result.data else 'None'}")
+                    return task_result
+
+                # 检查是否应该停止（例如任务被取消或失败）
+                if self._stop_hook.should_stop():
+                    logger.debug(f"[RalphLoop] Stop hook triggered, breaking loop")
+                    break
                 
                 # 任务未完成，继续循环
                 # 保存进度

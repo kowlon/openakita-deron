@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { OrchestrationTask, TaskStep } from '@/types/task'
+import type { OrchestrationTask } from '@/types/task'
 import { TaskStepTimeline } from './TaskStepTimeline'
 import { TaskStepOutput } from './TaskStepOutput'
 import { TaskStatusBar } from './TaskStatusBar'

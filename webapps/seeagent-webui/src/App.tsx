@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { Agentation } from 'agentation'
 import { ThreeColumnLayout } from './components/Layout/ThreeColumnLayout'
 import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
+import { BestPracticeDrawer } from './components/Layout/BestPracticeDrawer'
 import { useChat } from './hooks/useChat'
 import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
@@ -75,6 +77,7 @@ function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
+  const [isBestPracticeDrawerOpen, setIsBestPracticeDrawerOpen] = useState(false)
 
   // Track if this is the initial mount (to prevent saving empty array on mount in StrictMode)
   const isInitialMountRef = useRef(true)
@@ -451,42 +454,54 @@ function App() {
   }, [currentSessionId, currentSession?.userMessage, chatSteps, reset])
 
   return (
-    <ThreeColumnLayout
-      leftSidebar={
-        <LeftSidebar
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          searchQuery={searchQuery}
-          onNewSession={handleNewSession}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-          onSearchChange={setSearchQuery}
-        />
-      }
-      mainContent={
-        <MainContent
-          session={currentSession}
-          conversationHistory={currentSession?.conversationHistory || []}
-          steps={chatSteps}
-          allSteps={displaySteps}
-          onStepClick={setSelectedStepId}
-          onSendMessage={handleSendMessage}
-          isStreaming={isStreaming}
-          firstTokenTime={firstTokenTime}
-          messageSendTime={messageSendTime}
-          llmOutput={llmOutput}
-          artifacts={artifacts}
-          askUserQuestion={askUserQuestion}
-          activePlan={activePlan}
-        />
-      }
-      detailPanel={selectedStep ? (
-        <DetailPanel
-          step={selectedStep}
-          onClose={() => setSelectedStepId(null)}
-        />
-      ) : null}
-    />
+    <>
+      <ThreeColumnLayout
+        leftSidebar={
+          <LeftSidebar
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            searchQuery={searchQuery}
+            onNewSession={handleNewSession}
+            onSelectSession={handleSelectSession}
+            onDeleteSession={handleDeleteSession}
+            onSearchChange={setSearchQuery}
+            onOpenBestPractices={() => setIsBestPracticeDrawerOpen(true)}
+          />
+        }
+        mainContent={
+          <MainContent
+            session={currentSession}
+            conversationHistory={currentSession?.conversationHistory || []}
+            steps={chatSteps}
+            allSteps={displaySteps}
+            onStepClick={setSelectedStepId}
+            onSendMessage={handleSendMessage}
+            isStreaming={isStreaming}
+            firstTokenTime={firstTokenTime}
+            messageSendTime={messageSendTime}
+            llmOutput={llmOutput}
+            artifacts={artifacts}
+            askUserQuestion={askUserQuestion}
+            activePlan={activePlan}
+          />
+        }
+        detailPanel={selectedStep ? (
+          <DetailPanel
+            step={selectedStep}
+            onClose={() => setSelectedStepId(null)}
+          />
+        ) : null}
+      />
+      <Agentation />
+      <BestPracticeDrawer
+        isOpen={isBestPracticeDrawerOpen}
+        onClose={() => setIsBestPracticeDrawerOpen(false)}
+        onCreateTask={(templateId) => {
+          console.log('Create task from template:', templateId)
+          // TODO: Implement task creation from template
+        }}
+      />
+    </>
   )
 }
 
