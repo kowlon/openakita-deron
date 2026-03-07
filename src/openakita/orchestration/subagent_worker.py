@@ -12,9 +12,12 @@ Worker 执行完毕后返回 StepResult，可被其他任务复用。
 - 资源隔离：每次执行创建独立的 Agent 实例
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
@@ -524,8 +527,6 @@ class SubAgentWorker:
         Yields:
             流式事件字典
         """
-        from collections.abc import AsyncIterator
-
         if not self._running:
             await self.start()
 

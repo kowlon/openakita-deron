@@ -6,9 +6,12 @@ TaskOrchestrator - 任务编排核心组件
 实现完整的任务生命周期管理。
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
@@ -518,8 +521,6 @@ class TaskOrchestrator:
         Yields:
             SSE 事件字典
         """
-        from collections.abc import AsyncIterator
-
         # 更新任务状态
         task.status = TaskStatus.RUNNING.value
         await self._storage.save_task(task)
@@ -606,8 +607,6 @@ class TaskOrchestrator:
         Yields:
             步骤执行事件
         """
-        from collections.abc import AsyncIterator
-
         # 更新步骤状态
         step.set_status(StepStatus.RUNNING)
         await self._storage.save_step(step)
