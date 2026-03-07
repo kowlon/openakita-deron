@@ -16,6 +16,8 @@ import multiprocessing
 import os
 import uuid
 from pathlib import Path
+from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator
 from typing import Any
 
 from .bus import AgentBus, BusConfig
@@ -110,6 +112,9 @@ class MasterAgent:
         # 任务队列 {task_id: TaskPayload}
         self._pending_tasks: dict[str, TaskPayload] = {}
         self._task_futures: dict[str, asyncio.Future] = {}
+
+        # 流式事件队列 {session_id: asyncio.Queue}
+        self._stream_queues: dict[str, asyncio.Queue] = {}
 
         # 运行状态
         self._running = False
@@ -214,6 +219,10 @@ class MasterAgent:
         self.bus.register_command_handler(CommandType.TASK_RESULT, self._handle_task_result)
         self.bus.register_command_handler(CommandType.CHAT_RESPONSE, self._handle_chat_response)
 
+        # 流式事件处理
+        self.bus.register_command_handler(CommandType.STREAM_EVENT, self._handle_stream_event)
+        self.bus.register_command_handler(CommandType.STREAM_DONE, self._handle_stream_done)
+
     # ==================== 请求处理 ====================
 
     async def handle_request(
@@ -252,6 +261,77 @@ class MasterAgent:
             return await self._distribute_task(
                 session_id, message, session_messages, session, gateway
             )
+
+    async def handle_request_stream(
+        self,
+        session_id: str,
+        message: str,
+        session_messages: list[dict] | None = None,
+        session: Any = None,
+        gateway: Any = None,
+    ) -> AsyncIterator[dict]:
+        """
+        流式处理请求
+
+        对于本地处理的任务，使用 chat_with_session_stream() 提供实时步骤事件。
+        对于分发给 Worker 的任务，目前仍返回最终结果（Worker 进程间通信不支持流式）。
+
+        Args:
+            session_id: 会话 ID
+            message: 用户消息
+            session_messages: 会话历史
+            session: Session 对象
+            gateway: MessageGateway 对象
+
+        Yields:
+            SSE 事件字典
+        """
+        self._stats["tasks_total"] += 1
+
+        # 决定处理方式
+        if self._should_handle_locally(message, session_messages):
+            # 本地处理 - 支持流式输出
+            logger.info(f"[MasterAgent] Streaming locally: {message[:50]}...")
+            async for event in self._handle_locally_stream(
+                session_id, message, session_messages, session, gateway
+            ):
+                yield event
+        else:
+            # 分发给 Worker - 目前不支持流式，返回最终结果
+            logger.info(f"[MasterAgent] Distributing to Worker (no stream): {message[:50]}...")
+            result = await self._distribute_task(
+                session_id, message, session_messages, session, gateway
+            )
+            yield {"type": "text_delta", "content": result}
+
+    async def _handle_locally_stream(
+        self,
+        session_id: str,
+        message: str,
+        session_messages: list[dict] | None = None,
+        session: Any = None,
+        gateway: Any = None,
+    ) -> AsyncIterator[dict]:
+        """本地流式处理请求"""
+        self._stats["tasks_local"] += 1
+
+        async with self._local_agent_lock:
+            try:
+                async for event in self._local_agent.chat_with_session_stream(
+                    message=message,
+                    session_messages=session_messages or [],
+                    session_id=session_id,
+                    session=session,
+                    gateway=gateway,
+                ):
+                    yield event
+
+                self._stats["tasks_success"] += 1
+
+            except Exception as e:
+                self._stats["tasks_failed"] += 1
+                logger.error(f"Local streaming error: {e}", exc_info=True)
+                yield {"type": "error", "message": f"处理出错: {str(e)}"}
 
     def _should_handle_locally(
         self,
@@ -312,6 +392,7 @@ class MasterAgent:
             try:
                 if session_messages is not None:
                     # IM 通道：使用 session 上下文
+                    logger.debug(f"[MasterAgent] Calling chat_with_session, session_messages count: {len(session_messages)}")
                     response = await self._local_agent.chat_with_session(
                         message=message,
                         session_messages=session_messages,
@@ -319,9 +400,11 @@ class MasterAgent:
                         session=session,
                         gateway=gateway,
                     )
+                    logger.info(f"[MasterAgent] chat_with_session returned: {response[:100] if response else 'None/Empty'}...")
                 else:
                     # CLI：使用全局上下文
                     response = await self._local_agent.chat(message, session_id=session_id)
+                    logger.info(f"[MasterAgent] chat returned: {response[:100] if response else 'None/Empty'}...")
 
                 self._stats["tasks_success"] += 1
                 return response
@@ -417,6 +500,222 @@ class MasterAgent:
 
             return f"任务处理出错: {str(e)}"
 
+    async def _distribute_task_stream(
+        self,
+        session_id: str,
+        message: str,
+        session_messages: list[dict] | None = None,
+        session: Any = None,
+        gateway: Any = None,
+    ) -> AsyncIterator[dict]:
+        """
+        流式分发任务给 Worker
+
+        使用 asyncio.Queue 接收 Worker 发送的流式事件，
+        并转发给 SSE。
+
+        Args:
+            session_id: 会话 ID
+            message: 用户消息
+            session_messages: 会话历史
+            session: Session 对象
+            gateway: MessageGateway 对象
+
+        Yields:
+            SSE 事件字典
+        """
+        self._stats["tasks_distributed"] += 1
+
+        # 查找空闲 Worker
+        worker = self.registry.find_idle_agent(exclude_ids=[self.agent_id])
+
+        if not worker:
+            # 所有 Worker 都在忙，回退到本地流式处理
+            logger.warning("No idle worker, falling back to local streaming")
+            async for event in self._handle_locally_stream(
+                session_id, message, session_messages, session, gateway
+            ):
+                yield event
+            return
+
+        # 创建事件队列
+        event_queue = asyncio.Queue()
+        self._stream_queues[session_id] = event_queue
+
+        # 创建任务
+        task_id = str(uuid.uuid4())[:8]
+        task = TaskPayload(
+            task_id=task_id,
+            task_type="chat",
+            description=f"处理用户消息: {message}",
+            content=message,
+            session_id=session_id,
+            context={
+                "session_messages": session_messages or [],
+                "stream": True,  # 启用流式模式
+                "has_session": session is not None,
+                "has_gateway": gateway is not None,
+            },
+        )
+
+        # 记录任务
+        self._pending_tasks[task_id] = task
+
+        # 标记 Worker 为 BUSY
+        self.registry.set_agent_task(worker.agent_id, task_id, task.description)
+
+        logger.info(f"[MasterAgent] Streaming task {task_id} to worker {worker.agent_id}")
+
+        try:
+            # 发送任务
+            await self.bus.send_command(
+                target_id=worker.agent_id,
+                command_type=CommandType.ASSIGN_TASK,
+                payload=task.to_dict(),
+                wait_response=False,
+            )
+
+            # 流式接收事件
+            while True:
+                try:
+                    event = await asyncio.wait_for(
+                        event_queue.get(),
+                        timeout=task.timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"[MasterAgent] Stream task {task_id} timeout")
+                    yield {"type": "error", "message": "任务处理超时"}
+                    break
+
+                # 检查流结束标记
+                if event.get("type") == "__stream_done__":
+                    logger.debug(f"[MasterAgent] Stream done for task {task_id}")
+                    break
+
+                # 转发事件
+                yield event
+
+            self._stats["tasks_success"] += 1
+
+        except Exception as e:
+            logger.error(f"[MasterAgent] Stream task error: {e}", exc_info=True)
+            self._stats["tasks_failed"] += 1
+            yield {"type": "error", "message": f"处理出错: {str(e)}"}
+
+        finally:
+            # 清理资源
+            self._stream_queues.pop(session_id, None)
+            self._pending_tasks.pop(task_id, None)
+            self.registry.clear_agent_task(worker.agent_id, success=True)
+
+    async def _distribute_task_stream(
+        self,
+        session_id: str,
+        message: str,
+        session_messages: list[dict] | None = None,
+        session: Any = None,
+        gateway: Any = None,
+    ) -> AsyncIterator[dict]:
+        """
+        流式分发任务给 Worker
+
+        使用 asyncio.Queue 接收 Worker 发送的流式事件，
+        并转发给 SSE。
+
+        Args:
+            session_id: 会话 ID
+            message: 用户消息
+            session_messages: 会话历史
+            session: Session 对象
+            gateway: MessageGateway 对象
+
+        Yields:
+            SSE 事件字典
+        """
+        self._stats["tasks_distributed"] += 1
+
+        # 查找空闲 Worker
+        worker = self.registry.find_idle_agent(exclude_ids=[self.agent_id])
+
+        if not worker:
+            # 所有 Worker 都在忙，回退到本地流式处理
+            logger.warning("No idle worker, falling back to local streaming")
+            async for event in self._handle_locally_stream(
+                session_id, message, session_messages, session, gateway
+            ):
+                yield event
+            return
+
+        # 创建事件队列
+        event_queue = asyncio.Queue()
+        self._stream_queues[session_id] = event_queue
+
+        # 创建任务
+        task_id = str(uuid.uuid4())[:8]
+        task = TaskPayload(
+            task_id=task_id,
+            task_type="chat",
+            description=f"处理用户消息: {message}",
+            content=message,
+            session_id=session_id,
+            context={
+                "session_messages": session_messages or [],
+                "stream": True,  # 启用流式模式
+                "has_session": session is not None,
+                "has_gateway": gateway is not None,
+            },
+        )
+
+        # 记录任务
+        self._pending_tasks[task_id] = task
+
+        # 标记 Worker 为 BUSY
+        self.registry.set_agent_task(worker.agent_id, task_id, task.description)
+
+        logger.info(f"[MasterAgent] Streaming task {task_id} to worker {worker.agent_id}")
+
+        try:
+            # 发送任务
+            await self.bus.send_command(
+                target_id=worker.agent_id,
+                command_type=CommandType.ASSIGN_TASK,
+                payload=task.to_dict(),
+                wait_response=False,
+            )
+
+            # 流式接收事件
+            while True:
+                try:
+                    event = await asyncio.wait_for(
+                        event_queue.get(),
+                        timeout=task.timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"[MasterAgent] Stream task {task_id} timeout")
+                    yield {"type": "error", "message": "任务处理超时"}
+                    break
+
+                # 检查流结束标记
+                if event.get("type") == "__stream_done__":
+                    logger.debug(f"[MasterAgent] Stream done for task {task_id}")
+                    break
+
+                # 转发事件
+                yield event
+
+            self._stats["tasks_success"] += 1
+
+        except Exception as e:
+            logger.error(f"[MasterAgent] Stream task error: {e}", exc_info=True)
+            self._stats["tasks_failed"] += 1
+            yield {"type": "error", "message": f"处理出错: {str(e)}"}
+
+        finally:
+            # 清理资源
+            self._stream_queues.pop(session_id, None)
+            self._pending_tasks.pop(task_id, None)
+            self.registry.clear_agent_task(worker.agent_id, success=True)
+
     # ==================== 消息处理器 ====================
 
     async def _handle_heartbeat(self, message: AgentMessage) -> AgentMessage | None:
@@ -488,6 +787,50 @@ class MasterAgent:
         """处理对话响应"""
         # 类似 task_result，但专门用于对话
         return await self._handle_task_result(message)
+
+    async def _handle_stream_event(self, message: AgentMessage) -> AgentMessage | None:
+        """
+        处理流式事件
+
+        将 Worker 发送的事件放入对应 session 的队列
+        """
+        payload = message.payload
+        session_id = payload.get("session_id")
+        event = payload.get("event")
+
+        if not session_id:
+            logger.warning("[MasterAgent] STREAM_EVENT missing session_id")
+            return None
+
+        queue = self._stream_queues.get(session_id)
+        if queue:
+            await queue.put(event)
+            logger.debug(f"[MasterAgent] Stream event queued for session {session_id}")
+        else:
+            logger.warning(f"[MasterAgent] No stream queue for session {session_id}")
+
+        return None
+
+    async def _handle_stream_done(self, message: AgentMessage) -> AgentMessage | None:
+        """
+        处理流结束标记
+
+        通知队列流已结束
+        """
+        payload = message.payload
+        session_id = payload.get("session_id")
+
+        if not session_id:
+            logger.warning("[MasterAgent] STREAM_DONE missing session_id")
+            return None
+
+        queue = self._stream_queues.get(session_id)
+        if queue:
+            # 发送特殊的结束标记
+            await queue.put({"type": "__stream_done__"})
+            logger.debug(f"[MasterAgent] Stream done marker queued for session {session_id}")
+
+        return None
 
     # ==================== Worker 管理 ====================
 
