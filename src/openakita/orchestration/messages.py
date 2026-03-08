@@ -80,6 +80,7 @@ class EventType(Enum):
     TASK_COMPLETED = "task_completed"
     TASK_FAILED = "task_failed"
     SYSTEM_ALERT = "system_alert"
+    CONFIG_UPDATED = "config_updated"  # 配置更新事件（热重载）
 
 
 @dataclass

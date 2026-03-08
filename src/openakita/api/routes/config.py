@@ -199,10 +199,10 @@ async def reload_config(request: Request):
     if agent is None:
         return {"status": "ok", "reloaded": False, "reason": "agent not initialized"}
 
-    # Navigate: agent → brain → _llm_client
+    # Navigate: agent -> brain -> _llm_client
     brain = getattr(agent, "brain", None) or getattr(agent, "_local_agent", None)
     if brain and hasattr(brain, "brain"):
-        brain = brain.brain  # agent wrapper → actual agent → brain
+        brain = brain.brain  # agent wrapper -> actual agent -> brain
     llm_client = getattr(brain, "_llm_client", None) if brain else None
     if llm_client is None:
         # Try direct attribute on agent
@@ -214,13 +214,13 @@ async def reload_config(request: Request):
     try:
         success = llm_client.reload()
 
-        # 同时刷新编译端点（Brain 对象上的 compiler_client）
+        # Refresh compiler endpoint (Brain object's compiler_client)
         compiler_reloaded = False
-        brain_obj = brain  # 上面已经解析过的 brain 对象
+        brain_obj = brain  # Already resolved brain object above
         if brain_obj and hasattr(brain_obj, "reload_compiler_client"):
             compiler_reloaded = brain_obj.reload_compiler_client()
 
-        # 同时刷新 STT 端点（Gateway 上的 stt_client）
+        # Refresh STT endpoint (Gateway's stt_client)
         stt_reloaded = False
         gateway = getattr(request.app.state, "gateway", None)
         if gateway and hasattr(gateway, "stt_client") and gateway.stt_client:
@@ -246,6 +246,112 @@ async def reload_config(request: Request):
     except Exception as e:
         logger.error(f"[Config API] Reload failed: {e}", exc_info=True)
         return {"status": "error", "reloaded": False, "reason": str(e)}
+
+
+@router.post("/api/config/prompt/reload")
+async def reload_prompt_config(request: Request):
+    """Hot-reload prompt configuration (identity files) from disk.
+
+    This endpoint reloads SOUL.md, AGENT.md, USER.md, MEMORY.md and
+    compiled files from the identity directory.
+
+    Optionally broadcasts CONFIG_UPDATED event via AgentBus if available.
+    """
+    from openakita.config import settings
+    from openakita.orchestration.prompt_config_loader import (
+        get_prompt_config_loader,
+        reload_all_prompt_configs,
+    )
+
+    try:
+        # Reload all prompt configs
+        configs = reload_all_prompt_configs()
+
+        # Also reload the main identity config
+        identity_path = settings.identity_path
+        loader = get_prompt_config_loader(identity_path, auto_watch=False)
+        config = loader.reload(force=True)
+
+        # Compile prompts if needed
+        try:
+            from openakita.prompt.compiler import check_compiled_outdated, compile_all
+            if check_compiled_outdated(identity_path):
+                logger.info("[Config API] Compiled files outdated, recompiling...")
+                compile_all(identity_path)
+                # Reload after compilation
+                config = loader.reload(force=True)
+        except Exception as compile_err:
+            logger.warning(f"[Config API] Prompt compilation failed: {compile_err}")
+
+        # Broadcast CONFIG_UPDATED event via AgentBus if available
+        bus = getattr(request.app.state, "bus", None)
+        if bus:
+            try:
+                from openakita.orchestration.messages import EventType
+                await bus.broadcast_event(
+                    event_type=EventType.CONFIG_UPDATED,
+                    payload={
+                        "config_type": "prompt",
+                        "identity_dir": str(identity_path),
+                        "files_loaded": list(config.file_mtimes.keys()),
+                        "loaded_at": config.loaded_at,
+                    },
+                    sender_id="config_api",
+                )
+                logger.info("[Config API] Broadcasted CONFIG_UPDATED event")
+            except Exception as bus_err:
+                logger.warning(f"[Config API] Failed to broadcast event: {bus_err}")
+
+        logger.info(
+            f"[Config API] Prompt config reloaded: "
+            f"{len(config.file_mtimes)} files from {identity_path}"
+        )
+
+        return {
+            "status": "ok",
+            "reloaded": True,
+            "identity_dir": str(identity_path),
+            "files_loaded": list(config.file_mtimes.keys()),
+            "loaded_at": config.loaded_at,
+            "compiled_keys": list(config.compiled.keys()),
+        }
+
+    except Exception as e:
+        logger.error(f"[Config API] Prompt config reload failed: {e}", exc_info=True)
+        return {"status": "error", "reloaded": False, "reason": str(e)}
+
+
+@router.get("/api/config/prompt/status")
+async def get_prompt_config_status(request: Request):
+    """Get current prompt configuration status.
+
+    Returns information about loaded config files, their modification times,
+    and whether hot reload watcher is active.
+    """
+    from openakita.config import settings
+    from openakita.orchestration.prompt_config_loader import (
+        get_prompt_config_loader,
+        HAS_WATCHDOG,
+    )
+
+    try:
+        identity_path = settings.identity_path
+        loader = get_prompt_config_loader(identity_path, auto_watch=False)
+        config = loader.config
+
+        return {
+            "status": "ok",
+            "identity_dir": str(identity_path),
+            "loaded_at": config.loaded_at,
+            "files": config.file_mtimes,
+            "compiled": list(config.compiled.keys()),
+            "watching": loader.is_watching,
+            "watchdog_available": HAS_WATCHDOG,
+        }
+
+    except Exception as e:
+        logger.error(f"[Config API] Failed to get prompt config status: {e}")
+        return {"status": "error", "reason": str(e)}
 
 
 @router.post("/api/config/restart")
