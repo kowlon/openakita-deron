@@ -203,49 +203,6 @@ class StepTemplate:
 
 
 @dataclass
-class BestPracticeConfig:
-    """
-    可复用的任务模板配置
-
-    定义了任务的元数据（名称、描述、适用场景）、触发条件描述和步骤序列。
-    用户触发最佳实践时，系统加载配置并实例化为运行时任务。
-    """
-
-    id: str  # 唯一标识 (e.g., "code-review-v1")
-    name: str  # 显示名称
-    description: str  # 任务描述（含适用场景，供 LLM 判定）
-    steps: list[StepTemplate] = field(default_factory=list)  # 步骤模板列表
-    trigger_config: BestPracticeTriggerConfig | None = None  # 触发配置
-
-    def to_dict(self) -> dict:
-        """序列化为字典"""
-        result = {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "steps": [s.to_dict() for s in self.steps],
-        }
-        if self.trigger_config:
-            result["trigger_config"] = self.trigger_config.to_dict()
-        return result
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "BestPracticeConfig":
-        """从字典反序列化"""
-        steps = [StepTemplate.from_dict(s) for s in data.get("steps", [])]
-        trigger_config = None
-        if "trigger_config" in data:
-            trigger_config = BestPracticeTriggerConfig.from_dict(data["trigger_config"])
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            description=data["description"],
-            steps=steps,
-            trigger_config=trigger_config,
-        )
-
-
-@dataclass
 class BestPracticeTriggerConfig:
     """
     最佳实践触发器配置
@@ -330,6 +287,49 @@ class BestPracticeTriggerConfig:
         for bp_id, desc in self.best_practice_descriptions.items():
             lines.append(f"- {bp_id}: {desc}")
         return "\n".join(lines)
+
+
+@dataclass
+class BestPracticeConfig:
+    """
+    可复用的任务模板配置
+
+    定义了任务的元数据（名称、描述、适用场景）、触发条件描述和步骤序列。
+    用户触发最佳实践时，系统加载配置并实例化为运行时任务。
+    """
+
+    id: str  # 唯一标识 (e.g., "code-review-v1")
+    name: str  # 显示名称
+    description: str  # 任务描述（含适用场景，供 LLM 判定）
+    steps: list[StepTemplate] = field(default_factory=list)  # 步骤模板列表
+    trigger_config: BestPracticeTriggerConfig | None = None  # 触发配置
+
+    def to_dict(self) -> dict:
+        """序列化为字典"""
+        result = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "steps": [s.to_dict() for s in self.steps],
+        }
+        if self.trigger_config:
+            result["trigger_config"] = self.trigger_config.to_dict()
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BestPracticeConfig":
+        """从字典反序列化"""
+        steps = [StepTemplate.from_dict(s) for s in data.get("steps", [])]
+        trigger_config = None
+        if "trigger_config" in data:
+            trigger_config = BestPracticeTriggerConfig.from_dict(data["trigger_config"])
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            description=data["description"],
+            steps=steps,
+            trigger_config=trigger_config,
+        )
 
 
 # ==================== 运行时任务模型 ====================

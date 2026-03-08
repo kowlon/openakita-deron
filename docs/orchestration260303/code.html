@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased h-screen overflow-hidden">
+<div class="flex h-full w-full flex-col">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark px-6 py-3 shrink-0">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-1.5 rounded-lg">
+<span class="material-symbols-outlined text-white text-xl" style="">smart_toy</span>
+</div>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold tracking-tight" style="">SeeAgent</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-primary text-sm font-semibold" href="#" style="">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#" style="">History</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#" style="">Settings</a>
+</nav>
+</div>
+<div class="flex flex-1 justify-end gap-4 items-center">
+<label class="relative hidden sm:block w-64" style="">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+<span class="material-symbols-outlined text-xl" style="">search</span>
+</span>
+<input class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-white placeholder:text-slate-500" placeholder="Search sessions..."/>
+</label>
+<div class="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl" style="">person</span>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar -->
+<aside class="w-64 bg-[#111722] border-r border-primary/10 flex flex-col h-full shrink-0">
+<div class="p-4 flex flex-col gap-6">
+<div class="flex flex-col">
+<h1 class="text-white text-base font-bold leading-normal tracking-tight flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-primary text-xl" style="">hub</span>
+                        SeeAgent
+                    </h1>
+<p class="text-[#92a4c9] text-[9px] font-bold uppercase tracking-widest" style="">AI Orchestrator</p>
+</div>
+<button class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg h-9 bg-primary text-white text-xs font-bold leading-normal hover:bg-primary/90 transition-colors" style="">
+<span class="material-symbols-outlined text-[18px]" style="">add</span>
+<span class="" style="">New Chat</span>
+</button><div class="mt-4 flex flex-col gap-2">
+<div class="flex items-center justify-between px-1">
+<p class="text-[#92a4c9] text-[9px] font-bold uppercase tracking-widest" style="">Best Practices</p>
+<span class="material-symbols-outlined text-[#92a4c9] text-[14px] cursor-pointer hover:text-white transition-colors" style="">info</span>
+</div>
+<div class="grid grid-cols-2 gap-1.5">
+<button class="px-2 py-1.5 bg-[#232f48]/50 border border-slate-700/50 text-slate-300 text-[9px] rounded-lg hover:bg-primary/20 hover:text-white hover:border-primary/50 transition-all text-left flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-[12px]" style="">code</span>
+            Code Review
+        </button>
+<button class="px-2 py-1.5 bg-[#232f48]/50 border border-slate-700/50 text-slate-300 text-[9px] rounded-lg hover:bg-primary/20 hover:text-white hover:border-primary/50 transition-all text-left flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-[12px]" style="">database</span>
+            Extraction
+        </button>
+<button class="px-2 py-1.5 bg-[#232f48]/50 border border-slate-700/50 text-slate-300 text-[9px] rounded-lg hover:bg-primary/20 hover:text-white hover:border-primary/50 transition-all text-left flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-[12px]" style="">trending_up</span>
+            Market
+        </button>
+<button class="px-2 py-1.5 bg-[#232f48]/50 border border-slate-700/50 text-slate-300 text-[9px] rounded-lg hover:bg-primary/20 hover:text-white hover:border-primary/50 transition-all text-left flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-[12px]" style="">security</span>
+            Security
+        </button>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="flex flex-col w-full" style="">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-[#92a4c9] text-[18px]" style="">search</span>
+<input class="w-full h-9 bg-[#232f48] border-none rounded-lg pl-9 pr-3 text-white placeholder:text-[#92a4c9] text-xs focus:ring-1 focus:ring-primary" placeholder="Search sessions..."/>
+</div>
+</label>
+</div>
+</div>
+<nav class="flex-1 overflow-y-auto px-2 space-y-0.5 no-scrollbar">
+<!-- Active Session -->
+<div class="flex items-center gap-3 p-2.5 rounded-lg bg-primary/20 border border-primary/30 cursor-pointer">
+<div class="bg-primary text-white flex items-center justify-center rounded-lg shrink-0 size-8">
+<span class="material-symbols-outlined text-sm" style="">chat</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-white text-xs font-semibold truncate" style="">Web Research Task</p>
+<p class="text-[#92a4c9] text-[10px] truncate" style="">12 steps • 2m ago</p>
+</div>
+</div>
+<!-- Other Sessions -->
+<div class="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#232f48] transition-colors cursor-pointer group">
+<div class="bg-[#232f48] group-hover:bg-[#314161] text-white flex items-center justify-center rounded-lg shrink-0 size-8">
+<span class="material-symbols-outlined text-sm" style="">data_object</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-slate-300 text-xs font-medium truncate" style="">Data Extraction</p>
+<p class="text-[#92a4c9] text-[10px] truncate" style="">5 steps • 1h ago</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#232f48] transition-colors cursor-pointer group">
+<div class="bg-[#232f48] group-hover:bg-[#314161] text-white flex items-center justify-center rounded-lg shrink-0 size-8">
+<span class="material-symbols-outlined text-sm" style="">language</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-slate-300 text-xs font-medium truncate" style="">Market Analysis</p>
+<p class="text-[#92a4c9] text-[10px] truncate" style="">24 steps • 5h ago</p>
+</div>
+</div>
+</nav>
+<!-- Bottom Nav -->
+<div class="p-3 border-t border-[#232f48] flex flex-col gap-0.5">
+<div class="flex items-center gap-3 px-2 py-1.5 text-[#92a4c9] hover:text-white hover:bg-[#232f48] rounded-lg cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-lg" style="">settings</span>
+<span class="text-xs font-medium" style="">Settings</span>
+</div>
+<div class="flex items-center gap-3 px-2 py-1.5 text-[#92a4c9] hover:text-white hover:bg-[#232f48] rounded-lg cursor-pointer transition-colors">
+<div class="w-5 h-5 rounded-full bg-primary/40 overflow-hidden">
+<img alt="User profile avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkR66FMvjgXdjmkWxXy5vlSG62a6S55AJcV5QFp9Mdz3ON_cD7teaTNYICpBAfm5ewZotSmpm2Zkhf8GbXLfeyz8GwWfrfU19nV7U7xptef4jfUHO9iINkLnGmxokMGSHnOej3x0Xvhp_a-oHfutVnvbVslOJDgDfCZFUguFvCGK20iAC6L1kac1AxJ6s2-z3O--geUFuiPm1ontB3lpPlrZlkHZfzW2GY-4MVPjEnDwvzfHZj5UnSQPtcuHAd1e-PGD52uaLNNS0" style=""/>
+</div>
+<span class="text-xs font-medium" style="">Alex Rivera</span>
+</div>
+</div>
+</aside>
+<!-- Main Chat Area -->
+<main class="flex-1 flex flex-col bg-background-light dark:bg-background-dark relative overflow-y-auto">
+<div class="max-w-3xl mx-auto w-full p-6 space-y-8">
+<!-- User Message -->
+<div class="flex justify-end gap-3">
+<div class="flex flex-col items-end max-w-[80%]">
+<div class="bg-primary text-white px-4 py-3 rounded-2xl rounded-tr-none shadow-md">
+<p class="text-sm font-medium leading-relaxed" style="">Can you perform a detailed market analysis for AI agents in the healthcare sector for 2024?</p>
+</div>
+<span class="text-[10px] text-slate-500 mt-1 uppercase font-bold" style="">You • 10:24 AM</span>
+</div>
+</div>
+<!-- Agent Response & Task Card -->
+<div class="flex gap-3">
+<div class="h-8 w-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-white text-sm" style="">auto_awesome</span>
+</div>
+<div class="flex flex-col max-w-[85%] space-y-4">
+<div class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm">
+<p class="text-sm dark:text-slate-200 leading-relaxed" style="">Certainly. I'm initiating the Healthcare AI Market Research protocol. This involves multi-step data gathering and synthesis.</p>
+</div>
+<!-- Specialized Task Card -->
+<div class="group relative bg-slate-100 dark:bg-slate-800 border border-primary/30 rounded-xl overflow-hidden shadow-xl ring-1 ring-primary/20 hover:ring-primary/50 transition-all cursor-pointer">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="p-5">
+<div class="flex items-start justify-between mb-4">
+<div>
+<p class="text-[10px] font-bold text-primary uppercase tracking-widest mb-1" style="">Active Best Practice</p>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white" style="">Web Research Task</h3>
+</div>
+<div class="flex items-center gap-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase border border-yellow-500/20">
+<span class="material-symbols-outlined text-sm leading-none" style="">pause</span>
+<span class="" style="">Paused</span>
+</div>
+</div>
+<div class="flex items-center gap-4 mb-5">
+<div class="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[45%]"></div>
+</div>
+<span class="text-xs font-bold text-slate-500" style="">Step 2 of 4</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="h-6 w-6 rounded-full bg-slate-300 dark:bg-slate-600 border-2 border-slate-100 dark:border-slate-800"></div>
+<div class="h-6 w-6 rounded-full bg-primary/40 border-2 border-slate-100 dark:border-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-white" style="">search</span>
+</div>
+</div>
+<button class="text-primary text-sm font-bold flex items-center gap-1 hover:gap-2 transition-all" style="">
+                                        Open Details <span class="material-symbols-outlined text-lg" style="">chevron_right</span>
+</button>
+</div>
+</div>
+</div><div class="mt-4 p-4 bg-blue-50/30 dark:bg-blue-900/10 border-l-2 border-primary/40 rounded-r-xl">
+<p class="text-xs font-bold text-primary uppercase tracking-widest mb-2" style="">Preliminary Insights</p>
+<p class="text-sm text-slate-700 dark:text-slate-300 italic leading-relaxed" style="">
+        Initial findings indicate a significant surge in radiology automation investments, with the 2024 market cap for specialized AI agents projected to exceed $12.4B. Primary growth is driven by a shift toward patient triage bots that reduce administrative overhead by 40%. Key players like Nuance and HealthAgent AI are currently dominating the clinical integration landscape.
+    </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Bar -->
+<div class="absolute bottom-0 inset-x-0 p-6 bg-gradient-to-t from-background-light dark:from-background-dark via-background-light dark:via-background-dark to-transparent">
+<div class="max-w-3xl mx-auto flex gap-4">
+<div class="flex-1 relative">
+<input class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-4 pl-4 pr-12 text-sm shadow-sm focus:ring-2 focus:ring-primary focus:border-transparent text-slate-900 dark:text-white" placeholder="Message SeeAgent..." type="text"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-primary hover:text-primary/80" style="">
+<span class="material-symbols-outlined" style="">send</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Side Panel (Task Board) -->
+<aside class="w-[450px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark flex flex-col shrink-0 h-full">
+<!-- Header -->
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="">analytics</span>
+<h3 class="font-bold text-slate-900 dark:text-white" style="">任务名称</h3>
+</div>
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" style="">
+<span class="material-symbols-outlined" style="">close</span>
+</button>
+</div>
+<!-- Resume Banner -->
+<button class="w-full bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-3 px-4 flex items-center justify-center gap-2 transition-colors" style="">
+<span class="material-symbols-outlined" style="">play_circle</span>
+<span class="" style="">Cancel Task </span>
+</button>
+<!-- Horizontal Step List -->
+<div class="p-4 bg-slate-50 dark:bg-slate-800/30 overflow-x-auto no-scrollbar sticky top-0 z-10">
+<div class="flex gap-4 min-w-max">
+<!-- Step 1 Done -->
+<div class="flex flex-col gap-2 w-32 opacity-60">
+<div class="flex items-center gap-2">
+<span class="h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">check</span>
+</span>
+<span class="text-[10px] font-bold text-slate-500 uppercase" style="">Step 1</span>
+</div>
+<p class="text-xs font-semibold dark:text-slate-300" style="">Intent Analysis</p>
+</div>
+<!-- Step 2 Active -->
+<div class="flex flex-col gap-2 w-40 relative">
+<div class="flex items-center gap-2">
+<span class="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center ring-4 ring-primary/20">
+<span class="material-symbols-outlined text-sm" style="">search</span>
+</span>
+<span class="font-bold text-primary uppercase" style="">Step 2</span>
+</div>
+<p class="text-xs font-bold text-slate-900 dark:text-white" style="">Web Search</p>
+<div class="absolute -bottom-4 left-0 right-0 h-1 bg-primary rounded-full"></div>
+</div>
+<!-- Step 3 Pending -->
+<div class="flex flex-col gap-2 w-32 opacity-40">
+<div class="flex items-center gap-2">
+<span class="h-6 w-6 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-500 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">summarize</span>
+</span>
+<span class="text-[10px] font-bold text-slate-500 uppercase" style="">Step 3</span>
+</div>
+<p class="text-xs font-semibold dark:text-slate-300" style="">Synthesis</p>
+</div>
+<!-- Step 4 Pending -->
+<div class="flex flex-col gap-2 w-32 opacity-40">
+<div class="flex items-center gap-2">
+<span class="h-6 w-6 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-500 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">description</span>
+</span>
+<span class="text-[10px] font-bold text-slate-500 uppercase" style="">Step 4</span>
+</div>
+<p class="text-xs font-semibold dark:text-slate-300" style="">Final Report</p>
+</div>
+</div>
+</div>
+<!-- Detail Output Section -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar"><!-- Active Execution Section -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h4 class="text-xs font-bold text-slate-500 dark:text-[#92a4c9] uppercase tracking-wider">Active Execution</h4>
+<span class="text-[10px] text-primary font-bold px-2 py-0.5 bg-primary/10 rounded">2 Sources</span>
+</div>
+<div class="space-y-2">
+<!-- Card 1 -->
+<div class="group border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-800/20 overflow-hidden transition-all">
+<div class="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="text-sm font-medium dark:text-slate-200">mhealthintelligence.com</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform">expand_more</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-800/20 overflow-hidden transition-all">
+<div class="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/40">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="text-sm font-medium dark:text-slate-200">gartner.com</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Output Results Section -->
+<div class="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+<h4 class="text-xs font-bold text-slate-500 dark:text-[#92a4c9] uppercase tracking-wider">Preliminary Insights</h4>
+<div class="p-4 bg-blue-50/30 dark:bg-blue-900/10 border-l-2 border-primary/40 rounded-r-xl">
+<p class="text-sm text-slate-700 dark:text-slate-300 italic leading-relaxed">
+            The initial scan of healthcare provider portals reveals a distinct shift toward autonomous administrative agents. Market data suggests that these specialized LLM-based solutions are reducing claim denial rates by up to 22% in early adopter networks.
+        </p>
+<p class="text-sm text-slate-700 dark:text-slate-300 italic leading-relaxed mt-3">
+            Furthermore, integration patterns show that 'human-in-the-loop' workflows remain the standard for diagnostic-heavy clinical tasks, while fully autonomous paths are rapidly maturing for patient scheduling and documentation.
+        </p>
+</div>
+</div><div class="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between">
+<h4 class="text-xs font-bold text-slate-500 dark:text-[#92a4c9] uppercase tracking-wider">Output Results</h4><span class="material-symbols-outlined text-[14px] text-slate-400 ml-1.5 cursor-pointer hover:text-primary transition-colors">edit</span>
+<button class="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary/80">
+<span class="material-symbols-outlined text-xs">save</span> SAVE CHANGES
+        </button>
+</div>
+<div class="relative">
+<textarea class="w-full min-h-[300px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-sm leading-relaxed text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary focus:border-transparent resize-none hover:border-primary/50 transition-all cursor-text focus:bg-white dark:focus:bg-slate-900 bg-slate-50 dark:bg-slate-800/50" placeholder="Start typing analysis results...">The healthcare AI market in 2024 is witnessing an unprecedented convergence of generative AI and clinical workflows. 
+
+Key observations:
+1. Triage Automation: Hospitals are deploying AI agents to handle 40% of preliminary patient interactions.
+2. Imaging Synergy: Radiology units integrated with AI diagnostics show a 25% increase in throughput.
+3. Market Cap: The sector's growth is outpacing previous estimates, with specialized agents leading the charge.
+
+Nuance and HealthAgent AI remain the primary market movers...</textarea>
+</div>
+</div></div>
+<!-- Bottom Action Footer -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark shrink-0">
+<div class="flex items-center justify-between">
+<button class="flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs font-bold" style="">
+<span class="material-symbols-outlined text-lg" style="">arrow_back</span> Previous Step
+</button>
+<button class="flex items-center gap-2 text-slate-400 cursor-not-allowed text-xs font-bold" style="">
+Next Step <span class="material-symbols-outlined text-lg" style="">arrow_forward</span>
+</button>
+</div>
+</div></aside>
+</div>
+</div>
+</body></html>

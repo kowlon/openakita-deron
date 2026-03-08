@@ -118,14 +118,6 @@ from .transport import (
     TransportTimeoutError,
 )
 from .worker import WorkerAgent
-from .prompt_config_loader import (
-    PromptConfig,
-    PromptConfigLoader,
-    get_prompt_config_loader,
-    reload_all_prompt_configs,
-    stop_all_watchers,
-    HAS_WATCHDOG,
-)
 
 __all__ = [
     # 消息协议
@@ -194,16 +186,11 @@ __all__ = [
     "PayloadAssemblerConfig",
     "assemble_payload",
     # Prompt Config Loader
-    "PromptConfig",
     "PromptConfigLoader",
     "RouterPromptConfig",
     "BestPracticeTriggerConfig",
     "PromptConfigError",
     "ConfigNotFoundError",
     "get_prompt_loader",
-    "get_prompt_config_loader",
     "clear_prompt_loader",
-    "reload_all_prompt_configs",
-    "stop_all_watchers",
-    "HAS_WATCHDOG",
 ]

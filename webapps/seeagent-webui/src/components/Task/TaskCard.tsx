@@ -6,7 +6,8 @@ type TaskCardProps = {
 }
 
 export function TaskCard({ task, onOpenDetails }: TaskCardProps) {
-  const progress = (task.current_step_index / task.steps.length) * 100
+  const totalSteps = task.steps.length || 1
+  const progress = (task.current_step_index / totalSteps) * 100
 
   // Status label configuration
   const statusConfig = {

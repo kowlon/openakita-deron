@@ -7,10 +7,9 @@ import { DetailPanel } from './components/Layout/DetailPanel'
 import { BestPracticeDrawer } from './components/Layout/BestPracticeDrawer'
 import { TaskBoard } from './components/TaskBoard/TaskBoard'
 import { useChat } from './hooks/useChat'
-import { useTasks, generateTemplateQuestions } from './hooks/useTasks'
+import { useTasks, generateTemplateQuestions, MOCK_TEMPLATES } from './hooks/useTasks'
 import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
-import type { BestPracticeTemplate } from './types/task'
 
 // Extended Session type with conversation history
 interface ExtendedSession extends Session {
@@ -19,52 +18,6 @@ interface ExtendedSession extends Session {
 
 // Storage key for sessions
 const SESSIONS_STORAGE_KEY = 'openakita_sessions'
-
-// Best practice templates (same as in BestPracticeDrawer)
-const BEST_PRACTICE_TEMPLATES: BestPracticeTemplate[] = [
-  {
-    id: 'template-1',
-    name: '代码审查流程',
-    description: '系统化的代码审查流程，包括静态分析、安全检查和性能评估',
-    steps: [
-      { name: '静态分析', description: '运行代码静态分析工具' },
-      { name: '安全检查', description: '检查安全漏洞和风险' },
-      { name: '性能评估', description: '分析性能瓶颈' },
-      { name: '生成报告', description: '生成综合审查报告' },
-    ],
-  },
-  {
-    id: 'template-2',
-    name: '需求分析工作流',
-    description: '从用户需求到技术方案的完整分析流程',
-    steps: [
-      { name: '需求收集', description: '收集和整理用户需求' },
-      { name: '需求分析', description: '分析需求的可行性和优先级' },
-      { name: '技术方案', description: '制定技术实现方案' },
-    ],
-  },
-  {
-    id: 'template-3',
-    name: 'API 设计流程',
-    description: 'RESTful API 设计和文档生成标准流程',
-    steps: [
-      { name: '接口定义', description: '定义 API 接口规范' },
-      { name: '数据建模', description: '设计数据模型和 Schema' },
-      { name: '文档生成', description: '自动生成 API 文档' },
-      { name: 'Mock 服务', description: '创建 Mock 服务用于测试' },
-    ],
-  },
-  {
-    id: 'template-4',
-    name: '自动化测试流程',
-    description: '单元测试、集成测试和 E2E 测试的完整覆盖',
-    steps: [
-      { name: '单元测试', description: '编写和运行单元测试' },
-      { name: '集成测试', description: '编写和运行集成测试' },
-      { name: '覆盖率分析', description: '分析测试覆盖率' },
-    ],
-  },
-]
 
 // Load sessions from localStorage
 function loadSessions(): ExtendedSession[] {
@@ -550,7 +503,7 @@ function App() {
     setIsBestPracticeDrawerOpen(false)
 
     // Get template info for generating question
-    const template = BEST_PRACTICE_TEMPLATES.find(t => t.id === templateId)
+    const template = MOCK_TEMPLATES.find(t => t.id === templateId)
     if (template && template.steps.length > 0) {
       // Generate question based on template's first step
       const question = generateTemplateQuestions(
