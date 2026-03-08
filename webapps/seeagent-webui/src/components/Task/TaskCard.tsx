@@ -7,7 +7,18 @@ type TaskCardProps = {
 
 export function TaskCard({ task, onOpenDetails }: TaskCardProps) {
   const progress = (task.current_step_index / task.steps.length) * 100
-  const isPaused = task.status === 'paused'
+
+  // Status label configuration
+  const statusConfig = {
+    running: { bg: 'bg-primary/10', text: 'text-primary', label: 'RUNNING', icon: 'sync' },
+    paused: { bg: 'bg-yellow-500/10', text: 'text-yellow-600 dark:text-yellow-400', label: 'PAUSED', icon: 'pause' },
+    completed: { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', label: 'COMPLETED', icon: 'check_circle' },
+    failed: { bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400', label: 'FAILED', icon: 'cancel' },
+    cancelled: { bg: 'bg-slate-500/10', text: 'text-slate-500', label: 'CANCELLED', icon: 'block' },
+    pending: { bg: 'bg-slate-500/10', text: 'text-slate-500', label: 'PENDING', icon: 'schedule' },
+  }
+
+  const status = statusConfig[task.status] || statusConfig.pending
 
   return (
     <div className="group relative bg-slate-100 dark:bg-slate-800 border border-primary/30 rounded-xl overflow-hidden shadow-xl ring-1 ring-primary/20 hover:ring-primary/50 transition-all cursor-pointer">
@@ -23,12 +34,11 @@ export function TaskCard({ task, onOpenDetails }: TaskCardProps) {
             </p>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{task.name}</h3>
           </div>
-          {isPaused && (
-            <div className="flex items-center gap-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase border border-yellow-500/20">
-              <span className="material-symbols-outlined text-sm leading-none">pause</span>
-              <span>Paused</span>
-            </div>
-          )}
+          {/* Status Label */}
+          <div className={`flex items-center gap-2 ${status.bg} ${status.text} px-2.5 py-1 rounded-full text-[11px] font-bold uppercase border border-current/20`}>
+            <span className="material-symbols-outlined text-sm leading-none">{status.icon}</span>
+            <span>{status.label}</span>
+          </div>
         </div>
 
         {/* Progress bar */}
