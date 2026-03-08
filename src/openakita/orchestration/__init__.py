@@ -80,6 +80,15 @@ from .payload import (
     PayloadAssemblerConfig,
     assemble_payload,
 )
+from .prompt_config_loader import (
+    BestPracticeTriggerConfig,
+    ConfigNotFoundError,
+    PromptConfigError,
+    PromptConfigLoader,
+    RouterPromptConfig,
+    get_prompt_loader,
+    clear_prompt_loader,
+)
 from .session_tasks import RouteResult, SessionTasks as SessionTasksManager
 from .storage import TaskStorage, get_task_storage, close_task_storage
 from .subagent_worker import (
@@ -176,4 +185,12 @@ __all__ = [
     "PayloadAssembler",
     "PayloadAssemblerConfig",
     "assemble_payload",
+    # Prompt Config Loader
+    "PromptConfigLoader",
+    "RouterPromptConfig",
+    "BestPracticeTriggerConfig",
+    "PromptConfigError",
+    "ConfigNotFoundError",
+    "get_prompt_loader",
+    "clear_prompt_loader",
 ]
