@@ -678,6 +678,7 @@ onOpenTaskDetails={() => setSelectedStepId(null)}
             // Task is now available in the tasks list
           }
         }}
+        templates={templates}
       />
     </>
   )
