@@ -9,8 +9,8 @@ type ThreeColumnLayoutProps = {
 export function ThreeColumnLayout({ leftSidebar, mainContent, detailPanel }: ThreeColumnLayoutProps) {
   return (
     <div className="flex h-full w-full bg-background-dark">
-      {/* 左侧边栏 - 固定宽度 288px */}
-      <aside className="w-72 h-full shrink-0">
+      {/* 左侧边栏 - 256px，小屏幕隐藏 */}
+      <aside className="hidden md:flex w-64 h-full shrink-0">
         {leftSidebar}
       </aside>
 
@@ -19,9 +19,9 @@ export function ThreeColumnLayout({ leftSidebar, mainContent, detailPanel }: Thr
         {mainContent}
       </main>
 
-      {/* 右侧详情面板 - 固定宽度 384px，条件渲染 */}
+      {/* 右侧详情面板 - 450px，中等屏幕隐藏，大屏幕显示 */}
       {detailPanel && (
-        <aside className="w-96 h-full shrink-0">
+        <aside className="hidden xl:flex w-[450px] h-full shrink-0">
           {detailPanel}
         </aside>
       )}
