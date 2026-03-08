@@ -5,6 +5,7 @@ import { LeftSidebar } from './components/Layout/LeftSidebar'
 import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { BestPracticeDrawer } from './components/Layout/BestPracticeDrawer'
+import { TaskBoard } from './components/TaskBoard/TaskBoard'
 import { useChat } from './hooks/useChat'
 import { useTasks } from './hooks/useTasks'
 import type { Session, Step, ConversationTurn } from './types'
@@ -109,9 +110,11 @@ function App() {
 
   // Tasks hook for best practices integration
   const {
+    currentTask,
     createTask,
-    // These are available for future task board integration:
-    // tasks, currentTask, resumeTask, pauseTask, cancelTask, selectTask
+    resumeTask,
+    pauseTask,
+    cancelTask,
   } = useTasks(currentSessionId)
 
   // Chat hook - must be before currentSteps
@@ -461,6 +464,38 @@ function App() {
     currentTurnTimingRef.current = { startTime: null, firstTokenTime: null }
   }, [currentSessionId, currentSession?.userMessage, chatSteps, reset])
 
+  // Handler for starting a best practice - creates task and shows task board
+  const handleStartBestPractice = useCallback(async (templateId: string) => {
+    // Ensure we have a session
+    let sessionId = currentSessionId
+    if (!sessionId) {
+      const newSession: ExtendedSession = {
+        id: generateId(),
+        title: 'Best Practice Task',
+        stepCount: 0,
+        timestamp: Date.now(),
+        status: 'active',
+        userMessage: '',
+        conversationHistory: [],
+      }
+      setSessions((prev) => [newSession, ...prev])
+      sessionId = newSession.id
+      setCurrentSessionId(sessionId)
+    }
+
+    // Create the task
+    const task = await createTask(templateId)
+    if (task) {
+      // Close drawer if open
+      setIsBestPracticeDrawerOpen(false)
+    }
+  }, [currentSessionId, createTask])
+
+  // Handler for opening all best practices
+  const handleOpenAllPractices = useCallback(() => {
+    setIsBestPracticeDrawerOpen(true)
+  }, [])
+
   return (
     <>
       <ThreeColumnLayout
@@ -473,7 +508,8 @@ function App() {
             onSelectSession={handleSelectSession}
             onDeleteSession={handleDeleteSession}
             onSearchChange={setSearchQuery}
-            onOpenBestPractices={() => setIsBestPracticeDrawerOpen(true)}
+            onStartBestPractice={handleStartBestPractice}
+            onOpenAllPractices={handleOpenAllPractices}
           />
         }
         mainContent={
@@ -493,7 +529,23 @@ function App() {
             activePlan={activePlan}
           />
         }
-        detailPanel={selectedStep ? (
+        detailPanel={currentTask ? (
+          <TaskBoard
+            task={currentTask}
+            onResume={async () => {
+              if (currentTask) await resumeTask(currentTask.id)
+            }}
+            onPause={async () => {
+              if (currentTask) await pauseTask(currentTask.id)
+            }}
+            onCancel={async () => {
+              if (currentTask) await cancelTask(currentTask.id)
+            }}
+            onUpdateStep={async (stepId, output) => {
+              console.log('Update step:', stepId, output)
+            }}
+          />
+        ) : selectedStep ? (
           <DetailPanel
             step={selectedStep}
             onClose={() => setSelectedStepId(null)}

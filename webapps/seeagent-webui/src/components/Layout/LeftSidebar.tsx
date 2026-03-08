@@ -10,7 +10,8 @@ type LeftSidebarProps = {
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
   onSearchChange: (query: string) => void
-  onOpenBestPractices: () => void
+  onStartBestPractice: (templateId: string) => void
+  onOpenAllPractices: () => void
 }
 
 export function LeftSidebar({
@@ -21,7 +22,8 @@ export function LeftSidebar({
   onSelectSession,
   onDeleteSession,
   onSearchChange,
-  onOpenBestPractices,
+  onStartBestPractice,
+  onOpenAllPractices,
 }: LeftSidebarProps) {
   return (
     <aside className="w-72 bg-[#111722] border-r border-primary/10 flex flex-col h-full">
@@ -46,8 +48,8 @@ export function LeftSidebar({
 
         {/* Best Practices Quick Entry */}
         <BestPracticeEntry
-          onPracticeClick={onOpenBestPractices}
-          onOpenAllPractices={onOpenBestPractices}
+          onPracticeClick={onStartBestPractice}
+          onOpenAllPractices={onOpenAllPractices}
         />
 
         {/* Search */}
