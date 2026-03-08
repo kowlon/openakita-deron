@@ -638,7 +638,7 @@ function App() {
             askUserQuestion={askUserQuestion}
             activePlan={activePlan}
             currentTask={currentTask}
-            onOpenTaskDetails={() => {}}
+onOpenTaskDetails={() => setSelectedStepId(null)}
             pendingTaskQuestion={pendingTaskQuestion}
             onAnswerTaskQuestion={handleAnswerTaskQuestion}
           />
