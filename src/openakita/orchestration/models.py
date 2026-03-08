@@ -7,6 +7,7 @@
 - RouterPromptConfig: 路由器 Prompt 配置
 - SubAgentConfig: SubAgent 配置
 - StepTemplate / BestPracticeConfig: 任务模板
+- BestPracticeTriggerConfig: 最佳实践触发器配置
 - TaskStep / OrchestrationTask: 运行时任务和步骤
 - SessionTasks: 会话任务管理
 """
@@ -234,6 +235,93 @@ class BestPracticeConfig:
             description=data["description"],
             steps=steps,
         )
+
+
+@dataclass
+class BestPracticeTriggerConfig:
+    """
+    最佳实践触发器配置
+
+    定义 LLM 判断是否应该触发最佳实践的配置。
+    独立于 BestPracticeConfig，专注于触发判断逻辑。
+
+    Attributes:
+        trigger_name: 触发器名称（用于标识和日志）
+        description: 触发器用途描述
+        system_prompt: LLM 判断用的系统提示词，包含判断逻辑和输出格式要求
+        best_practice_descriptions: 各最佳实践的描述字典 {bp_id: description}，供 LLM 匹配
+        confidence_threshold: 触发置信度阈值，范围 [0.0, 1.0]，默认 0.7
+    """
+
+    trigger_name: str  # 触发器名称
+    description: str  # 触发器用途描述
+    system_prompt: str  # LLM 判断用的系统提示词
+    best_practice_descriptions: dict[str, str] = field(
+        default_factory=dict
+    )  # {bp_id: description}
+    confidence_threshold: float = 0.7  # 触发置信度阈值
+
+    def to_dict(self) -> dict:
+        """序列化为字典"""
+        return {
+            "trigger_name": self.trigger_name,
+            "description": self.description,
+            "system_prompt": self.system_prompt,
+            "best_practice_descriptions": self.best_practice_descriptions,
+            "confidence_threshold": self.confidence_threshold,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BestPracticeTriggerConfig":
+        """从字典反序列化"""
+        return cls(
+            trigger_name=data["trigger_name"],
+            description=data["description"],
+            system_prompt=data["system_prompt"],
+            best_practice_descriptions=data.get("best_practice_descriptions", {}),
+            confidence_threshold=data.get("confidence_threshold", 0.7),
+        )
+
+    def update_best_practice_descriptions(
+        self, descriptions: dict[str, str]
+    ) -> None:
+        """
+        动态更新最佳实践描述列表
+
+        Args:
+            descriptions: 新的最佳实践描述字典 {bp_id: description}
+        """
+        self.best_practice_descriptions.update(descriptions)
+
+    def remove_best_practice(self, bp_id: str) -> bool:
+        """
+        移除指定最佳实践描述
+
+        Args:
+            bp_id: 最佳实践 ID
+
+        Returns:
+            是否成功移除
+        """
+        if bp_id in self.best_practice_descriptions:
+            del self.best_practice_descriptions[bp_id]
+            return True
+        return False
+
+    def get_formatted_descriptions(self) -> str:
+        """
+        获取格式化的最佳实践描述列表，用于 LLM prompt
+
+        Returns:
+            格式化的描述文本
+        """
+        if not self.best_practice_descriptions:
+            return "当前没有可用的最佳实践。"
+
+        lines = ["可用的最佳实践列表："]
+        for bp_id, desc in self.best_practice_descriptions.items():
+            lines.append(f"- {bp_id}: {desc}")
+        return "\n".join(lines)
 
 
 # ==================== 运行时任务模型 ====================
