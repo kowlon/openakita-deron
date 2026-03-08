@@ -1,6 +1,25 @@
 import { useState, useEffect, useCallback } from 'react'
-import { apiGet } from '@/api/client'
+import { apiGet, apiPost } from '@/api/client'
 import type { BestPracticeTemplate, OrchestrationTask, TaskStats } from '@/types/task'
+
+/**
+ * Generate a question dialog for a template's first step
+ */
+export function generateTemplateQuestions(
+  _templateId: string,
+  templateName: string,
+  firstStepName: string,
+  firstStepDescription: string
+) {
+  return {
+    question: `即将执行「${templateName}」任务。第一步：${firstStepName} - ${firstStepDescription}。是否开始执行？`,
+    options: [
+      { id: 'start', label: '开始执行' },
+      { id: 'customize', label: '自定义参数' },
+      { id: 'skip', label: '取消' },
+    ],
+  }
+}
 
 /**
  * Hook for managing tasks and best practice templates
@@ -74,6 +93,35 @@ export function useTasks(sessionId: string | null) {
     }
   }, [sessionId])
 
+  // Create a new task with input payload
+  const createTaskWithInput = useCallback(async (
+    templateId: string,
+    inputPayload: Record<string, unknown>
+  ): Promise<OrchestrationTask | null> => {
+    if (!sessionId) {
+      console.error('No session ID available')
+      return null
+    }
+
+    try {
+      setIsLoading(true)
+      const task = await apiPost<OrchestrationTask>('/tasks', {
+        session_id: sessionId,
+        template_id: templateId,
+        input_payload: inputPayload,
+      })
+      setCurrentTask(task)
+      setTasks(prev => [task, ...prev])
+      return task
+    } catch (err) {
+      console.error('Failed to create task with input:', err)
+      setError(err instanceof Error ? err.message : 'Failed to create task')
+      return null
+    } finally {
+      setIsLoading(false)
+    }
+  }, [sessionId])
+
   // Resume a task
   const resumeTask = useCallback(async (taskId: string): Promise<void> => {
     try {
@@ -118,6 +166,7 @@ export function useTasks(sessionId: string | null) {
     isLoading,
     error,
     createTask,
+    createTaskWithInput,
     resumeTask,
     pauseTask,
     cancelTask,
