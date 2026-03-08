@@ -22,13 +22,14 @@ const DEFAULT_QUICK_PRACTICES: QuickPractice[] = [
 
 type BestPracticeEntryProps = {
   onPracticeClick: (practiceId: string) => void
+  onOpenAllPractices?: () => void
 }
 
 /**
  * BestPracticeEntry component
  * Displays a grid of quick access best practice templates in the sidebar
  */
-export function BestPracticeEntry({ onPracticeClick }: BestPracticeEntryProps) {
+export function BestPracticeEntry({ onPracticeClick, onOpenAllPractices }: BestPracticeEntryProps) {
   const [practices] = useState<QuickPractice[]>(DEFAULT_QUICK_PRACTICES)
 
   return (
@@ -39,10 +40,11 @@ export function BestPracticeEntry({ onPracticeClick }: BestPracticeEntryProps) {
           Best Practices
         </p>
         <span
+          onClick={onOpenAllPractices}
           className="material-symbols-outlined text-[#92a4c9] text-[14px] cursor-pointer hover:text-white transition-colors"
-          title="Click to start a best practice template for quick task creation"
+          title="查看所有最佳实践"
         >
-          info
+          expand_more
         </span>
       </div>
 

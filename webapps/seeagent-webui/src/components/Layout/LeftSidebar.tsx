@@ -45,7 +45,10 @@ export function LeftSidebar({
         </button>
 
         {/* Best Practices Quick Entry */}
-        <BestPracticeEntry onPracticeClick={onOpenBestPractices} />
+        <BestPracticeEntry
+          onPracticeClick={onOpenBestPractices}
+          onOpenAllPractices={onOpenBestPractices}
+        />
 
         {/* Search */}
         <div className="flex flex-col gap-1">
