@@ -1,5 +1,4 @@
 import type { TaskStep } from '@/types/task'
-import { TaskStepCard } from './TaskStepCard'
 
 type TaskStepTimelineProps = {
   steps: TaskStep[]
@@ -7,6 +6,20 @@ type TaskStepTimelineProps = {
   onStepClick: (stepId: string) => void
 }
 
+/**
+ * Get icon for step based on status
+ */
+function getStepIcon(status: string): string {
+  if (status === 'completed') return 'check'
+  if (status === 'running') return 'play_arrow'
+  if (status === 'failed') return 'error'
+  return 'circle' // Default icon for pending
+}
+
+/**
+ * Horizontal step timeline component
+ * Displays steps in a horizontal scrollable layout
+ */
 export function TaskStepTimeline({
   steps,
   currentStepIndex,
@@ -22,31 +35,54 @@ export function TaskStepTimeline({
   }
 
   return (
-    <div className="space-y-3">
-      {/* Progress bar */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-          <span>进度</span>
-          <span>{currentStepIndex} / {steps.length}</span>
-        </div>
-        <div className="w-full bg-slate-700 rounded-full h-2">
-          <div
-            className="bg-primary h-2 rounded-full transition-all duration-300"
-            style={{ width: `${(currentStepIndex / steps.length) * 100}%` }}
-          />
-        </div>
-      </div>
+    <div className="p-4 bg-slate-50 dark:bg-slate-800/30 overflow-x-auto no-scrollbar">
+      <div className="flex gap-4 min-w-max">
+        {steps.map((step, index) => {
+          const isCompleted = step.status === 'completed'
+          const isActive = index === currentStepIndex
 
-      {/* Step cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        {steps.map((step, index) => (
-          <TaskStepCard
-            key={step.id}
-            step={step}
-            isActive={index === currentStepIndex}
-            onClick={() => onStepClick(step.id)}
-          />
-        ))}
+          // Determine styles based on status
+          const containerClass = isActive
+            ? 'flex flex-col gap-2 w-32 relative'
+            : `flex flex-col gap-2 w-32 ${isCompleted ? 'opacity-60' : 'opacity-40'}`
+
+          const iconBgClass = isCompleted
+            ? 'bg-emerald-500 text-white'
+            : isActive
+              ? 'bg-primary text-white ring-4 ring-primary/20'
+              : 'bg-slate-300 dark:bg-slate-700 text-slate-500'
+
+          const labelClass = isActive
+            ? 'font-bold text-primary uppercase'
+            : 'text-[10px] font-bold text-slate-500 uppercase'
+
+          const nameClass = isActive
+            ? 'text-xs font-bold text-slate-900 dark:text-white'
+            : 'text-xs font-semibold dark:text-slate-300'
+
+          return (
+            <div
+              key={step.id}
+              onClick={() => onStepClick(step.id)}
+              className={containerClass}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`h-6 w-6 rounded-full flex items-center justify-center ${iconBgClass}`}>
+                  <span className="material-symbols-outlined text-sm">
+                    {getStepIcon(step.status)}
+                  </span>
+                </span>
+                <span className={labelClass}>Step {index + 1}</span>
+              </div>
+              <p className={nameClass}>{step.name}</p>
+              {/* Active step indicator line */}
+              {isActive && (
+                <div className="absolute -bottom-4 left-0 right-0 h-1 bg-primary rounded-full" />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
