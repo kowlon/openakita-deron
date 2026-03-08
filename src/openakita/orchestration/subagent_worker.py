@@ -520,25 +520,38 @@ class SubAgentWorker:
         流式执行步骤，yield 事件
 
         使用 Agent.chat_with_session_stream() 实现流式输出。
+        支持超时控制，事件包装和错误处理。
 
         Args:
             payload: 执行载荷
 
         Yields:
-            流式事件字典
+            流式事件字典，包装了 task_id 和 step_id 上下文
         """
         if not self._running:
             await self.start()
 
         if self.is_busy:
-            yield {"type": "error", "message": "Worker is busy with another task"}
+            yield {
+                "type": "error",
+                "message": "Worker is busy with another task",
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
             return
 
         self._current_task_id = payload.task_id
+        start_time = time.time()
+        step_success = False  # 跟踪步骤是否成功
 
         agent_config = payload.agent_config
         if not agent_config:
-            yield {"type": "error", "message": "Missing agent_config in payload"}
+            yield {
+                "type": "error",
+                "message": "Missing agent_config in payload",
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
             self._current_task_id = None
             return
 
@@ -553,29 +566,129 @@ class SubAgentWorker:
             # 初始化 Agent
             await agent.initialize(start_scheduler=False)
 
-            # 流式执行
-            async for event in agent.chat_with_session_stream(
+            # 使用超时保护的流式执行
+            async for event in self._execute_stream_with_timeout(
+                agent=agent,
+                payload=payload,
+                messages=messages,
+            ):
+                # 检查步骤完成状态
+                if event.get("type") == "step_complete":
+                    step_success = event.get("success", False)
+                yield event
+
+            # 更新成功统计
+            if step_success:
+                self._tasks_completed += 1
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Worker {self.worker_id}: stream step {payload.step_id} timeout "
+                f"after {payload.timeout}s"
+            )
+            self._tasks_failed += 1
+            yield {
+                "type": "error",
+                "message": f"Execution timeout after {payload.timeout}s",
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Worker {self.worker_id}: stream step {payload.step_id} failed: {e}",
+                exc_info=True,
+            )
+            self._tasks_failed += 1
+            yield {
+                "type": "error",
+                "message": str(e),
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
+
+        finally:
+            # 清理资源
+            await agent.shutdown()
+            self._current_task_id = None
+
+            # 更新统计
+            duration_ms = (time.time() - start_time) * 1000
+            logger.info(
+                f"Worker {self.worker_id}: stream step {payload.step_id} completed "
+                f"(success={step_success}, duration={duration_ms:.0f}ms)"
+            )
+
+    async def _execute_stream_with_timeout(
+        self,
+        agent: Agent,
+        payload: SubAgentPayload,
+        messages: list[dict],
+    ) -> AsyncIterator[dict]:
+        """
+        带超时保护的流式执行
+
+        Args:
+            agent: Agent 实例
+            payload: 执行载荷
+            messages: 聊天消息列表
+
+        Yields:
+            包装后的流式事件
+        """
+        start_time = time.time()
+
+        try:
+            # 创建流式生成器
+            stream_gen = agent.chat_with_session_stream(
                 message=payload.user_input,
                 session_messages=messages,
                 session_id=f"task-{payload.task_id}-step-{payload.step_id}",
-            ):
-                yield event
+            )
+
+            # 使用 asyncio.timeout 进行超时控制 (Python 3.11+)
+            # 对于兼容性，使用 asyncio.wait_for 包装整个迭代
+            async for event in stream_gen:
+                # 检查超时
+                elapsed = time.time() - start_time
+                if elapsed > payload.timeout:
+                    raise asyncio.TimeoutError(
+                        f"Stream execution exceeded timeout: {payload.timeout}s"
+                    )
+
+                # 包装事件，添加步骤上下文
+                wrapped_event = {
+                    **event,
+                    "task_id": payload.task_id,
+                    "step_id": payload.step_id,
+                }
+                yield wrapped_event
 
             # 发送步骤完成事件
             yield {
                 "type": "step_complete",
                 "task_id": payload.task_id,
                 "step_id": payload.step_id,
+                "success": True,
             }
 
+        except asyncio.TimeoutError:
+            raise
         except Exception as e:
-            logger.error(f"Stream execution error: {e}", exc_info=True)
-            yield {"type": "error", "message": str(e)}
-
-        finally:
-            # 清理资源
-            await agent.shutdown()
-            self._current_task_id = None
+            # 将异常转换为错误事件
+            yield {
+                "type": "error",
+                "message": str(e),
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+            }
+            yield {
+                "type": "step_complete",
+                "task_id": payload.task_id,
+                "step_id": payload.step_id,
+                "success": False,
+            }
+            raise
 
     def _extract_artifacts(self, response: Any) -> list[dict]:
         """

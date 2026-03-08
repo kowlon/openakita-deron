@@ -6,6 +6,7 @@ import { MainContent } from './components/Layout/MainContent'
 import { DetailPanel } from './components/Layout/DetailPanel'
 import { BestPracticeDrawer } from './components/Layout/BestPracticeDrawer'
 import { useChat } from './hooks/useChat'
+import { useTasks } from './hooks/useTasks'
 import type { Session, Step, ConversationTurn } from './types'
 import type { Plan } from './types/plan'
 
@@ -105,6 +106,13 @@ function App() {
     startTime: number | null
     firstTokenTime: number | null
   }>({ startTime: null, firstTokenTime: null })
+
+  // Tasks hook for best practices integration
+  const {
+    createTask,
+    // These are available for future task board integration:
+    // tasks, currentTask, resumeTask, pauseTask, cancelTask, selectTask
+  } = useTasks(currentSessionId)
 
   // Chat hook - must be before currentSteps
   const {
@@ -496,9 +504,13 @@ function App() {
       <BestPracticeDrawer
         isOpen={isBestPracticeDrawerOpen}
         onClose={() => setIsBestPracticeDrawerOpen(false)}
-        onCreateTask={(templateId) => {
+        onCreateTask={async (templateId) => {
           console.log('Create task from template:', templateId)
-          // TODO: Implement task creation from template
+          const task = await createTask(templateId)
+          if (task) {
+            console.log('Task created successfully:', task.id)
+            // Task is now available in the tasks list
+          }
         }}
       />
     </>

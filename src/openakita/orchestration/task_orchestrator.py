@@ -28,6 +28,7 @@ from .models import (
 )
 from .session_tasks import RouteResult, SessionTasks as SessionTasksManager
 from .storage import TaskStorage
+from .subagent_worker import SubAgentPayload, SubAgentWorker
 from .transport import (
     AgentTransport,
     Command,
@@ -111,6 +112,7 @@ class TaskOrchestrator:
         self,
         storage: TaskStorage | None = None,
         transport: AgentTransport | None = None,
+        worker: SubAgentWorker | None = None,
     ):
         """
         初始化任务编排器
@@ -118,9 +120,11 @@ class TaskOrchestrator:
         Args:
             storage: 任务存储实例（可选，默认创建新实例）
             transport: 通信传输实例（可选，默认使用 MemoryTransport）
+            worker: SubAgentWorker 实例（可选，默认创建新实例）
         """
         self._storage = storage or TaskStorage()
         self._transport = transport or MemoryTransport("orchestrator")
+        self._worker = worker or SubAgentWorker("orchestrator-worker")
 
         # 会话任务管理器缓存
         self._session_tasks: dict[str, SessionTasksManager] = {}
@@ -148,6 +152,9 @@ class TaskOrchestrator:
         # 启动传输
         await self._transport.start()
 
+        # 启动 Worker
+        await self._worker.start()
+
         self._running = True
         logger.info("TaskOrchestrator started")
 
@@ -155,6 +162,9 @@ class TaskOrchestrator:
         """停止编排器"""
         if not self._running:
             return
+
+        # 停止 Worker
+        await self._worker.stop()
 
         # 停止传输
         await self._transport.stop()
@@ -612,21 +622,6 @@ class TaskOrchestrator:
         await self._storage.save_step(step)
 
         try:
-            # 构建执行命令
-            command = Command.create(
-                command_type=CommandType.EXECUTE_STEP,
-                payload={
-                    "task_id": task.id,
-                    "step_id": step.id,
-                    "step_index": step.index,
-                    "input_args": step.input_args,
-                    "sub_agent_config": step.sub_agent_config.to_dict() if step.sub_agent_config else None,
-                    "context_variables": task.context_variables,
-                },
-                sender_id="orchestrator",
-                target_id="worker",
-            )
-
             # 发布步骤执行中事件
             yield {
                 "type": "step_progress",
@@ -635,18 +630,38 @@ class TaskOrchestrator:
                 "status": "executing",
             }
 
-            # TODO: 实际调用 SubAgentWorker.execute_stream()
-            # 目前返回模拟响应
-            yield {
-                "type": "step_progress",
-                "task_id": task.id,
-                "step_id": step.id,
-                "status": "completed",
-            }
+            # 构建执行载荷
+            payload = SubAgentPayload(
+                task_id=task.id,
+                step_id=step.id,
+                step_index=step.index,
+                agent_config=step.sub_agent_config,
+                task_context=task.context_variables,
+                user_input="",  # 从 input_args 或其他来源获取
+                timeout=300.0,  # 默认超时
+            )
+
+            # 从 input_args 获取用户输入（如果存在）
+            if step.input_args and isinstance(step.input_args, dict):
+                payload.user_input = step.input_args.get("user_input", "")
+
+            # 调用 Worker.execute_stream()
+            step_completed = False
+            async for event in self._worker.execute_stream(payload):
+                # 检查是否为步骤完成事件
+                if event.get("type") == "step_complete":
+                    step_completed = event.get("success", True)
+
+                yield event
 
             # 更新步骤状态
-            step.set_status(StepStatus.COMPLETED)
-            step.output_result = {"status": "completed"}
+            if step_completed:
+                step.set_status(StepStatus.COMPLETED)
+                step.output_result = {"status": "completed"}
+            else:
+                step.set_status(StepStatus.FAILED)
+                step.output_result = {"status": "failed"}
+
             await self._storage.save_step(step)
 
         except Exception as e:

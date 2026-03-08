@@ -32,6 +32,8 @@ from .messages import (
     TaskResult,
 )
 from .registry import AgentRegistry
+from .storage import TaskStorage
+from .task_orchestrator import RouteDecision, TaskOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +142,9 @@ class MasterAgent:
         )
         self.registry.register(master_info)
 
+        # TaskOrchestrator 集成（用于最佳实践任务编排）
+        self.task_orchestrator = TaskOrchestrator(storage=TaskStorage())
+
     # ==================== 生命周期 ====================
 
     async def start(self) -> None:
@@ -161,6 +166,9 @@ class MasterAgent:
         # 启动最小数量的 Worker
         for _i in range(self.min_workers):
             await self.spawn_worker()
+
+        # 启动 TaskOrchestrator
+        await self.task_orchestrator.start()
 
         # 启动健康检查
         self._health_check_task = asyncio.create_task(self._health_check_loop())
@@ -188,6 +196,9 @@ class MasterAgent:
 
         # 停止所有 Worker
         await self._stop_all_workers()
+
+        # 停止 TaskOrchestrator
+        await self.task_orchestrator.stop()
 
         # 停止通信总线
         await self.bus.stop()
@@ -276,6 +287,10 @@ class MasterAgent:
         对于本地处理的任务，使用 chat_with_session_stream() 提供实时步骤事件。
         对于分发给 Worker 的任务，目前仍返回最终结果（Worker 进程间通信不支持流式）。
 
+        集成 TaskOrchestrator 后，会先检查是否命中最佳实践任务：
+        - 如果命中，创建任务并流式执行
+        - 否则走原有逻辑
+
         Args:
             session_id: 会话 ID
             message: 用户消息
@@ -287,6 +302,38 @@ class MasterAgent:
             SSE 事件字典
         """
         self._stats["tasks_total"] += 1
+
+        # 先检查是否命中最佳实践任务
+        try:
+            route_output = await self.task_orchestrator.route_input(session_id, message)
+
+            if route_output.decision == RouteDecision.TO_TASK:
+                # 检查是否有活跃任务需要恢复
+                session_tasks = await self.task_orchestrator.get_session_tasks(session_id)
+                active_task = session_tasks.get_active_task()
+
+                if active_task:
+                    # 恢复并执行现有任务
+                    logger.info(f"[MasterAgent] Resuming existing task: {active_task.id}")
+                    async for event in self.task_orchestrator.execute_task_stream(active_task):
+                        yield event
+                    return
+
+                # 创建新任务（如果没有模板，走正常流程）
+                # TODO: 后续根据最佳实践匹配创建任务
+                logger.debug(f"[MasterAgent] Route to task but no active task, falling back to normal flow")
+
+            elif route_output.decision == RouteDecision.TASK_SUSPENDED:
+                # 任务已暂停
+                yield {
+                    "type": "task_suspended",
+                    "message": route_output.message or "Task suspended",
+                }
+                return
+
+        except Exception as e:
+            # 路由失败，继续走正常流程
+            logger.warning(f"[MasterAgent] Task routing failed: {e}, falling back to normal flow")
 
         # 决定处理方式
         if self._should_handle_locally(message, session_messages):
@@ -499,114 +546,6 @@ class MasterAgent:
             self._task_futures.pop(task_id, None)
 
             return f"任务处理出错: {str(e)}"
-
-    async def _distribute_task_stream(
-        self,
-        session_id: str,
-        message: str,
-        session_messages: list[dict] | None = None,
-        session: Any = None,
-        gateway: Any = None,
-    ) -> AsyncIterator[dict]:
-        """
-        流式分发任务给 Worker
-
-        使用 asyncio.Queue 接收 Worker 发送的流式事件，
-        并转发给 SSE。
-
-        Args:
-            session_id: 会话 ID
-            message: 用户消息
-            session_messages: 会话历史
-            session: Session 对象
-            gateway: MessageGateway 对象
-
-        Yields:
-            SSE 事件字典
-        """
-        self._stats["tasks_distributed"] += 1
-
-        # 查找空闲 Worker
-        worker = self.registry.find_idle_agent(exclude_ids=[self.agent_id])
-
-        if not worker:
-            # 所有 Worker 都在忙，回退到本地流式处理
-            logger.warning("No idle worker, falling back to local streaming")
-            async for event in self._handle_locally_stream(
-                session_id, message, session_messages, session, gateway
-            ):
-                yield event
-            return
-
-        # 创建事件队列
-        event_queue = asyncio.Queue()
-        self._stream_queues[session_id] = event_queue
-
-        # 创建任务
-        task_id = str(uuid.uuid4())[:8]
-        task = TaskPayload(
-            task_id=task_id,
-            task_type="chat",
-            description=f"处理用户消息: {message}",
-            content=message,
-            session_id=session_id,
-            context={
-                "session_messages": session_messages or [],
-                "stream": True,  # 启用流式模式
-                "has_session": session is not None,
-                "has_gateway": gateway is not None,
-            },
-        )
-
-        # 记录任务
-        self._pending_tasks[task_id] = task
-
-        # 标记 Worker 为 BUSY
-        self.registry.set_agent_task(worker.agent_id, task_id, task.description)
-
-        logger.info(f"[MasterAgent] Streaming task {task_id} to worker {worker.agent_id}")
-
-        try:
-            # 发送任务
-            await self.bus.send_command(
-                target_id=worker.agent_id,
-                command_type=CommandType.ASSIGN_TASK,
-                payload=task.to_dict(),
-                wait_response=False,
-            )
-
-            # 流式接收事件
-            while True:
-                try:
-                    event = await asyncio.wait_for(
-                        event_queue.get(),
-                        timeout=task.timeout_seconds,
-                    )
-                except asyncio.TimeoutError:
-                    logger.error(f"[MasterAgent] Stream task {task_id} timeout")
-                    yield {"type": "error", "message": "任务处理超时"}
-                    break
-
-                # 检查流结束标记
-                if event.get("type") == "__stream_done__":
-                    logger.debug(f"[MasterAgent] Stream done for task {task_id}")
-                    break
-
-                # 转发事件
-                yield event
-
-            self._stats["tasks_success"] += 1
-
-        except Exception as e:
-            logger.error(f"[MasterAgent] Stream task error: {e}", exc_info=True)
-            self._stats["tasks_failed"] += 1
-            yield {"type": "error", "message": f"处理出错: {str(e)}"}
-
-        finally:
-            # 清理资源
-            self._stream_queues.pop(session_id, None)
-            self._pending_tasks.pop(task_id, None)
-            self.registry.clear_agent_task(worker.agent_id, success=True)
 
     async def _distribute_task_stream(
         self,
@@ -1043,6 +982,63 @@ class MasterAgent:
     def get_dashboard_data(self) -> dict[str, Any]:
         """获取仪表盘数据"""
         return self.registry.get_dashboard_data()
+
+    # ==================== 任务控制（TaskOrchestrator 集成）====================
+
+    async def resume_task_stream(self, task_id: str) -> AsyncIterator[dict]:
+        """
+        恢复并流式执行任务
+
+        Args:
+            task_id: 任务 ID
+
+        Yields:
+            SSE 事件字典
+        """
+        try:
+            task = await self.task_orchestrator.resume_task(task_id)
+            async for event in self.task_orchestrator.execute_task_stream(task):
+                yield event
+        except Exception as e:
+            logger.error(f"[MasterAgent] Failed to resume task {task_id}: {e}")
+            yield {"type": "error", "message": f"恢复任务失败: {str(e)}"}
+
+    async def pause_task(self, task_id: str, reason: str = "user_requested") -> bool:
+        """
+        暂停任务
+
+        Args:
+            task_id: 任务 ID
+            reason: 暂停原因
+
+        Returns:
+            是否暂停成功
+        """
+        try:
+            await self.task_orchestrator.pause_task(task_id, reason)
+            logger.info(f"[MasterAgent] Task paused: {task_id}")
+            return True
+        except Exception as e:
+            logger.error(f"[MasterAgent] Failed to pause task {task_id}: {e}")
+            return False
+
+    async def cancel_task(self, task_id: str) -> bool:
+        """
+        取消任务
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            是否取消成功
+        """
+        try:
+            await self.task_orchestrator.cancel_task(task_id)
+            logger.info(f"[MasterAgent] Task cancelled: {task_id}")
+            return True
+        except Exception as e:
+            logger.error(f"[MasterAgent] Failed to cancel task {task_id}: {e}")
+            return False
 
 
 # ==================== Worker 进程入口 ====================

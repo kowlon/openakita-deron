@@ -46,6 +46,10 @@
     └──────────┘ └──────────┘ └──────────┘
 """
 
+from .best_practice_manager import (
+    BestPracticeManager,
+    BestPracticeManagerError,
+)
 from .bus import AgentBus, BusConfig
 from .handoff import HandoffAgent, HandoffOrchestrator, HandoffTarget
 from .master import MasterAgent
@@ -122,6 +126,9 @@ __all__ = [
     "HandoffAgent",
     "HandoffTarget",
     "HandoffOrchestrator",
+    # 最佳实践模板
+    "BestPracticeManager",
+    "BestPracticeManagerError",
     # 任务编排模型
     "TaskStatus",
     "StepStatus",
