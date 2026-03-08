@@ -36,6 +36,8 @@ type MainContentProps = {
   activePlan?: Plan | null  // Active plan for Plan mode
   currentTask?: OrchestrationTask | null  // Current task for Best Practice
   onOpenTaskDetails?: () => void  // Callback to open task details
+  pendingTaskQuestion?: AskUserQuestion  // Pending task question from frontend
+  onAnswerTaskQuestion?: (answer: string, answerId?: string) => void  // Handler for task question answer
 }
 
 /**
@@ -137,6 +139,8 @@ export function MainContent({
   activePlan = null,
   currentTask = null,
   onOpenTaskDetails,
+  pendingTaskQuestion,
+  onAnswerTaskQuestion,
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -196,7 +200,8 @@ export function MainContent({
   }, [steps, llmOutput])
 
   // Check if we should show the welcome screen (no session and no steps)
-  const showWelcome = !session && steps.length === 0
+  // Also don't show welcome if we have a pending task question
+  const showWelcome = !session && steps.length === 0 && !pendingTaskQuestion
 
   // ========== Welcome Screen (ChatGPT Style) ==========
   if (showWelcome) {
@@ -309,7 +314,8 @@ export function MainContent({
 
           {/* Current Turn - AI Response Area */}
           {/* Show if: user message exists AND not in history AND (has content OR waiting for response) */}
-          {session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (isWaiting || isRunning || isCompleted || steps.length > 0 || askUserQuestion || llmOutput || activePlan) && (
+          {/* OR: has pendingTaskQuestion (for best practice flow) */}
+          {((session?.userMessage && !conversationHistory.some(t => t.userMessage === session.userMessage) && (isWaiting || isRunning || isCompleted || steps.length > 0 || askUserQuestion || llmOutput || activePlan)) || pendingTaskQuestion) && (
             <div className="flex justify-start items-start gap-3 mr-12">
               {/* AI Avatar */}
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 shrink-0 flex items-center justify-center shadow-md">
@@ -440,6 +446,71 @@ export function MainContent({
                     {!askUserQuestion.questions && !askUserQuestion.options && (
                       <div className="text-xs text-slate-500">
                         请在下方输入框中回答
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Pending Task Question - shown when starting a best practice */}
+                {pendingTaskQuestion && !askUserQuestion && (
+                  <div className="mt-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="material-symbols-outlined text-blue-400 text-xl">task_alt</span>
+                      <span className="text-sm font-medium text-blue-400">任务确认</span>
+                    </div>
+
+                    {/* Simple question format */}
+                    {pendingTaskQuestion.question && (
+                      <p className="text-sm text-slate-300 mb-3 whitespace-pre-wrap">{pendingTaskQuestion.question}</p>
+                    )}
+
+                    {/* Multiple questions format */}
+                    {pendingTaskQuestion.questions && pendingTaskQuestion.questions.length > 0 && (
+                      <div className="space-y-4">
+                        {pendingTaskQuestion.questions.map((q, qIdx) => (
+                          <div key={q.id || qIdx}>
+                            <p className="text-sm text-slate-300 mb-2">{q.prompt}</p>
+                            {q.options && q.options.length > 0 && (
+                              <div className="space-y-2">
+                                {q.options.map((option) => (
+                                  <button
+                                    key={option.id}
+                                    onClick={() => {
+                                      onAnswerTaskQuestion?.(option.label, option.id)
+                                    }}
+                                    className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-blue-500/30 transition-all"
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Simple options format (without questions array) */}
+                    {!pendingTaskQuestion.questions && pendingTaskQuestion.options && pendingTaskQuestion.options.length > 0 && (
+                      <div className="space-y-2">
+                        {pendingTaskQuestion.options.map((option) => (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              onAnswerTaskQuestion?.(option.label, option.id)
+                            }}
+                            className="w-full text-left px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-300 hover:bg-slate-700 hover:border-blue-500/30 transition-all"
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No options - show text input hint */}
+                    {!pendingTaskQuestion.questions && !pendingTaskQuestion.options && (
+                      <div className="text-xs text-slate-500">
+                        请在下方输入框中输入您的回答
                       </div>
                     )}
                   </div>
