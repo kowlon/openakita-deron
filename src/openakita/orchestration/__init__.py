@@ -63,6 +63,7 @@ from .messages import (
 from .models import (
     BestPracticeConfig,
     OrchestrationTask,
+    RouterPromptConfig,
     SessionTasks,
     StepStatus,
     StepTemplate,
@@ -138,6 +139,7 @@ __all__ = [
     "BestPracticeConfig",
     "TaskStep",
     "OrchestrationTask",
+    "RouterPromptConfig",
     "SessionTasks",
     "SessionTasksManager",
     "RouteResult",

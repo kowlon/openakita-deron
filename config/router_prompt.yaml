@@ -1,0 +1,95 @@
+# Router Prompt Configuration
+# 路由判断 Prompt 配置
+#
+# 此配置文件定义 LLM 路由判断所需的系统提示词和用户提示词模板。
+# 用于判断用户输入是否与当前任务相关。
+#
+# 使用方法：
+# from openakita.orchestration.models import RouterPromptConfig
+# config = RouterPromptConfig.from_yaml("config/router_prompt.yaml")
+
+# 是否启用 LLM 路由（false 时回退到关键词匹配）
+enabled: true
+
+# 系统提示词
+system_prompt: |
+  你是一个任务路由判断助手。你的职责是判断用户的输入是否与当前正在执行的任务相关。
+
+  你需要分析：
+  1. 用户输入的意图
+  2. 当前任务的上下文
+  3. 用户输入是否是对任务的响应、确认、补充或相关问题
+
+  判断标准：
+  - 相关（relevant）：用户输入是对当前任务的直接响应、确认、补充信息或相关问题
+  - 无关（irrelevant）：用户输入是完全不同的话题，与当前任务无直接关联
+
+  你必须以 JSON 格式返回结果，格式如下：
+  {
+    "decision": "relevant" 或 "irrelevant",
+    "confidence": 0.0-1.0 的置信度,
+    "reason": "判断原因的简短说明"
+  }
+
+# 用户提示词模板
+# 支持的变量占位符：
+# - {user_input}: 用户输入内容
+# - {task_name}: 任务名称
+# - {task_description}: 任务描述
+# - {step_name}: 当前步骤名称
+# - {step_description}: 当前步骤描述
+user_prompt_template: |
+请判断以下用户输入是否与当前任务相关。
+
+## 当前任务信息
+- 任务名称：{task_name}
+- 任务描述：{task_description}
+- 当前步骤：{step_name}
+- 步骤描述：{step_description}
+
+## 用户输入
+{user_input}
+
+请以 JSON 格式返回你的判断结果。
+
+# 输出格式说明（供代码解析参考）
+output_format: |
+  {
+    "decision": "relevant" | "irrelevant",
+    "confidence": float,
+    "reason": string
+  }
+
+# 示例（可选，用于 few-shot 学习）
+examples:
+  - task_name: "代码审查"
+    task_description: "审查用户提交的代码，检查潜在问题"
+    step_name: "分析代码结构"
+    step_description: "分析代码的整体结构和模块划分"
+    user_input: "这个函数可以优化一下"
+    expected_decision: "relevant"
+    expected_reason: "用户提出了对代码的优化建议，与当前代码审查任务直接相关"
+
+  - task_name: "代码审查"
+    task_description: "审查用户提交的代码，检查潜在问题"
+    step_name: "分析代码结构"
+    step_description: "分析代码的整体结构和模块划分"
+    user_input: "今天天气怎么样"
+    expected_decision: "irrelevant"
+    expected_reason: "用户询问天气，与代码审查任务完全无关"
+
+  - task_name: "文档编写"
+    task_description: "编写 API 文档"
+    step_name: "编写接口说明"
+    step_description: "编写 REST API 的接口说明"
+    user_input: "继续"
+    expected_decision: "relevant"
+    expected_reason: "用户确认继续，是对任务流程的直接响应"
+
+  - task_name: "数据分析"
+    task_description: "分析销售数据并生成报告"
+    step_name: "数据清洗"
+    step_description: "清洗和预处理原始数据"
+    user_input: "跳过这个步骤"
+    expected_decision: "relevant"
+    expected_reason: "用户要求跳过当前步骤，是对任务的直接操作"

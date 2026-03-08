@@ -62,13 +62,20 @@ class RouterPromptConfig:
     """
 
     # 路由器标识
-    router_name: str  # 路由器名称 (e.g., "task_router", "agent_router")
-    description: str  # 路由器用途描述
+    router_name: str = ""  # 路由器名称 (e.g., "task_router", "agent_router")
+    description: str = ""  # 路由器用途描述
 
     # LLM 判断配置
-    system_prompt: str  # LLM 判断用的系统提示词
+    system_prompt: str = ""  # LLM 判断用的系统提示词
+    user_prompt_template: str = ""  # 用户提示词模板（支持变量占位符）
+    output_format: str = ""  # 输出格式说明
+
+    # 示例
     examples: list[dict[str, str]] = field(default_factory=list)  # 判断示例 (input -> output)
+
+    # 配置
     threshold: float = 0.7  # 置信度阈值 (0.0 - 1.0)
+    enabled: bool = True  # 是否启用 LLM 路由
 
     def to_dict(self) -> dict:
         """序列化为字典"""
@@ -76,19 +83,54 @@ class RouterPromptConfig:
             "router_name": self.router_name,
             "description": self.description,
             "system_prompt": self.system_prompt,
+            "user_prompt_template": self.user_prompt_template,
+            "output_format": self.output_format,
             "examples": self.examples,
             "threshold": self.threshold,
+            "enabled": self.enabled,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "RouterPromptConfig":
         """从字典反序列化"""
         return cls(
-            router_name=data["router_name"],
-            description=data["description"],
-            system_prompt=data["system_prompt"],
+            router_name=data.get("router_name", ""),
+            description=data.get("description", ""),
+            system_prompt=data.get("system_prompt", ""),
+            user_prompt_template=data.get("user_prompt_template", ""),
+            output_format=data.get("output_format", ""),
             examples=data.get("examples", []),
             threshold=data.get("threshold", 0.7),
+            enabled=data.get("enabled", True),
+        )
+
+    def format_user_prompt(
+        self,
+        user_input: str,
+        task_name: str = "",
+        task_description: str = "",
+        step_name: str = "",
+        step_description: str = "",
+    ) -> str:
+        """
+        格式化用户提示词
+
+        Args:
+            user_input: 用户输入
+            task_name: 任务名称
+            task_description: 任务描述
+            step_name: 当前步骤名称
+            step_description: 当前步骤描述
+
+        Returns:
+            格式化后的提示词
+        """
+        return self.user_prompt_template.format(
+            user_input=user_input,
+            task_name=task_name,
+            task_description=task_description,
+            step_name=step_name,
+            step_description=step_description,
         )
 
 
