@@ -26,7 +26,7 @@ export function LeftSidebar({
   onOpenAllPractices,
 }: LeftSidebarProps) {
   return (
-    <aside className="w-72 bg-[#111722] border-r border-primary/10 flex flex-col h-full">
+    <aside className="w-64 bg-[#111722] border-r border-primary/10 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 flex flex-col gap-6">
         <div className="flex flex-col">
