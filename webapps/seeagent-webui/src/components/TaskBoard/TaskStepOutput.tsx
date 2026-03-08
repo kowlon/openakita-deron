@@ -61,12 +61,19 @@ export function TaskStepOutput({ step, onUpdate, isEditing }: TaskStepOutputProp
 
       {/* Output content */}
       <div className="flex-1 overflow-auto p-4">
+        {/* Output Results Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-xs font-bold text-slate-500 dark:text-[#92a4c9] uppercase tracking-wider">
+            Output Results
+          </h4>
+        </div>
+
         {isEditing ? (
-          <div className="h-full flex flex-col">
+          <div className="flex flex-col">
             <textarea
               value={editedOutput}
               onChange={(e) => setEditedOutput(e.target.value)}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-4 font-mono text-sm text-slate-300 resize-none focus:outline-none focus:border-primary"
+              className="min-h-[300px] bg-slate-900 border border-slate-700 rounded-lg p-4 font-mono text-sm text-slate-300 resize-none focus:outline-none focus:border-primary"
               placeholder="编辑输出 JSON..."
             />
             <div className="mt-3 flex justify-end gap-2">
