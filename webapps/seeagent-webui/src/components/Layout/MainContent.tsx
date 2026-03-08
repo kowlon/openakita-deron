@@ -2,10 +2,12 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import type { Session, Step, ConversationTurn } from '@/types'
 import type { Artifact } from '@/types/artifact'
 import type { Plan } from '@/types/plan'
+import type { OrchestrationTask } from '@/types/task'
 import { StepTimeline } from '@/components/Step/StepTimeline'
 import { ElapsedTimer } from '@/components/Timer/ElapsedTimer'
 import { ArtifactList } from '@/components/Artifact/ArtifactList'
 import { PlanCard } from '@/components/Plan/PlanCard'
+import { TaskCard } from '@/components/Task/TaskCard'
 
 type AskUserQuestion = {
   question?: string;
@@ -32,6 +34,8 @@ type MainContentProps = {
   artifacts?: Artifact[]  // Current turn artifacts
   askUserQuestion?: AskUserQuestion
   activePlan?: Plan | null  // Active plan for Plan mode
+  currentTask?: OrchestrationTask | null  // Current task for Best Practice
+  onOpenTaskDetails?: () => void  // Callback to open task details
 }
 
 /**
@@ -131,6 +135,8 @@ export function MainContent({
   artifacts = [],
   askUserQuestion,
   activePlan = null,
+  currentTask = null,
+  onOpenTaskDetails,
 }: MainContentProps) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -324,6 +330,13 @@ export function MainContent({
                 {activePlan && (
                   <div className="mt-3">
                     <PlanCard plan={activePlan} />
+                  </div>
+                )}
+
+                {/* Task Card - show if Best Practice is active */}
+                {currentTask && (
+                  <div className="mt-3">
+                    <TaskCard task={currentTask} onOpenDetails={onOpenTaskDetails || (() => {})} />
                   </div>
                 )}
 

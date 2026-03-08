@@ -527,6 +527,8 @@ function App() {
             artifacts={artifacts}
             askUserQuestion={askUserQuestion}
             activePlan={activePlan}
+            currentTask={currentTask}
+            onOpenTaskDetails={() => {}}
           />
         }
         detailPanel={currentTask ? (
