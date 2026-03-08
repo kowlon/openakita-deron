@@ -90,6 +90,7 @@ apps/setup-center/src-tauri/resources/modules/
 data/*
 !data/.gitkeep
 !data/*.example
+!data/prompts/
 
 # Identity files (local only, auto-generated from .example templates)
 identity/*.md

@@ -1,0 +1,222 @@
+# Route Decision Prompt Template - English Version
+# LLM Router Decision Prompt Template
+
+version: "1.0"
+name: route_decision_en
+language: en-US
+description: |
+  Prompt template for determining which SubAgent or task handler should process user input.
+  Supports intelligent routing decisions based on user intent, task context, and available agent capabilities.
+
+# Template Metadata
+metadata:
+  author: OpenAkita Team
+  created_at: "2026-03-08"
+  tags:
+    - routing
+    - subagent
+    - decision
+  min_llm_version: "1.0"
+
+# System Prompt
+system_prompt: |
+  [Role]
+  You are a professional routing expert responsible for analyzing user requests and intelligently routing them to the most appropriate processing unit.
+
+  [Responsibilities]
+  1. Analyze the intent and requirements of user input
+  2. Evaluate the relevance of the current task context
+  3. Match the most suitable SubAgent or task handler
+  4. Generate clear routing decisions
+
+# User Prompt Template
+user_prompt_template: |
+  Please analyze the following user request and determine which processing unit it should be routed to.
+
+  ## User Input
+  {{ user_input }}
+
+  ## Current Task Context
+  {{ current_task }}
+
+  ## Available SubAgents
+  {{ available_agents }}
+
+  ---
+
+# Judgment Rules
+judgment_rules:
+  - name: "Exact Match Priority"
+    description: "If the user explicitly specifies an Agent or functionality, prioritize routing to the corresponding target"
+    priority: 1
+
+  - name: "Capability Matching"
+    description: "Match the Agent's core capabilities based on the request content, selecting the Agent most skilled at handling that type of request"
+    priority: 2
+
+  - name: "Context Relevance"
+    description: "Consider the current task context, prioritize maintaining conversation coherence by routing to the Agent currently handling related tasks"
+    priority: 3
+
+  - name: "Default Routing"
+    description: "When unable to make a clear determination, route to the default general-purpose Agent"
+    priority: 99
+
+# Output Format Definition
+output_format:
+  type: json
+  schema:
+    decision:
+      type: object
+      properties:
+        target_agent:
+          type: string
+          description: Unique identifier of the target Agent
+          required: true
+        confidence:
+          type: number
+          description: Confidence level (0.0 - 1.0)
+          minimum: 0.0
+          maximum: 1.0
+          required: true
+        reasoning:
+          type: string
+          description: Explanation of the routing decision
+          required: true
+        alternative_agents:
+          type: array
+          description: List of alternative Agents (sorted by priority)
+          items:
+            type: object
+            properties:
+              agent_id:
+                type: string
+              confidence:
+                type: number
+          required: false
+        parameters:
+          type: object
+          description: Parameters to pass to the target Agent
+          required: false
+        requires_clarification:
+          type: boolean
+          description: Whether user clarification is needed
+          default: false
+          required: true
+        clarification_question:
+          type: string
+          description: Question to ask when clarification is needed
+          required: false
+
+  example: |
+    ```json
+    {
+      "decision": {
+        "target_agent": "code_assistant",
+        "confidence": 0.92,
+        "reasoning": "User request involves code writing and debugging, highly matching code_assistant's core capabilities",
+        "alternative_agents": [
+          {"agent_id": "general_assistant", "confidence": 0.3}
+        ],
+        "parameters": {
+          "language": "python",
+          "task_type": "debug"
+        },
+        "requires_clarification": false
+      }
+    }
+    ```
+
+# Variable Definitions
+variables:
+  user_input:
+    type: string
+    description: The original message or request from the user
+    required: true
+    example: "Help me write a Python script to process CSV files"
+
+  current_task:
+    type: string
+    description: Description of the currently active task, empty string if no active task
+    required: true
+    default: ""
+    example: "User is developing a data analysis project, previously discussed data cleaning workflow"
+
+  available_agents:
+    type: string
+    description: Formatted text listing available SubAgents with each Agent's ID, name, and capability description
+    required: true
+    example: |
+      1. code_assistant - Code Assistant
+         Capabilities: Code writing, debugging, refactoring, code review
+      2. data_analyst - Data Analyst
+         Capabilities: Data analysis, visualization, statistical modeling
+      3. general_assistant - General Assistant
+         Capabilities: Daily Q&A, information retrieval, task coordination
+
+# Error Handling
+error_handling:
+  no_match:
+    action: "route_to_default"
+    default_agent: "general_assistant"
+    message: "Unable to match to a specific Agent, routed to general assistant"
+
+  low_confidence:
+    threshold: 0.5
+    action: "request_clarification"
+    message: "Multiple Agents may be suitable for this request, user clarification needed"
+
+  ambiguous_input:
+    action: "ask_followup"
+    message: "Request is not clear enough, please provide more information"
+
+# Example Dialogs
+examples:
+  - name: "Code-Related Request"
+    input:
+      user_input: "There's a bug in this code, help me check it"
+      current_task: ""
+      available_agents: |
+        1. code_assistant - Code Assistant
+           Capabilities: Code writing, debugging, refactoring
+        2. general_assistant - General Assistant
+           Capabilities: Daily Q&A, information retrieval
+    expected_output:
+      decision:
+        target_agent: "code_assistant"
+        confidence: 0.95
+        reasoning: "User explicitly mentioned code bug, falls under code debugging category"
+        requires_clarification: false
+
+  - name: "Request Needing Clarification"
+    input:
+      user_input: "Help me analyze this"
+      current_task: ""
+      available_agents: |
+        1. code_assistant - Code Assistant
+           Capabilities: Code writing, debugging
+        2. data_analyst - Data Analyst
+           Capabilities: Data analysis, visualization
+    expected_output:
+      decision:
+        target_agent: "general_assistant"
+        confidence: 0.3
+        reasoning: "Request is too vague, cannot determine analysis target (code or data)"
+        requires_clarification: true
+        clarification_question: "What would you like to analyze? Code or data?"
+
+  - name: "Context-Aware Routing"
+    input:
+      user_input: "Continue with the previous task"
+      current_task: "Currently using data_analyst for sales data analysis"
+      available_agents: |
+        1. data_analyst - Data Analyst
+           Capabilities: Data analysis, visualization
+        2. code_assistant - Code Assistant
+           Capabilities: Code writing, debugging
+    expected_output:
+      decision:
+        target_agent: "data_analyst"
+        confidence: 0.98
+        reasoning: "Context shows current task involves data analysis, should continue with data_analyst"
+        requires_clarification: false

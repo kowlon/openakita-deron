@@ -1,0 +1,222 @@
+# 路由判断 Prompt 模板 - 中文版
+# Route Decision Prompt Template - Chinese Version
+
+version: "1.0"
+name: route_decision
+language: zh-CN
+description: |
+  用于判断用户输入应该路由到哪个 SubAgent 或任务的 Prompt 模板。
+  支持基于用户意图、任务上下文和可用 Agent 能力的智能路由决策。
+
+# 模板元数据
+metadata:
+  author: OpenAkita Team
+  created_at: "2026-03-08"
+  tags:
+    - routing
+    - subagent
+    - decision
+  min_llm_version: "1.0"
+
+# 系统提示词
+system_prompt: |
+  【角色】
+  你是一位专业的路由判断专家，负责分析用户请求并将其智能路由到最合适的处理单元。
+
+  【职责】
+  1. 分析用户输入的意图和需求
+  2. 评估当前任务上下文的关联性
+  3. 匹配最合适的 SubAgent 或任务处理器
+  4. 生成清晰的路由决策
+
+# 用户提示词模板
+user_prompt_template: |
+  请分析以下用户请求，并决定应该路由到哪个处理单元。
+
+  ## 用户输入
+  {{ user_input }}
+
+  ## 当前任务上下文
+  {{ current_task }}
+
+  ## 可用的 SubAgent 列表
+  {{ available_agents }}
+
+  ---
+
+# 判断规则
+judgment_rules:
+  - name: "精确匹配优先"
+    description: "如果用户明确指定了某个 Agent 或功能，优先路由到对应的目标"
+    priority: 1
+
+  - name: "能力匹配"
+    description: "根据请求内容匹配 Agent 的核心能力，选择最擅长处理该类型请求的 Agent"
+    priority: 2
+
+  - name: "上下文关联"
+    description: "考虑当前任务上下文，优先保持对话连贯性，路由到正在处理相关任务的 Agent"
+    priority: 3
+
+  - name: "默认路由"
+    description: "当无法明确判断时，路由到默认的通用处理 Agent"
+    priority: 99
+
+# 输出格式定义
+output_format:
+  type: json
+  schema:
+    decision:
+      type: object
+      properties:
+        target_agent:
+          type: string
+          description: 目标 Agent 的唯一标识符
+          required: true
+        confidence:
+          type: number
+          description: 置信度 (0.0 - 1.0)
+          minimum: 0.0
+          maximum: 1.0
+          required: true
+        reasoning:
+          type: string
+          description: 路由决策的理由说明
+          required: true
+        alternative_agents:
+          type: array
+          description: 备选 Agent 列表（按优先级排序）
+          items:
+            type: object
+            properties:
+              agent_id:
+                type: string
+              confidence:
+                type: number
+          required: false
+        parameters:
+          type: object
+          description: 传递给目标 Agent 的参数
+          required: false
+        requires_clarification:
+          type: boolean
+          description: 是否需要用户澄清
+          default: false
+          required: true
+        clarification_question:
+          type: string
+          description: 当需要澄清时的提问
+          required: false
+
+  example: |
+    ```json
+    {
+      "decision": {
+        "target_agent": "code_assistant",
+        "confidence": 0.92,
+        "reasoning": "用户请求涉及代码编写和调试，与 code_assistant 的核心能力高度匹配",
+        "alternative_agents": [
+          {"agent_id": "general_assistant", "confidence": 0.3}
+        ],
+        "parameters": {
+          "language": "python",
+          "task_type": "debug"
+        },
+        "requires_clarification": false
+      }
+    }
+    ```
+
+# 变量说明
+variables:
+  user_input:
+    type: string
+    description: 用户输入的原始消息或请求
+    required: true
+    example: "帮我写一个 Python 脚本来处理 CSV 文件"
+
+  current_task:
+    type: string
+    description: 当前正在进行的任务描述，若无活动任务则为空字符串
+    required: true
+    default: ""
+    example: "用户正在开发一个数据分析项目，之前讨论过数据清洗流程"
+
+  available_agents:
+    type: string
+    description: 可用 SubAgent 列表的格式化文本，包含每个 Agent 的 ID、名称和能力描述
+    required: true
+    example: |
+      1. code_assistant - 代码助手
+         能力: 代码编写、调试、重构、代码审查
+      2. data_analyst - 数据分析师
+         能力: 数据分析、可视化、统计建模
+      3. general_assistant - 通用助手
+         能力: 日常问答、信息检索、任务协调
+
+# 错误处理
+error_handling:
+  no_match:
+    action: "route_to_default"
+    default_agent: "general_assistant"
+    message: "无法匹配到特定 Agent，已路由到通用助手"
+
+  low_confidence:
+    threshold: 0.5
+    action: "request_clarification"
+    message: "多个 Agent 可能适合处理该请求，需要用户澄清"
+
+  ambiguous_input:
+    action: "ask_followup"
+    message: "请求不够明确，请提供更多信息"
+
+# 示例对话
+examples:
+  - name: "代码相关请求"
+    input:
+      user_input: "这段代码有个 bug，帮我看看"
+      current_task: ""
+      available_agents: |
+        1. code_assistant - 代码助手
+           能力: 代码编写、调试、重构
+        2. general_assistant - 通用助手
+           能力: 日常问答、信息检索
+    expected_output:
+      decision:
+        target_agent: "code_assistant"
+        confidence: 0.95
+        reasoning: "用户明确提到代码 bug，属于代码调试范畴"
+        requires_clarification: false
+
+  - name: "需要澄清的请求"
+    input:
+      user_input: "帮我分析一下"
+      current_task: ""
+      available_agents: |
+        1. code_assistant - 代码助手
+           能力: 代码编写、调试
+        2. data_analyst - 数据分析师
+           能力: 数据分析、可视化
+    expected_output:
+      decision:
+        target_agent: "general_assistant"
+        confidence: 0.3
+        reasoning: "请求过于模糊，无法确定分析对象（代码还是数据）"
+        requires_clarification: true
+        clarification_question: "您想分析什么内容？是代码还是数据？"
+
+  - name: "上下文关联路由"
+    input:
+      user_input: "继续上一个任务"
+      current_task: "正在使用 data_analyst 进行销售数据分析"
+      available_agents: |
+        1. data_analyst - 数据分析师
+           能力: 数据分析、可视化
+        2. code_assistant - 代码助手
+           能力: 代码编写、调试
+    expected_output:
+      decision:
+        target_agent: "data_analyst"
+        confidence: 0.98
+        reasoning: "上下文显示当前任务涉及数据分析，应继续由 data_analyst 处理"
+        requires_clarification: false
