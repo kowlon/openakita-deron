@@ -1,5 +1,6 @@
 import type { Session } from '@/types/session'
 import { SessionList } from '@/components/Session/SessionList'
+import { BestPracticeEntry } from '@/components/Layout/BestPracticeEntry'
 
 type LeftSidebarProps = {
   sessions: Session[]
@@ -43,6 +44,9 @@ export function LeftSidebar({
           <span>New Chat</span>
         </button>
 
+        {/* Best Practices Quick Entry */}
+        <BestPracticeEntry onPracticeClick={onOpenBestPractices} />
+
         {/* Search */}
         <div className="flex flex-col gap-1">
           <div className="relative flex items-center">
@@ -69,13 +73,6 @@ export function LeftSidebar({
 
       {/* Bottom */}
       <div className="p-4 border-t border-[#232f48] flex flex-col gap-1">
-        <div
-          onClick={onOpenBestPractices}
-          className="flex items-center gap-3 px-3 py-2 text-[#92a4c9] hover:text-white hover:bg-[#232f48] rounded-lg cursor-pointer transition-colors"
-        >
-          <span className="material-symbols-outlined">auto_awesome</span>
-          <span className="text-sm font-medium">最佳实践</span>
-        </div>
         <div className="flex items-center gap-3 px-3 py-2 text-[#92a4c9] hover:text-white hover:bg-[#232f48] rounded-lg cursor-pointer transition-colors">
           <span className="material-symbols-outlined">settings</span>
           <span className="text-sm font-medium">Settings</span>
