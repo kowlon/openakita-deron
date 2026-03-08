@@ -4,6 +4,7 @@
 定义任务编排系统的核心数据结构：
 - TaskStatus / StepStatus: 状态枚举
 - TriggerType: 触发类型枚举
+- RouterPromptConfig: 路由器 Prompt 配置
 - SubAgentConfig: SubAgent 配置
 - StepTemplate / BestPracticeConfig: 任务模板
 - TaskStep / OrchestrationTask: 运行时任务和步骤
@@ -46,6 +47,49 @@ class TriggerType(Enum):
     BEST_PRACTICE = "best_practice"  # 从最佳实践入口触发
     CONTEXT = "context"  # 从对话上下文触发（LLM 判定）
     PLAN = "plan"  # 从 Plan 转任务
+
+
+# ==================== 路由 Prompt 配置 ====================
+
+
+@dataclass
+class RouterPromptConfig:
+    """
+    路由器 Prompt 配置
+
+    用于 LLM 智能路由判断的配置，包含系统提示词、判断示例和置信度阈值。
+    支持 YAML 文件加载和序列化/反序列化。
+    """
+
+    # 路由器标识
+    router_name: str  # 路由器名称 (e.g., "task_router", "agent_router")
+    description: str  # 路由器用途描述
+
+    # LLM 判断配置
+    system_prompt: str  # LLM 判断用的系统提示词
+    examples: list[dict[str, str]] = field(default_factory=list)  # 判断示例 (input -> output)
+    threshold: float = 0.7  # 置信度阈值 (0.0 - 1.0)
+
+    def to_dict(self) -> dict:
+        """序列化为字典"""
+        return {
+            "router_name": self.router_name,
+            "description": self.description,
+            "system_prompt": self.system_prompt,
+            "examples": self.examples,
+            "threshold": self.threshold,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RouterPromptConfig":
+        """从字典反序列化"""
+        return cls(
+            router_name=data["router_name"],
+            description=data["description"],
+            system_prompt=data["system_prompt"],
+            examples=data.get("examples", []),
+            threshold=data.get("threshold", 0.7),
+        )
 
 
 # ==================== SubAgent 配置 ====================
