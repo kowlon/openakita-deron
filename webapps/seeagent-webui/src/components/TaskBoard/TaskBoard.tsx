@@ -3,6 +3,8 @@ import type { OrchestrationTask } from '@/types/task'
 import { TaskStepTimeline } from './TaskStepTimeline'
 import { TaskStepOutput } from './TaskStepOutput'
 import { TaskStatusBar } from './TaskStatusBar'
+import { ActiveExecution } from './ActiveExecution'
+import { PreliminaryInsights } from './PreliminaryInsights'
 
 type TaskBoardProps = {
   task: OrchestrationTask | null
@@ -46,8 +48,19 @@ export function TaskBoard({
     )
   }
 
+  // Mock sources for demo (would come from task in real implementation)
+  const mockSources = [
+    { id: '1', name: 'mhealthintelligence.com', status: 'active' as const },
+    { id: '2', name: 'gartner.com', status: 'active' as const },
+  ]
+
+  // Mock insights for demo (would come from task in real implementation)
+  const mockInsights = `The initial scan of healthcare provider portals reveals a distinct shift toward autonomous administrative agents. Market data suggests that these specialized LLM-based solutions are reducing claim denial rates by up to 22% in early adopter networks.
+
+Furthermore, integration patterns show that 'human-in-the-loop' workflows remain the standard for diagnostic-heavy clinical tasks, while fully autonomous paths are rapidly maturing for patient scheduling and documentation.`
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-[450px] border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark">
       {/* Task header */}
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -78,6 +91,17 @@ export function TaskBoard({
 
       {/* Detail Output Section */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+        {/* Active Execution */}
+        {task.status === 'running' && (
+          <ActiveExecution sources={mockSources} />
+        )}
+
+        {/* Preliminary Insights */}
+        {mockInsights && (
+          <PreliminaryInsights content={mockInsights} />
+        )}
+
+        {/* Step Output */}
         <TaskStepOutput
           step={selectedStep}
           onUpdate={handleUpdateOutput}
