@@ -1,4 +1,5 @@
 import type { Session } from '@/types/session'
+import type { BestPracticeTemplate } from '@/types/task'
 import { SessionList } from '@/components/Session/SessionList'
 import { BestPracticeEntry } from '@/components/Layout/BestPracticeEntry'
 
@@ -6,6 +7,7 @@ type LeftSidebarProps = {
   sessions: Session[]
   currentSessionId: string | null
   searchQuery: string
+  templates: BestPracticeTemplate[]
   onNewSession: () => void
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
@@ -18,6 +20,7 @@ export function LeftSidebar({
   sessions,
   currentSessionId,
   searchQuery,
+  templates,
   onNewSession,
   onSelectSession,
   onDeleteSession,
@@ -48,6 +51,7 @@ export function LeftSidebar({
 
         {/* Best Practices Quick Entry */}
         <BestPracticeEntry
+          templates={templates}
           onPracticeClick={onStartBestPractice}
           onOpenAllPractices={onOpenAllPractices}
         />

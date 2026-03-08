@@ -110,6 +110,7 @@ function App() {
 
   // Tasks hook for best practices integration
   const {
+    templates,
     currentTask,
     createTask,
     resumeTask,
@@ -504,6 +505,7 @@ function App() {
             sessions={sessions}
             currentSessionId={currentSessionId}
             searchQuery={searchQuery}
+            templates={templates}
             onNewSession={handleNewSession}
             onSelectSession={handleSelectSession}
             onDeleteSession={handleDeleteSession}
