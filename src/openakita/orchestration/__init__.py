@@ -62,6 +62,7 @@ from .messages import (
 )
 from .models import (
     BestPracticeConfig,
+    BestPracticeTriggerConfig,
     OrchestrationTask,
     RouterPromptConfig,
     SessionTasks,
@@ -137,6 +138,7 @@ __all__ = [
     "SubAgentConfig",
     "StepTemplate",
     "BestPracticeConfig",
+    "BestPracticeTriggerConfig",
     "TaskStep",
     "OrchestrationTask",
     "RouterPromptConfig",

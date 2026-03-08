@@ -215,25 +215,33 @@ class BestPracticeConfig:
     name: str  # 显示名称
     description: str  # 任务描述（含适用场景，供 LLM 判定）
     steps: list[StepTemplate] = field(default_factory=list)  # 步骤模板列表
+    trigger_config: BestPracticeTriggerConfig | None = None  # 触发配置
 
     def to_dict(self) -> dict:
         """序列化为字典"""
-        return {
+        result = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
             "steps": [s.to_dict() for s in self.steps],
         }
+        if self.trigger_config:
+            result["trigger_config"] = self.trigger_config.to_dict()
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "BestPracticeConfig":
         """从字典反序列化"""
         steps = [StepTemplate.from_dict(s) for s in data.get("steps", [])]
+        trigger_config = None
+        if "trigger_config" in data:
+            trigger_config = BestPracticeTriggerConfig.from_dict(data["trigger_config"])
         return cls(
             id=data["id"],
             name=data["name"],
             description=data["description"],
             steps=steps,
+            trigger_config=trigger_config,
         )
 
 

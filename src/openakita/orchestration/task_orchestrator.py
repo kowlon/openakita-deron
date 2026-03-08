@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from .models import (
     BestPracticeConfig,
+    BestPracticeTriggerConfig,
     OrchestrationTask,
     SessionTasks,
     StepStatus,
@@ -113,6 +114,7 @@ class TaskOrchestrator:
         storage: TaskStorage | None = None,
         transport: AgentTransport | None = None,
         worker: SubAgentWorker | None = None,
+        llm_client: Any | None = None,
     ):
         """
         初始化任务编排器
@@ -121,10 +123,14 @@ class TaskOrchestrator:
             storage: 任务存储实例（可选，默认创建新实例）
             transport: 通信传输实例（可选，默认使用 MemoryTransport）
             worker: SubAgentWorker 实例（可选，默认创建新实例）
+            llm_client: LLM 客户端实例（可选，用于智能路由判断）
         """
         self._storage = storage or TaskStorage()
         self._transport = transport or MemoryTransport("orchestrator")
         self._worker = worker or SubAgentWorker("orchestrator-worker")
+
+        # LLM 客户端（用于智能路由判断）
+        self._llm_client = llm_client
 
         # 会话任务管理器缓存
         self._session_tasks: dict[str, SessionTasksManager] = {}
@@ -720,6 +726,7 @@ class TaskOrchestrator:
         self,
         session_id: str,
         user_input: str,
+        check_best_practices: bool = True,
     ) -> RouteOutput:
         """
         路由用户输入
@@ -727,6 +734,7 @@ class TaskOrchestrator:
         Args:
             session_id: 会话 ID
             user_input: 用户输入
+            check_best_practices: 是否检查最佳实践触发（默认 True）
 
         Returns:
             RouteOutput 路由输出
@@ -753,10 +761,229 @@ class TaskOrchestrator:
                 message="Task auto-suspended due to irrelevant input",
             )
 
+        # 检查是否触发最佳实践
+        if check_best_practices and not session_tasks.has_active_task():
+            matched_template = await self.should_trigger_best_practice(user_input)
+            if matched_template:
+                # 创建最佳实践任务
+                task = await self.create_task(
+                    session_id=session_id,
+                    template_id=matched_template.id,
+                    name=matched_template.name,
+                    description=matched_template.description,
+                    input_payload={"user_input": user_input},
+                    trigger_type=TriggerType.BEST_PRACTICE.value,
+                )
+                return RouteOutput(
+                    decision=RouteDecision.TO_TASK,
+                    task_id=task.id,
+                    message=f"Triggered best practice: {matched_template.name}",
+                )
+
         return RouteOutput(
             decision=RouteDecision.TO_NORMAL_CHAT,
             message=route_result.reason,
         )
+
+    async def should_trigger_best_practice(
+        self,
+        user_input: str,
+    ) -> BestPracticeConfig | None:
+        """
+        判断用户输入是否触发最佳实践
+
+        优先使用 LLM 智能判断，失败时回退到关键词匹配。
+
+        Args:
+            user_input: 用户输入
+
+        Returns:
+            匹配的最佳实践模板，无匹配返回 None
+        """
+        if not self._templates:
+            return None
+
+        # 获取启用了 LLM 触发的模板
+        templates_with_llm = []
+        templates_fallback = []
+
+        for template in self._templates.values():
+            if template.trigger_config and template.trigger_config.enabled:
+                templates_with_llm.append(template)
+            else:
+                templates_fallback.append(template)
+
+        # 尝试 LLM 匹配
+        matched_template = None
+        if templates_with_llm and self._llm_client:
+            try:
+                matched_template = await self._llm_match_best_practice(
+                    user_input,
+                    templates_with_llm,
+                )
+                if matched_template:
+                    logger.info(f"LLM matched best practice: {matched_template.id}")
+                    return matched_template
+            except Exception as e:
+                logger.warning(f"LLM matching failed, falling back to keywords: {e}")
+
+        # 回退到关键词匹配
+        for template in templates_with_llm:
+            if self._keyword_match_best_practice(user_input, template):
+                logger.info(f"Keyword matched best practice: {template.id}")
+                return template
+
+        for template in templates_fallback:
+            if self._keyword_match_best_practice(user_input, template):
+                logger.info(f"Keyword matched best practice (fallback): {template.id}")
+                return template
+
+        return None
+
+    async def _llm_match_best_practice(
+        self,
+        user_input: str,
+        templates: list[BestPracticeConfig],
+    ) -> BestPracticeConfig | None:
+        """
+        使用 LLM 判断用户输入匹配哪个最佳实践
+
+        Args:
+            user_input: 用户输入
+            templates: 候选最佳实践模板列表
+
+        Returns:
+            匹配的最佳实践模板，无匹配返回 None
+        """
+        if not self._llm_client or not templates:
+            return None
+
+        # 获取第一个模板的触发配置（作为默认配置）
+        trigger_config = templates[0].trigger_config
+        if not trigger_config:
+            trigger_config = BestPracticeTriggerConfig()
+
+        # 限制检查的模板数量
+        max_templates = trigger_config.max_templates_to_check
+        templates_to_check = templates[:max_templates]
+
+        # 构建 prompt
+        template_descriptions = []
+        for i, template in enumerate(templates_to_check):
+            template_descriptions.append(
+                f"{i + 1}. {template.name}: {template.description}"
+            )
+
+        prompt = trigger_config.trigger_prompt or self._get_default_trigger_prompt()
+        prompt = prompt.replace(
+            "{templates}", "\n".join(template_descriptions)
+        ).replace("{user_input}", user_input)
+
+        try:
+            # 调用 LLM
+            from ..llm.types import LLMRequest, Message, TextBlock
+
+            request = LLMRequest(
+                messages=[Message(role="user", content=[TextBlock(text=prompt)])],
+                temperature=trigger_config.llm_temperature,
+                max_tokens=100,  # 简短回复即可
+            )
+
+            response = await self._llm_client.generate(request)
+
+            # 解析结果
+            response_text = response.content[0].text if response.content else ""
+
+            # 尝试解析 JSON 格式的返回
+            import json
+            try:
+                result = json.loads(response_text)
+                if isinstance(result, dict):
+                    matched_id = result.get("matched_template_id")
+                    if matched_id:
+                        for template in templates_to_check:
+                            if template.id == matched_id:
+                                return template
+                    # 也支持索引匹配
+                    matched_index = result.get("matched_index")
+                    if matched_index and 0 < matched_index <= len(templates_to_check):
+                        return templates_to_check[matched_index - 1]
+            except json.JSONDecodeError:
+                pass
+
+            # 尝试从文本中提取模板名称或 ID
+            for template in templates_to_check:
+                if template.id in response_text or template.name in response_text:
+                    return template
+
+            # 检查是否明确表示不匹配
+            if "none" in response_text.lower() or "无匹配" in response_text:
+                return None
+
+            # 尝试匹配数字索引
+            import re
+            match = re.search(r"\b([1-9])\b", response_text)
+            if match:
+                idx = int(match.group(1))
+                if 0 < idx <= len(templates_to_check):
+                    return templates_to_check[idx - 1]
+
+            return None
+
+        except Exception as e:
+            logger.error(f"LLM matching error: {e}")
+            raise
+
+    def _keyword_match_best_practice(
+        self,
+        user_input: str,
+        template: BestPracticeConfig,
+    ) -> bool:
+        """
+        使用关键词匹配判断用户输入是否触发最佳实践
+
+        Args:
+            user_input: 用户输入
+            template: 最佳实践模板
+
+        Returns:
+            是否匹配
+        """
+        input_lower = user_input.lower()
+
+        # 检查模板名称和描述中的关键词
+        keywords = [
+            template.name.lower(),
+            template.id.lower(),
+        ]
+
+        # 从描述中提取关键词（简单的空格分割）
+        desc_words = template.description.lower().split()
+        keywords.extend([w for w in desc_words if len(w) > 3])
+
+        for keyword in keywords:
+            if keyword and keyword in input_lower:
+                return True
+
+        return False
+
+    @staticmethod
+    def _get_default_trigger_prompt() -> str:
+        """获取默认的 LLM 触发判断 prompt"""
+        return """你是一个任务路由助手。根据用户的输入判断是否应该触发以下最佳实践流程。
+
+最佳实践列表:
+{templates}
+
+用户输入: {user_input}
+
+请判断用户输入是否匹配某个最佳实践。如果匹配，请返回 JSON 格式：
+{"matched_template_id": "模板ID"} 或 {"matched_index": 数字索引}
+
+如果不匹配任何最佳实践，请返回：
+{"matched_template_id": null}
+
+只返回 JSON，不要其他解释。"""
 
     # ==================== 自动暂停 ====================
 
