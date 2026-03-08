@@ -26,10 +26,39 @@ export function TaskBoard({
 
   const selectedStep = task?.steps.find(s => s.id === selectedStepId) || null
 
+  // Get selected step index
+  const selectedStepIndex = task?.steps.findIndex(s => s.id === selectedStepId) ?? -1
+
+  // Navigation helpers
+  const canGoPrevious = selectedStepIndex > 0
+  const canGoNext = task && selectedStepIndex < task.steps.length - 1 && selectedStepIndex >= 0
+    ? task.steps[selectedStepIndex]?.status === 'completed'
+    : false
+
   const handleStepClick = useCallback((stepId: string) => {
     setSelectedStepId(stepId)
     setIsEditing(false)
   }, [])
+
+  const handlePreviousStep = useCallback(() => {
+    if (task && canGoPrevious) {
+      const prevStep = task.steps[selectedStepIndex - 1]
+      if (prevStep) {
+        setSelectedStepId(prevStep.id)
+        setIsEditing(false)
+      }
+    }
+  }, [task, canGoPrevious, selectedStepIndex])
+
+  const handleNextStep = useCallback(() => {
+    if (task && canGoNext && selectedStepIndex >= 0) {
+      const nextStep = task.steps[selectedStepIndex + 1]
+      if (nextStep) {
+        setSelectedStepId(nextStep.id)
+        setIsEditing(false)
+      }
+    }
+  }, [task, canGoNext, selectedStepIndex])
 
   const handleUpdateOutput = useCallback((output: Record<string, unknown>) => {
     if (selectedStepId) {
@@ -112,11 +141,27 @@ Furthermore, integration patterns show that 'human-in-the-loop' workflows remain
       {/* Bottom Action Footer */}
       <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark shrink-0">
         <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs font-bold">
+          <button
+            onClick={handlePreviousStep}
+            disabled={!canGoPrevious}
+            className={`flex items-center gap-2 text-xs font-bold ${
+              canGoPrevious
+                ? 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer'
+                : 'text-slate-400 cursor-not-allowed'
+            }`}
+          >
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             Previous Step
           </button>
-          <button className="flex items-center gap-2 text-slate-400 cursor-not-allowed text-xs font-bold">
+          <button
+            onClick={handleNextStep}
+            disabled={!canGoNext}
+            className={`flex items-center gap-2 text-xs font-bold ${
+              canGoNext
+                ? 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer'
+                : 'text-slate-400 cursor-not-allowed'
+            }`}
+          >
             Next Step
             <span className="material-symbols-outlined text-lg">arrow_forward</span>
           </button>
